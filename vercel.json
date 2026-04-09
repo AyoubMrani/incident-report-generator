@@ -3,9 +3,7 @@
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "functions": {
-    "api/**/*.ts": {
-      "runtime": "nodejs20.x"
-    }
+    "api/**/*.ts": {}
   },
   "rewrites": [
     {
