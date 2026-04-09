@@ -56,8 +56,9 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       
       for (const block of report.blocks) {
         if (block.type === 'image' && block.image_path && !block.data_url) {
+          let imagePath = '';
           try {
-            const imagePath = `incidents/${incidentId}/${block.image_path}`;
+            imagePath = `incidents/${incidentId}/${block.image_path}`;
             console.log('Converting image:', imagePath);
             const { data: imageData, error: imageError } = await supabaseServer.storage
               .from(BUCKET_NAME)
