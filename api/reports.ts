@@ -234,8 +234,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       console.log('Upload successful!');
       res.status(200).json({
         success: true,
-        jsonUrl: `/api/download?filename=${safeIncidentId}/${jsonFilename}`,
-        mdUrl: `/api/download?filename=${safeIncidentId}/${mdFilename}`,
+        jsonUrl: `/api/download?filename=incidents/${safeIncidentId}/${jsonFilename}`,
+        mdUrl: `/api/download?filename=incidents/${safeIncidentId}/${mdFilename}`,
         jsonFilename,
         mdFilename,
         incident_id: safeIncidentId,

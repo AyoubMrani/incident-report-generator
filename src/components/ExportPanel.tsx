@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import Swal from 'sweetalert2';
 import { IncidentReport } from '../types';
-import { FileJson, FileText, Save, Download, Loader2, CheckCircle2 } from 'lucide-react';
+import { Save, Loader2 } from 'lucide-react';
 
 interface Props {
   report: IncidentReport;
@@ -9,12 +9,6 @@ interface Props {
 
 export function ExportPanel({ report }: Props) {
   const [isSaving, setIsSaving] = useState(false);
-  const [saveResult, setSaveResult] = useState<{
-    jsonUrl: string;
-    mdUrl: string;
-    jsonFilename: string;
-    mdFilename: string;
-  } | null>(null);
 
   const generateMarkdown = () => {
     let md = `# Incident Report: ${report.metadata.title || 'Untitled'}\n\n`;
@@ -111,7 +105,35 @@ export function ExportPanel({ report }: Props) {
       }
       
       const data = await response.json();
-      setSaveResult(data);
+      
+      // Show success alert with download options
+      await Swal.fire({
+        icon: 'success',
+        title: 'Report Saved Successfully!',
+        html: `
+          <div style="text-align: left; margin: 20px 0;">
+            <p style="margin-bottom: 15px;">Your incident report has been saved. Download it now:</p>
+            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
+              <a href="${data.jsonUrl}" download="${data.jsonFilename}" 
+                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                📄 JSON
+              </a>
+              <a href="${data.mdUrl}" download="${data.mdFilename}"
+                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
+                📝 Markdown
+              </a>
+            </div>
+          </div>
+        `,
+        confirmButtonText: 'Done',
+        confirmButtonColor: '#3b82f6',
+        allowOutsideClick: false,
+        allowEscapeKey: false,
+      });
+      
+      // Reset the form after confirmation
+      setSaveResult(null);
+    
     } catch (error) {
       console.error('Error saving:', error);
       alert('Failed to save report to the server.');
@@ -136,33 +158,6 @@ export function ExportPanel({ report }: Props) {
           {isSaving ? 'Saving to Server...' : 'Generate & Save Report'}
         </button>
       </div>
-
-      {saveResult && (
-        <div className="mt-6 p-4 bg-green-50 border border-green-200 rounded-lg">
-          <div className="flex items-center text-green-800 font-medium mb-3">
-            <CheckCircle2 className="w-5 h-5 mr-2 text-green-600" />
-            Report successfully saved to the server!
-          </div>
-          <div className="flex flex-col sm:flex-row gap-3">
-            <a
-              href={saveResult.jsonUrl}
-              download={saveResult.jsonFilename}
-              className="flex items-center justify-center px-4 py-2 bg-gray-800 text-white rounded hover:bg-gray-700 transition-colors"
-            >
-              <FileJson className="w-4 h-4 mr-2" />
-              Download JSON
-            </a>
-            <a
-              href={saveResult.mdUrl}
-              download={saveResult.mdFilename}
-              className="flex items-center justify-center px-4 py-2 bg-white text-gray-800 border border-gray-300 rounded hover:bg-gray-50 transition-colors"
-            >
-              <FileText className="w-4 h-4 mr-2" />
-              Download Markdown
-            </a>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
