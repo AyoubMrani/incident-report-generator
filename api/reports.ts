@@ -282,7 +282,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
                   const text = await data.text();
                   const parsed = JSON.parse(text);
                   reports.push({
-                    filename: `${incidentId}/${file.name}`,
+                    filename: `incidents/${incidentId}/${file.name}`,
                     incident_id: incidentId,
                     metadata: parsed.metadata,
                     timestamp: new Date(file.updated_at).getTime(),
