@@ -82,34 +82,55 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       }
 
       console.log('Saving custom fields and categories to database');
+      console.log('Categories to save:', customCategories);
+      console.log('Fields to save:', customFields);
+
+      const errors: string[] = [];
 
       // Insert/update categories
       for (const category of customCategories) {
-        const { error: catError } = await supabaseServer
+        console.log('Upserting category:', category);
+        const { data, error: catError } = await supabaseServer
           .from('custom_categories')
-          .upsert({ id: category.id, label: category.label }, { onConflict: 'id' });
+          .upsert({ id: category.id, label: category.label }, { onConflict: 'id' })
+          .select();
         
         if (catError) {
-          console.error('Error upserting category:', catError);
+          const errMsg = `Error upserting category ${category.id}: ${catError.message}`;
+          console.error(errMsg);
+          errors.push(errMsg);
+        } else {
+          console.log('Category upserted successfully:', data);
         }
       }
 
       // Insert/update fields (only permanent ones)
       for (const field of customFields) {
         if (field.isPermanent !== false) {
-          const { error: fieldError } = await supabaseServer
+          console.log('Upserting field:', field);
+          const { data, error: fieldError } = await supabaseServer
             .from('custom_fields')
             .upsert({
               id: field.id,
               name: field.name,
               label: field.label,
               is_permanent: field.isPermanent !== false,
-            }, { onConflict: 'id' });
+            }, { onConflict: 'id' })
+            .select();
           
           if (fieldError) {
-            console.error('Error upserting field:', fieldError);
+            const errMsg = `Error upserting field ${field.id}: ${fieldError.message}`;
+            console.error(errMsg);
+            errors.push(errMsg);
+          } else {
+            console.log('Field upserted successfully:', data);
           }
         }
+      }
+
+      if (errors.length > 0) {
+        console.error('There were errors saving:', errors);
+        return res.status(400).json({ success: false, errors, message: 'Some fields failed to save' });
       }
 
       console.log('Custom fields saved to database successfully');
