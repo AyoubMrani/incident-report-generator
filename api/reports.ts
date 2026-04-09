@@ -18,6 +18,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   // POST - Save report
   if (req.method === 'POST') {
     try {
+      console.log('POST /api/reports - Saving report...');
       const { report, markdown } = req.body as ReportData;
       const incidentId = report.metadata.incident_id || `untitled-${Date.now()}`;
       const timestamp = Date.now();
@@ -29,6 +30,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       const jsonFilename = `incident_${safeIncidentId}_${timestamp}.json`;
       const mdFilename = `incident_${safeIncidentId}_${timestamp}.md`;
 
+      console.log('Uploading to Supabase:', { BUCKET_NAME, jsonFilename, mdFilename });
+
       // Upload JSON file to Supabase
       const { error: jsonError } = await supabaseServer.storage
         .from(BUCKET_NAME)
@@ -36,7 +39,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           contentType: 'application/json',
         });
 
-      if (jsonError) throw jsonError;
+      if (jsonError) {
+        console.error('JSON upload error:', jsonError);
+        throw jsonError;
+      }
 
       // Upload Markdown file to Supabase
       const { error: mdError } = await supabaseServer.storage
@@ -45,8 +51,12 @@ export default async (req: VercelRequest, res: VercelResponse) => {
           contentType: 'text/markdown',
         });
 
-      if (mdError) throw mdError;
+      if (mdError) {
+        console.error('MD upload error:', mdError);
+        throw mdError;
+      }
 
+      console.log('Upload successful!');
       res.status(200).json({
         success: true,
         jsonUrl: `/api/download?filename=${jsonFilename}`,
@@ -56,7 +66,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       });
     } catch (error) {
       console.error('Error saving report:', error);
-      res.status(500).json({ error: 'Failed to save report' });
+      res.status(500).json({ error: 'Failed to save report', details: String(error) });
     }
   }
 
