@@ -130,9 +130,6 @@ export function ExportPanel({ report }: Props) {
         allowOutsideClick: false,
         allowEscapeKey: false,
       });
-      
-      // Reset the form after confirmation
-      setSaveResult(null);
     
     } catch (error) {
       console.error('Error saving:', error);
