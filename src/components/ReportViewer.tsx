@@ -124,6 +124,15 @@ export function ReportViewer({ filename, onBack }: Props) {
             <FileText className="w-4 h-4 mr-1.5" />
             Markdown
           </a>
+          <a 
+            href={`/api/html?filename=${encodeURIComponent(filename)}`}
+            download
+            className="flex items-center px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded text-sm transition-colors"
+            title="Download as HTML with embedded images"
+          >
+            <FileText className="w-4 h-4 mr-1.5" />
+            HTML
+          </a>
           <button
             onClick={handleDeleteReport}
             disabled={isDeleting}
