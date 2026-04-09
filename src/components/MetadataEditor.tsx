@@ -110,10 +110,21 @@ export function MetadataEditor({ metadata, onChange }: Props) {
   };
 
   const handleDeleteCategory = (id: string) => {
+    const category = customCategories.find(c => c.id === id);
     const updated = customCategories.filter(c => c.id !== id);
     setCustomCategories(updated);
     localStorage.setItem('customCategories', JSON.stringify(updated));
-    saveCustomFieldsToSupabase(customFields, updated);
+    
+    // Delete from Supabase database
+    fetch('/api/custom-fields', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        type: 'category',
+        categoryLabel: category?.label,
+        fieldId: id,
+      }),
+    }).catch(err => console.error('Error deleting category:', err));
   };
 
   const handleAddCustomField = () => {
@@ -146,14 +157,23 @@ export function MetadataEditor({ metadata, onChange }: Props) {
   };
 
   const handleDeleteField = (id: string) => {
+    const field = customFields.find(f => f.id === id);
     const isTemporary = temporaryFieldIds.has(id);
     const updated = customFields.filter(f => f.id !== id);
     setCustomFields(updated);
 
-    // If permanent field, update localStorage and Supabase
-    if (!isTemporary) {
+    // If permanent field, delete from Supabase database
+    if (!isTemporary && field) {
       localStorage.setItem('customMetadataFields', JSON.stringify(updated));
-      saveCustomFieldsToSupabase(updated, customCategories);
+      fetch('/api/custom-fields', {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'field',
+          fieldName: field.name,
+          fieldId: id,
+        }),
+      }).catch(err => console.error('Error deleting field:', err));
     } else {
       // Remove from temporary tracking
       setTemporaryFieldIds(prev => {
