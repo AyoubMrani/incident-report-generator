@@ -93,4 +93,5 @@ export interface StoredMetadataField {
   id: string;
   name: string;
   label: string;
+  isPermanent?: boolean;
 }

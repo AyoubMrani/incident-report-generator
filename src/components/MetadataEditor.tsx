@@ -37,9 +37,11 @@ export function MetadataEditor({ metadata, onChange }: Props) {
             setCustomCategories(data.customCategories);
             localStorage.setItem('customCategories', JSON.stringify(data.customCategories));
           }
+          // Only load PERMANENT fields from Supabase
           if (data.customFields && data.customFields.length > 0) {
-            setCustomFields(data.customFields);
-            localStorage.setItem('customMetadataFields', JSON.stringify(data.customFields));
+            const permanentFields = data.customFields.filter((f: StoredMetadataField) => f.isPermanent !== false);
+            setCustomFields(permanentFields);
+            localStorage.setItem('customMetadataFields', JSON.stringify(permanentFields));
           }
         }
       } catch (err) {
@@ -53,8 +55,13 @@ export function MetadataEditor({ metadata, onChange }: Props) {
       }
       const storedFields = localStorage.getItem('customMetadataFields');
       if (storedFields && customFields.length === 0) {
-        setCustomFields(JSON.parse(storedFields));
+        const parsed = JSON.parse(storedFields);
+        const permanentFields = parsed.filter((f: StoredMetadataField) => f.isPermanent !== false);
+        setCustomFields(permanentFields);
       }
+      
+      // Clear temporary field tracking on fresh page load
+      setTemporaryFieldIds(new Set());
     };
 
     loadCustomFields();
@@ -68,11 +75,13 @@ export function MetadataEditor({ metadata, onChange }: Props) {
   // Save to both localStorage and Supabase
   const saveCustomFieldsToSupabase = async (fields: StoredMetadataField[], categories: StoredCategoryOption[]) => {
     try {
+      // Only save permanent fields to Supabase
+      const permanentFields = fields.filter(f => f.isPermanent !== false);
       const response = await fetch('/api/custom-fields', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          customFields: fields,
+          customFields: permanentFields,
           customCategories: categories,
         }),
       });
@@ -113,6 +122,7 @@ export function MetadataEditor({ metadata, onChange }: Props) {
         id: Date.now().toString(),
         name: newFieldName,
         label: newFieldName,
+        isPermanent: saveNewField, // Set isPermanent based on checkbox
       };
 
       // Always add to UI state
