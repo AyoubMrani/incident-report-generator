@@ -1,0 +1,5 @@
+{
+  "name": "Incident Report Generator",
+  "description": "A block-based editor to create structured incident reports and export them as JSON or Markdown for AI training.",
+  "requestFramePermissions": []
+}
