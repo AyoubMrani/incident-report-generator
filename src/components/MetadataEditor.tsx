@@ -77,7 +77,9 @@ export function MetadataEditor({ metadata, onChange }: Props) {
 
       // Only save to localStorage if checkbox is checked
       if (saveNewField) {
-        localStorage.setItem('customMetadataFields', JSON.stringify(updated));
+        // Save only permanent fields (exclude temporary ones)
+        const fieldsToSave = updated.filter(f => !temporaryFieldIds.has(f.id));
+        localStorage.setItem('customMetadataFields', JSON.stringify(fieldsToSave));
       } else {
         // Track this as a temporary field for this session
         setTemporaryFieldIds(prev => new Set([...prev, newField.id]));
@@ -97,7 +99,9 @@ export function MetadataEditor({ metadata, onChange }: Props) {
 
     // If permanent field, update localStorage
     if (!isTemporary) {
-      localStorage.setItem('customMetadataFields', JSON.stringify(updated));
+      // Save only permanent fields (exclude temporary ones)
+      const fieldsToSave = updated.filter(f => !temporaryFieldIds.has(f.id));
+      localStorage.setItem('customMetadataFields', JSON.stringify(fieldsToSave));
     } else {
       // Remove from temporary tracking
       setTemporaryFieldIds(prev => {
