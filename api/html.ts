@@ -27,7 +27,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     }
 
     // Security: prevent directory traversal
-    if (filename.includes('..') || filename.includes('/')) {
+    if (filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
 
@@ -43,6 +43,32 @@ export default async (req: VercelRequest, res: VercelResponse) => {
     const report = JSON.parse(content);
     const metadata = report.metadata || {};
     const blocks = report.blocks || [];
+
+    // Extract incident_id from filename like "incidents/inc00001/incident_inc00001_timestamp.json"
+    const incidentMatch = filename.match(/^incidents\/([^/]+)\//);
+    const incidentId = incidentMatch ? incidentMatch[1] : 'unknown';
+
+    // Convert image_path to base64 for embedded HTML
+    for (const block of blocks) {
+      if (block.type === 'image' && block.image_path && !block.data_url) {
+        try {
+          const imagePath = `incidents/${incidentId}/${block.image_path}`;
+          const { data: imageData, error: imageError } = await supabaseServer.storage
+            .from(BUCKET_NAME)
+            .download(imagePath);
+
+          if (!imageError) {
+            const buffer = await imageData.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString('base64');
+            const ext = block.image_path.split('.').pop() || 'jpg';
+            const mimeType = getMimeType(ext);
+            block.data_url = `data:${mimeType};base64,${base64}`;
+          }
+        } catch (err) {
+          console.error('Error converting image_path to base64:', err);
+        }
+      }
+    }
 
     // Build HTML
     let html = `<!DOCTYPE html>
@@ -150,7 +176,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 </html>`;
 
     res.setHeader('Content-Type', 'text/html; charset=utf-8');
-    res.setHeader('Content-Disposition', `attachment; filename="${filename.replace('.json', '.html')}"`);
+    const downloadName = filename.split('/').pop()?.replace('.json', '.html') || 'report.html';
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
     res.status(200).send(html);
   } catch (error) {
     console.error('Error generating HTML:', error);
@@ -167,4 +194,15 @@ function escapeHtml(text: string): string {
     "'": '&#039;'
   };
   return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+function getMimeType(ext: string): string {
+  const mimeTypes: { [key: string]: string } = {
+    jpg: 'image/jpeg',
+    jpeg: 'image/jpeg',
+    png: 'image/png',
+    gif: 'image/gif',
+    webp: 'image/webp',
+  };
+  return mimeTypes[ext.toLowerCase()] || 'image/jpeg';
 }

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import Swal from 'sweetalert2';
 import { IncidentReport } from '../types';
 import { FileJson, FileText, Save, Download, Loader2, CheckCircle2 } from 'lucide-react';
 
@@ -91,6 +92,19 @@ export function ExportPanel({ report }: Props) {
           markdown
         }),
       });
+      
+      if (response.status === 409) {
+        // Duplicate incident ID
+        const data = await response.json();
+        await Swal.fire({
+          icon: 'error',
+          title: 'Incident ID Already Exists',
+          text: `An incident report with ID "${data.incident_id}" already exists. Please change the incident ID and try again.`,
+          confirmButtonColor: '#3b82f6',
+        });
+        setIsSaving(false);
+        return;
+      }
       
       if (!response.ok) {
         throw new Error('Failed to save report');

@@ -20,60 +20,76 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    // Extract filename from query parameter
-    const filename = req.query.filename as string;
+    // Extract incident_id from query parameter
+    const incident_id = req.query.incident_id as string;
 
-    if (!filename) {
-      console.error('No filename provided');
-      return res.status(400).json({ error: 'Filename required' });
+    if (!incident_id) {
+      console.error('No incident_id provided');
+      return res.status(400).json({ error: 'Incident ID required' });
     }
 
     // Security: prevent directory traversal
-    if (filename.includes('..') || filename.includes('/')) {
-      return res.status(400).json({ error: 'Invalid filename' });
+    if (incident_id.includes('..') || incident_id.includes('/')) {
+      return res.status(400).json({ error: 'Invalid incident ID' });
     }
 
-    // Determine corresponding files
-    const mdFilename = filename.replace('.json', '.md');
+    const folderPath = `incidents/${incident_id}`;
+    console.log('Deleting folder:', folderPath);
 
-    console.log('Deleting files:', { filename, mdFilename });
-
-    let deletedJson = false;
-    let deletedMd = false;
-
-    // Delete JSON file
-    const { error: jsonError } = await supabaseServer.storage
+    // List all files in the incident folder
+    const { data: files, error: listError } = await supabaseServer.storage
       .from(BUCKET_NAME)
-      .remove([filename]);
+      .list(folderPath);
 
-    if (!jsonError) {
-      deletedJson = true;
-      console.log('Deleted JSON:', filename);
-    } else {
-      console.error(`Error deleting JSON file ${filename}:`, jsonError);
+    if (listError) {
+      console.error(`Error listing files in ${folderPath}:`, listError);
+      return res.status(404).json({ error: 'Incident folder not found' });
     }
 
-    // Delete MD file
-    const { error: mdError } = await supabaseServer.storage
+    // Collect all file paths to delete (including subfolders)
+    const filesToDelete: string[] = [];
+
+    const collectFiles = async (folderName: string) => {
+      const { data: items, error } = await supabaseServer.storage
+        .from(BUCKET_NAME)
+        .list(folderName);
+
+      if (error) throw error;
+
+      for (const item of items) {
+        if (item.is_dir) {
+          await collectFiles(`${folderName}/${item.name}`);
+        } else {
+          filesToDelete.push(`${folderName}/${item.name}`);
+        }
+      }
+    };
+
+    await collectFiles(folderPath);
+
+    console.log('Files to delete:', filesToDelete);
+
+    if (filesToDelete.length === 0) {
+      return res.status(404).json({ error: 'No files found in incident folder' });
+    }
+
+    // Delete all files
+    const { error: deleteError } = await supabaseServer.storage
       .from(BUCKET_NAME)
-      .remove([mdFilename]);
+      .remove(filesToDelete);
 
-    if (!mdError) {
-      deletedMd = true;
-      console.log('Deleted MD:', mdFilename);
-    } else {
-      console.error(`Error deleting MD file ${mdFilename}:`, mdError);
+    if (deleteError) {
+      console.error('Error deleting files:', deleteError);
+      throw deleteError;
     }
 
-    if (!deletedJson && !deletedMd) {
-      return res.status(404).json({ error: 'Files not found' });
-    }
+    console.log(`Successfully deleted ${filesToDelete.length} files from ${folderPath}`);
 
     res.status(200).json({
       success: true,
       message: 'Report deleted successfully',
-      deletedJson,
-      deletedMd,
+      deletedCount: filesToDelete.length,
+      incident_id,
     });
   } catch (error) {
     console.error('Error deleting report:', error);

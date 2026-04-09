@@ -20,7 +20,7 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    // Extract filename from query parameter
+    // Extract filename from query parameter (now supports paths like "incidents/inc00001/...")
     const filename = req.query.filename as string;
 
     if (!filename) {
@@ -28,8 +28,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       return res.status(400).json({ error: 'Filename required' });
     }
 
-    // Security: prevent directory traversal
-    if (filename.includes('..') || filename.includes('/')) {
+    // Security: prevent directory traversal attacks (but allow normal paths)
+    if (filename.includes('..')) {
       return res.status(400).json({ error: 'Invalid filename' });
     }
 
@@ -45,9 +45,10 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
     const isJson = filename.endsWith('.json');
     const contentType = isJson ? 'application/json' : 'text/markdown';
+    const downloadName = filename.split('/').pop() || filename;
 
     res.setHeader('Content-Type', contentType);
-    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${downloadName}"`);
     res.status(200).send(content);
   } catch (error) {
     console.error('Error downloading report:', error);
