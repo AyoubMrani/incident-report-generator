@@ -55,7 +55,7 @@ export function ReportList({ onSelectReport }: Props) {
 
     setDeletingFilename(filename);
     try {
-      const response = await fetch(`/api/delete/${filename}`, {
+      const response = await fetch(`/api/delete?filename=${encodeURIComponent(filename)}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete report');

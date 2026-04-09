@@ -32,7 +32,7 @@ export function ReportViewer({ filename, onBack }: Props) {
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/delete/${filename}`, {
+      const response = await fetch(`/api/delete?filename=${encodeURIComponent(filename)}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete report');
@@ -61,7 +61,7 @@ export function ReportViewer({ filename, onBack }: Props) {
   useEffect(() => {
     const fetchReport = async () => {
       try {
-        const response = await fetch(`/api/reports/content/${filename}`);
+        const response = await fetch(`/api/reports-content?filename=${encodeURIComponent(filename)}`);
         if (!response.ok) throw new Error('Failed to fetch report content');
         const data = await response.json();
         setReport(data);
@@ -109,7 +109,7 @@ export function ReportViewer({ filename, onBack }: Props) {
         </button>
         <div className="flex gap-2">
           <a 
-            href={`/api/reports/download/${filename}`}
+            href={`/api/download?filename=${encodeURIComponent(filename)}`}
             download
             className="flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded text-sm transition-colors"
           >
@@ -117,7 +117,7 @@ export function ReportViewer({ filename, onBack }: Props) {
             JSON
           </a>
           <a 
-            href={`/api/reports/download/${mdFilename}`}
+            href={`/api/download?filename=${encodeURIComponent(mdFilename)}`}
             download
             className="flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded text-sm transition-colors"
           >
