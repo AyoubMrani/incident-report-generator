@@ -40,11 +40,14 @@ async function incidentIdExists(incidentId: string): Promise<boolean> {
       .from(BUCKET_NAME)
       .list(folderPath);
     
-    if (error && error.statusCode !== 404) {
+    if (error) {
       console.error('Error checking incident ID:', error);
+      // If we get an error, assume folder doesn't exist
+      return false;
     }
     
-    return !error || error.statusCode !== 404;
+    // If data exists and has files, the incident exists
+    return data && data.length > 0;
   } catch (err) {
     console.error('Error in incidentIdExists:', err);
     return false;
@@ -256,7 +259,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       
       // Each item in incidents/ is a folder (incident ID)
       for (const item of items) {
-        if (item.is_dir) {
+        // Folders don't have metadata.mimetype
+        if (!item.metadata || !item.metadata.mimetype) {
           const incidentId = item.name;
           try {
             const { data: files, error: listError } = await supabaseServer.storage

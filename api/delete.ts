@@ -57,7 +57,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       if (error) throw error;
 
       for (const item of items) {
-        if (item.is_dir) {
+        // Check if it's a folder (no mimetype)
+        if (!item.metadata || !item.metadata.mimetype) {
           await collectFiles(`${folderName}/${item.name}`);
         } else {
           filesToDelete.push(`${folderName}/${item.name}`);
