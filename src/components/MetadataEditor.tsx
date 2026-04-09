@@ -25,21 +25,63 @@ export function MetadataEditor({ metadata, onChange }: Props) {
   const [newFieldValue, setNewFieldValue] = useState('');
   const [saveNewField, setSaveNewField] = useState(false);
 
-  // Load custom categories and fields from localStorage
+  // Load custom categories and fields from Supabase (with localStorage fallback)
   useEffect(() => {
-    const stored = localStorage.getItem('customCategories');
-    if (stored) {
-      setCustomCategories(JSON.parse(stored));
-    }
-    const storedFields = localStorage.getItem('customMetadataFields');
-    if (storedFields) {
-      setCustomFields(JSON.parse(storedFields));
-    }
+    const loadCustomFields = async () => {
+      try {
+        // Try to fetch from Supabase
+        const response = await fetch('/api/custom-fields');
+        if (response.ok) {
+          const data = await response.json();
+          if (data.customCategories && data.customCategories.length > 0) {
+            setCustomCategories(data.customCategories);
+            localStorage.setItem('customCategories', JSON.stringify(data.customCategories));
+          }
+          if (data.customFields && data.customFields.length > 0) {
+            setCustomFields(data.customFields);
+            localStorage.setItem('customMetadataFields', JSON.stringify(data.customFields));
+          }
+        }
+      } catch (err) {
+        console.log('Could not fetch from Supabase, using localStorage');
+      }
+
+      // Fallback to localStorage if Supabase is not available
+      const stored = localStorage.getItem('customCategories');
+      if (stored && customCategories.length === 0) {
+        setCustomCategories(JSON.parse(stored));
+      }
+      const storedFields = localStorage.getItem('customMetadataFields');
+      if (storedFields && customFields.length === 0) {
+        setCustomFields(JSON.parse(storedFields));
+      }
+    };
+
+    loadCustomFields();
   }, []);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     onChange({ ...metadata, [name]: value });
+  };
+
+  // Save to both localStorage and Supabase
+  const saveCustomFieldsToSupabase = async (fields: StoredMetadataField[], categories: StoredCategoryOption[]) => {
+    try {
+      const response = await fetch('/api/custom-fields', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          customFields: fields,
+          customCategories: categories,
+        }),
+      });
+      if (!response.ok) {
+        console.warn('Failed to sync to Supabase, will try again later');
+      }
+    } catch (err) {
+      console.warn('Could not sync to Supabase:', err);
+    }
   };
 
   const handleAddCustomCategory = () => {
@@ -51,6 +93,7 @@ export function MetadataEditor({ metadata, onChange }: Props) {
       const updated = [...customCategories, newCategory];
       setCustomCategories(updated);
       localStorage.setItem('customCategories', JSON.stringify(updated));
+      saveCustomFieldsToSupabase(customFields, updated);
       onChange({ ...metadata, category: newCategoryLabel });
       setNewCategoryLabel('');
       setShowCustomCategoryInput(false);
@@ -61,6 +104,7 @@ export function MetadataEditor({ metadata, onChange }: Props) {
     const updated = customCategories.filter(c => c.id !== id);
     setCustomCategories(updated);
     localStorage.setItem('customCategories', JSON.stringify(updated));
+    saveCustomFieldsToSupabase(customFields, updated);
   };
 
   const handleAddCustomField = () => {
@@ -75,9 +119,10 @@ export function MetadataEditor({ metadata, onChange }: Props) {
       const updated = [...customFields, newField];
       setCustomFields(updated);
 
-      // Only save to localStorage if checkbox is checked
+      // Only save to localStorage and Supabase if checkbox is checked
       if (saveNewField) {
         localStorage.setItem('customMetadataFields', JSON.stringify(updated));
+        saveCustomFieldsToSupabase(updated, customCategories);
       } else {
         // Track this as a temporary field for this session
         setTemporaryFieldIds(prev => new Set([...prev, newField.id]));
@@ -95,9 +140,10 @@ export function MetadataEditor({ metadata, onChange }: Props) {
     const updated = customFields.filter(f => f.id !== id);
     setCustomFields(updated);
 
-    // If permanent field, update localStorage
+    // If permanent field, update localStorage and Supabase
     if (!isTemporary) {
       localStorage.setItem('customMetadataFields', JSON.stringify(updated));
+      saveCustomFieldsToSupabase(updated, customCategories);
     } else {
       // Remove from temporary tracking
       setTemporaryFieldIds(prev => {
