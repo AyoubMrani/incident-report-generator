@@ -71,7 +71,6 @@ export function ExportPanel({ report }: Props) {
 
   const handleSaveAndExport = async () => {
     setIsSaving(true);
-    setSaveResult(null);
     
     try {
       const markdown = generateMarkdown();
