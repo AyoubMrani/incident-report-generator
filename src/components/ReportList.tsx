@@ -38,6 +38,19 @@ export function ReportList({ onSelectReport }: Props) {
   }, []);
 
   const handleDeleteReport = async (filename: string) => {
+    // Extract incident_id from filename "incidents/inc00001/incident_inc00001_timestamp.json"
+    const incidentMatch = filename.match(/^incidents\/([^/]+)\//);
+    const incident_id = incidentMatch ? incidentMatch[1] : null;
+
+    if (!incident_id) {
+      await Swal.fire({
+        title: 'Error!',
+        text: 'Could not determine incident ID.',
+        icon: 'error',
+      });
+      return;
+    }
+
     const result = await Swal.fire({
       title: 'Delete Report?',
       text: 'This action cannot be undone.',
@@ -55,7 +68,7 @@ export function ReportList({ onSelectReport }: Props) {
 
     setDeletingFilename(filename);
     try {
-      const response = await fetch(`/api/delete?filename=${encodeURIComponent(filename)}`, {
+      const response = await fetch(`/api/delete?incident_id=${encodeURIComponent(incident_id)}`, {
         method: 'DELETE',
       });
       if (!response.ok) throw new Error('Failed to delete report');

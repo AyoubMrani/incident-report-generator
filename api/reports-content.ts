@@ -39,43 +39,54 @@ export default async (req: VercelRequest, res: VercelResponse) => {
       .from(BUCKET_NAME)
       .download(filename);
 
-    if (error) throw error;
+    if (error) {
+      console.error('Download error:', error);
+      throw error;
+    }
 
     const content = await data.text();
+    console.log('Parsing JSON content...');
     const report = JSON.parse(content);
 
     // Convert image_path back to data_url for display
     const incidentMatch = filename.match(/^incidents\/([^/]+)\//);
     if (incidentMatch && report.blocks) {
       const incidentId = incidentMatch[1];
+      console.log('Processing images for incident:', incidentId);
       
       for (const block of report.blocks) {
         if (block.type === 'image' && block.image_path && !block.data_url) {
           try {
             const imagePath = `incidents/${incidentId}/${block.image_path}`;
+            console.log('Converting image:', imagePath);
             const { data: imageData, error: imageError } = await supabaseServer.storage
               .from(BUCKET_NAME)
               .download(imagePath);
 
-            if (!imageError) {
-              const buffer = await imageData.arrayBuffer();
-              const base64 = Buffer.from(buffer).toString('base64');
-              const ext = block.image_path.split('.').pop() || 'jpg';
-              const mimeType = getMimeType(ext);
-              block.data_url = `data:${mimeType};base64,${base64}`;
+            if (imageError) {
+              console.error('Image download error:', imagePath, imageError);
+              continue;
             }
+
+            const buffer = await imageData.arrayBuffer();
+            const base64 = Buffer.from(buffer).toString('base64');
+            const ext = block.image_path.split('.').pop() || 'jpg';
+            const mimeType = getMimeType(ext);
+            block.data_url = `data:${mimeType};base64,${base64}`;
+            console.log('Image converted successfully:', imagePath);
           } catch (err) {
-            console.error('Error converting image_path to data_url:', err);
+            console.error('Error converting image_path to data_url:', imagePath, err);
           }
         }
       }
     }
 
+    console.log('Sending report successfully');
     res.setHeader('Content-Type', 'application/json');
     res.status(200).send(JSON.stringify(report));
   } catch (error) {
     console.error('Error reading report content:', error);
-    res.status(500).json({ error: 'Failed to read report content' });
+    res.status(500).json({ error: 'Failed to read report content', details: String(error) });
   }
 };
 
