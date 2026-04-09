@@ -1,5 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
+import crypto from 'crypto';
 
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
@@ -18,6 +19,11 @@ interface CustomField {
 interface CustomCategory {
   id: string;
   label: string;
+}
+
+// Generate a UUID v4
+function generateUUID(): string {
+  return crypto.randomUUID();
 }
 
 export default async (req: VercelRequest, res: VercelResponse) => {
@@ -70,6 +76,8 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         label: c.label,
       }));
 
+      console.log('Returning fields:', customFields);
+      console.log('Returning categories:', customCategories);
       return res.status(200).json({ customFields, customCategories });
     }
 
@@ -87,16 +95,17 @@ export default async (req: VercelRequest, res: VercelResponse) => {
 
       const errors: string[] = [];
 
-      // Insert/update categories
+      // Insert/update categories - generate UUIDs if missing
       for (const category of customCategories) {
-        console.log('Upserting category:', category);
+        const uuid = category.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(category.id) ? category.id : generateUUID();
+        console.log('Upserting category with UUID:', uuid, 'label:', category.label);
         const { data, error: catError } = await supabaseServer
           .from('custom_categories')
-          .upsert({ id: category.id, label: category.label }, { onConflict: 'id' })
+          .upsert({ id: uuid, label: category.label }, { onConflict: 'label' })
           .select();
         
         if (catError) {
-          const errMsg = `Error upserting category ${category.id}: ${catError.message}`;
+          const errMsg = `Error upserting category: ${catError.message}`;
           console.error(errMsg);
           errors.push(errMsg);
         } else {
@@ -104,22 +113,23 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         }
       }
 
-      // Insert/update fields (only permanent ones)
+      // Insert/update fields - generate UUIDs if missing
       for (const field of customFields) {
         if (field.isPermanent !== false) {
-          console.log('Upserting field:', field);
+          const uuid = field.id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(field.id) ? field.id : generateUUID();
+          console.log('Upserting field with UUID:', uuid, 'name:', field.name);
           const { data, error: fieldError } = await supabaseServer
             .from('custom_fields')
             .upsert({
-              id: field.id,
+              id: uuid,
               name: field.name,
               label: field.label,
               is_permanent: field.isPermanent !== false,
-            }, { onConflict: 'id' })
+            }, { onConflict: 'name' })
             .select();
           
           if (fieldError) {
-            const errMsg = `Error upserting field ${field.id}: ${fieldError.message}`;
+            const errMsg = `Error upserting field: ${fieldError.message}`;
             console.error(errMsg);
             errors.push(errMsg);
           } else {
