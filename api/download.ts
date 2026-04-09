@@ -1,5 +1,5 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseServer } from './supabaseClient';
+import { supabaseServer } from './supabaseClient.js';
 
 const BUCKET_NAME = 'reports';
 
