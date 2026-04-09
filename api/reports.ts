@@ -1,7 +1,22 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
-import { supabaseServer } from './supabaseClient.js';
+import { createClient } from '@supabase/supabase-js';
 
 const BUCKET_NAME = 'reports';
+
+// Initialize Supabase client
+const supabaseUrl = process.env.SUPABASE_URL;
+const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+console.log('Supabase URL:', supabaseUrl ? 'Set' : 'NOT SET');
+console.log('Supabase Key:', serviceRoleKey ? 'Set' : 'NOT SET');
+
+if (!supabaseUrl || !serviceRoleKey) {
+  console.error('Missing Supabase server environment variables!');
+}
+
+const supabaseServer = supabaseUrl && serviceRoleKey 
+  ? createClient(supabaseUrl, serviceRoleKey)
+  : null;
 
 interface ReportData {
   report: {
@@ -15,6 +30,10 @@ interface ReportData {
 }
 
 export default async (req: VercelRequest, res: VercelResponse) => {
+  if (!supabaseServer) {
+    return res.status(500).json({ error: 'Supabase not configured' });
+  }
+
   // POST - Save report
   if (req.method === 'POST') {
     try {
