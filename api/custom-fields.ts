@@ -1,8 +1,6 @@
 import { VercelRequest, VercelResponse } from '@vercel/node';
 import { createClient } from '@supabase/supabase-js';
 
-const BUCKET_NAME = 'reports';
-
 // Initialize Supabase client
 const supabaseUrl = process.env.SUPABASE_URL;
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -13,12 +11,13 @@ const supabaseServer = supabaseUrl && serviceRoleKey
 interface CustomField {
   id: string;
   name: string;
-  isPermanent: boolean;
+  label: string;
+  isPermanent?: boolean;
 }
 
 interface CustomCategory {
   id: string;
-  name: string;
+  label: string;
 }
 
 export default async (req: VercelRequest, res: VercelResponse) => {
@@ -36,35 +35,45 @@ export default async (req: VercelRequest, res: VercelResponse) => {
   }
 
   try {
-    // GET - Fetch custom fields and categories
+    // GET - Fetch custom fields and categories from database
     if (req.method === 'GET') {
-      console.log('Fetching custom fields and categories');
+      console.log('Fetching custom fields and categories from database');
 
-      // Try to fetch from files storage (fallback approach)
-      // For now, return empty arrays if table doesn't exist
-      const customFields: CustomField[] = [];
-      const customCategories: CustomCategory[] = [];
+      // Fetch from database tables
+      const { data: categories, error: catError } = await supabaseServer
+        .from('custom_categories')
+        .select('*')
+        .order('created_at', { ascending: true });
 
-      // Try to read from a JSON file in storage
-      try {
-        const { data, error } = await supabaseServer.storage
-          .from(BUCKET_NAME)
-          .download('config/custom-fields.json');
+      const { data: fields, error: fieldsError } = await supabaseServer
+        .from('custom_fields')
+        .select('*')
+        .eq('is_permanent', true)
+        .order('created_at', { ascending: true });
 
-        if (!error) {
-          const content = await data.text();
-          const parsed = JSON.parse(content);
-          customFields.push(...(parsed.fields || []));
-          customCategories.push(...(parsed.categories || []));
-        }
-      } catch (err) {
-        console.log('No custom fields config found yet');
+      if (catError) {
+        console.log('Categories table may not exist yet:', catError);
       }
+      if (fieldsError) {
+        console.log('Fields table may not exist yet:', fieldsError);
+      }
+
+      const customFields: CustomField[] = (fields || []).map(f => ({
+        id: f.id,
+        name: f.name,
+        label: f.label,
+        isPermanent: f.is_permanent,
+      }));
+
+      const customCategories: CustomCategory[] = (categories || []).map(c => ({
+        id: c.id,
+        label: c.label,
+      }));
 
       return res.status(200).json({ customFields, customCategories });
     }
 
-    // POST - Save custom fields and categories
+    // POST - Save custom fields and categories to database
     if (req.method === 'POST') {
       const { customFields, customCategories } = req.body;
 
@@ -72,37 +81,39 @@ export default async (req: VercelRequest, res: VercelResponse) => {
         return res.status(400).json({ error: 'customFields and customCategories are required' });
       }
 
-      console.log('Saving custom fields and categories');
+      console.log('Saving custom fields and categories to database');
 
-      const configData = {
-        fields: customFields,
-        categories: customCategories,
-        updatedAt: new Date().toISOString(),
-      };
-
-      try {
-        // Try to delete existing file first
-        await supabaseServer.storage
-          .from(BUCKET_NAME)
-          .remove(['config/custom-fields.json']);
-      } catch (err) {
-        console.log('No existing config to delete');
+      // Insert/update categories
+      for (const category of customCategories) {
+        const { error: catError } = await supabaseServer
+          .from('custom_categories')
+          .upsert({ id: category.id, label: category.label }, { onConflict: 'id' });
+        
+        if (catError) {
+          console.error('Error upserting category:', catError);
+        }
       }
 
-      // Upload new config
-      const { error } = await supabaseServer.storage
-        .from(BUCKET_NAME)
-        .upload('config/custom-fields.json', JSON.stringify(configData, null, 2), {
-          contentType: 'application/json',
-        });
-
-      if (error) {
-        console.error('Error saving custom fields:', error);
-        throw error;
+      // Insert/update fields (only permanent ones)
+      for (const field of customFields) {
+        if (field.isPermanent !== false) {
+          const { error: fieldError } = await supabaseServer
+            .from('custom_fields')
+            .upsert({
+              id: field.id,
+              name: field.name,
+              label: field.label,
+              is_permanent: field.isPermanent !== false,
+            }, { onConflict: 'id' });
+          
+          if (fieldError) {
+            console.error('Error upserting field:', fieldError);
+          }
+        }
       }
 
-      console.log('Custom fields saved successfully');
-      return res.status(200).json({ success: true, message: 'Custom fields saved' });
+      console.log('Custom fields saved to database successfully');
+      return res.status(200).json({ success: true, message: 'Custom fields saved to database' });
     }
 
     return res.status(405).json({ error: 'Method not allowed' });
