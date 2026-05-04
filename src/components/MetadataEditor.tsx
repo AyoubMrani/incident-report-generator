@@ -39,7 +39,18 @@ export function MetadataEditor({ metadata, onChange }: Props) {
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
-    onChange({ ...metadata, [name]: value });
+    if (name === 'category' && value === '__other__') {
+      // Show input for custom category
+      setShowCustomCategoryInput(true);
+      setNewCategoryLabel('');
+    } else if (name === 'category' && value !== '__other__') {
+      // Hide custom input when selecting standard category
+      setShowCustomCategoryInput(false);
+      setNewCategoryLabel('');
+      onChange({ ...metadata, [name]: value });
+    } else {
+      onChange({ ...metadata, [name]: value });
+    }
   };
 
   const handleAddCustomCategory = () => {
@@ -51,10 +62,16 @@ export function MetadataEditor({ metadata, onChange }: Props) {
       const updated = [...customCategories, newCategory];
       setCustomCategories(updated);
       localStorage.setItem('customCategories', JSON.stringify(updated));
-      onChange({ ...metadata, category: newCategoryLabel });
       setNewCategoryLabel('');
       setShowCustomCategoryInput(false);
     }
+  };
+
+  const handleCustomCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value;
+    setNewCategoryLabel(value);
+    // Update metadata with the typed value (even if not added to permanent list)
+    onChange({ ...metadata, category: value });
   };
 
   const handleDeleteCategory = (id: string) => {
@@ -186,25 +203,27 @@ export function MetadataEditor({ metadata, onChange }: Props) {
               <input
                 type="text"
                 value={newCategoryLabel}
-                onChange={(e) => setNewCategoryLabel(e.target.value)}
-                placeholder="Enter custom category"
+                onChange={handleCustomCategoryChange}
+                placeholder="Enter custom category name"
                 className="flex-1 p-2 border border-gray-300 rounded-md text-sm"
                 onKeyPress={(e) => e.key === 'Enter' && handleAddCustomCategory()}
               />
               <button
                 onClick={handleAddCustomCategory}
-                className="px-3 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 text-sm"
+                className="px-3 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm font-medium"
+                title="Save this category for future use"
               >
                 Add
               </button>
               <button
                 onClick={() => {
                   setShowCustomCategoryInput(false);
-                  setNewCategoryLabel('');
+                  // Keep the typed value in metadata but don't save to permanent list
                 }}
                 className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 text-sm"
+                title="Use custom category for this report only"
               >
-                Cancel
+                Skip
               </button>
             </div>
           )}

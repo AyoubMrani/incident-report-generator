@@ -265,6 +265,42 @@ async function startServer() {
     }
   });
 
+  // API to update existing report
+  app.put('/api/reports/update', async (req, res) => {
+    try {
+      const { filename, report, markdown } = req.body;
+
+      if (!filename || !report) {
+        return res.status(400).json({ error: 'Filename and report data are required' });
+      }
+
+      // Security: prevent directory traversal
+      if (filename.includes('..') || filename.includes('/')) {
+        return res.status(400).json({ error: 'Invalid filename' });
+      }
+
+      // Update JSON file
+      const jsonPath = path.join(reportsDir, filename);
+      await fs.writeFile(jsonPath, JSON.stringify(report, null, 2), 'utf-8');
+
+      // Update MD file
+      const mdPath = path.join(reportsDir, filename.replace('.json', '.md'));
+      await fs.writeFile(mdPath, markdown, 'utf-8');
+
+      res.json({
+        success: true,
+        message: 'Report updated successfully',
+        jsonUrl: `/api/download?filename=${encodeURIComponent(filename)}`,
+        jsonFilename: filename,
+        mdUrl: `/api/download?filename=${encodeURIComponent(filename.replace('.json', '.md'))}`,
+        mdFilename: filename.replace('.json', '.md'),
+      });
+    } catch (error) {
+      console.error('Error updating report:', error);
+      res.status(500).json({ error: 'Failed to update report' });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({

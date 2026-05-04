@@ -1,11 +1,12 @@
 import React, { useEffect, useState } from 'react';
 import { IncidentReport } from '../types';
-import { Loader2, ArrowLeft, Download, FileJson, FileText, Trash2 } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, FileJson, FileText, Trash2, Edit } from 'lucide-react';
 import Swal from 'sweetalert2';
 
 interface Props {
   filename: string;
   onBack: () => void;
+  onEdit: (filename: string) => void;
 }
 
 export function ReportViewer({ filename, onBack }: Props) {
@@ -121,6 +122,14 @@ export function ReportViewer({ filename, onBack }: Props) {
           Back to List
         </button>
         <div className="flex gap-2">
+          <button
+            onClick={() => onEdit(filename)}
+            className="flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded text-sm transition-colors"
+            title="Edit this report"
+          >
+            <Edit className="w-4 h-4 mr-1.5" />
+            Edit
+          </button>
           <a 
             href={`/api/download?filename=${encodeURIComponent(filename)}`}
             download

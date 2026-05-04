@@ -7,11 +7,12 @@ import { ReportList } from './components/ReportList';
 import { ReportViewer } from './components/ReportViewer';
 import { FileText, Plus, List } from 'lucide-react';
 
-type ViewState = 'create' | 'list' | 'view';
+type ViewState = 'create' | 'list' | 'view' | 'edit';
 
 export default function App() {
   const [view, setView] = useState<ViewState>('create');
   const [selectedReportFile, setSelectedReportFile] = useState<string | null>(null);
+  const [editingFilename, setEditingFilename] = useState<string | null>(null);
 
   const [metadata, setMetadata] = useState<ReportMetadata>({
     incident_id: '',
@@ -32,6 +33,38 @@ export default function App() {
   const handleSelectReport = (filename: string) => {
     setSelectedReportFile(filename);
     setView('view');
+  };
+
+  const handleEditReport = async (filename: string) => {
+    try {
+      const response = await fetch(`/api/reports/content/${encodeURIComponent(filename)}`);
+      if (!response.ok) throw new Error('Failed to load report');
+      const reportData = await response.json();
+      
+      // Load data into edit form
+      setMetadata(reportData.metadata);
+      setBlocks(reportData.blocks);
+      setEditingFilename(filename);
+      setView('edit');
+    } catch (error) {
+      console.error('Error loading report for editing:', error);
+      alert('Failed to load report for editing');
+    }
+  };
+
+  const handleBackFromEdit = () => {
+    // Reset form
+    setMetadata({
+      incident_id: '',
+      title: '',
+      caller: '',
+      category: '',
+      subcategory: '',
+      date: new Date().toISOString().split('T')[0],
+    });
+    setBlocks([]);
+    setEditingFilename(null);
+    setView('list');
   };
 
   return (
@@ -80,7 +113,36 @@ export default function App() {
                 <BlockEditor blocks={blocks} onChange={setBlocks} />
               </div>
 
-              <ExportPanel report={report} />
+              <ExportPanel report={report} editingFilename={null} />
+            </div>
+          )}
+
+          {view === 'edit' && (
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-200">
+                <h2 className="text-xl font-bold text-gray-900">Edit Report</h2>
+                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
+                  {editingFilename}
+                </span>
+              </div>
+              
+              <MetadataEditor metadata={metadata} onChange={setMetadata} />
+              
+              <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
+                <h2 className="text-lg font-semibold mb-4 text-gray-800">Report Content</h2>
+                <BlockEditor blocks={blocks} onChange={setBlocks} />
+              </div>
+
+              <div className="mt-4 mb-8 flex gap-2">
+                <button
+                  onClick={handleBackFromEdit}
+                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+
+              <ExportPanel report={report} editingFilename={editingFilename} />
             </div>
           )}
 
@@ -94,7 +156,8 @@ export default function App() {
             <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
               <ReportViewer 
                 filename={selectedReportFile} 
-                onBack={() => setView('list')} 
+                onBack={() => setView('list')}
+                onEdit={handleEditReport}
               />
             </div>
           )}
