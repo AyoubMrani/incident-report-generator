@@ -38,8 +38,8 @@ export function ReportList({ onSelectReport }: Props) {
   }, []);
 
   const handleDeleteReport = async (filename: string) => {
-    // Extract incident_id from filename "incidents/inc00001/incident_inc00001_timestamp.json"
-    const incidentMatch = filename.match(/^incidents\/([^/]+)\//);
+    // Extract incident_id from simple filename "incident_inc0001_timestamp.json"
+    const incidentMatch = filename.match(/incident_([^_]+)_/);
     const incident_id = incidentMatch ? incidentMatch[1] : null;
 
     if (!incident_id) {

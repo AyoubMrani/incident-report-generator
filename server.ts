@@ -59,6 +59,117 @@ async function startServer() {
     res.download(filepath);
   });
 
+  // API to download report (query parameter version)
+  app.get('/api/download', (req, res) => {
+    const filename = req.query.filename as string;
+    if (!filename) {
+      return res.status(400).json({ error: 'Filename is required' });
+    }
+    const filepath = path.join(reportsDir, filename);
+    res.download(filepath);
+  });
+
+  // API to generate HTML report
+  app.get('/api/html', async (req, res) => {
+    try {
+      const filename = req.query.filename as string;
+      if (!filename) {
+        return res.status(400).json({ error: 'Filename is required' });
+      }
+
+      const content = await fs.readFile(path.join(reportsDir, filename), 'utf-8');
+      const report = JSON.parse(content);
+      const metadata = report.metadata || {};
+
+      // Build HTML
+      let html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${metadata.title || 'Incident Report'}</title>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; line-height: 1.6; color: #333; }
+    h1 { color: #1f2937; border-bottom: 3px solid #3b82f6; padding-bottom: 10px; }
+    h2 { color: #374151; margin-top: 30px; }
+    h3 { color: #6b7280; }
+    .metadata { background: #f3f4f6; padding: 15px; border-radius: 5px; margin-bottom: 20px; }
+    .metadata-item { margin: 8px 0; }
+    .metadata-label { font-weight: bold; color: #1f2937; }
+    img { max-width: 100%; height: auto; margin: 15px 0; border: 1px solid #d1d5db; border-radius: 5px; }
+    code { background: #f3f4f6; padding: 2px 6px; border-radius: 3px; font-family: monospace; }
+    pre { background: #1f2937; color: #e5e7eb; padding: 15px; border-radius: 5px; overflow-x: auto; }
+    table { border-collapse: collapse; width: 100%; margin: 15px 0; }
+    th, td { border: 1px solid #d1d5db; padding: 12px; text-align: left; }
+    th { background: #f3f4f6; font-weight: bold; }
+    blockquote { border-left: 4px solid #3b82f6; padding-left: 15px; margin-left: 0; color: #6b7280; }
+    ul, ol { margin: 10px 0; }
+    .page-break { page-break-after: always; margin: 30px 0; }
+  </style>
+</head>
+<body>
+  <h1>${metadata.title || 'Incident Report'}</h1>
+  
+  <div class="metadata">
+    <div class="metadata-item"><span class="metadata-label">Incident ID:</span> ${metadata.incident_id || 'N/A'}</div>
+    <div class="metadata-item"><span class="metadata-label">Caller:</span> ${metadata.caller || 'N/A'}</div>
+    <div class="metadata-item"><span class="metadata-label">Date:</span> ${metadata.date || 'N/A'}</div>
+    <div class="metadata-item"><span class="metadata-label">Category:</span> ${metadata.category || 'N/A'}</div>
+    ${metadata.subcategory ? `<div class="metadata-item"><span class="metadata-label">Subcategory:</span> ${metadata.subcategory}</div>` : ''}
+  </div>
+
+  <hr />
+`;
+
+      // Render blocks
+      const blocks = report.blocks || [];
+      for (const block of blocks) {
+        switch (block.type) {
+          case 'heading':
+            html += `<h${block.level || 2}>${block.content || ''}</h${block.level || 2}>`;
+            break;
+          case 'paragraph':
+            html += `<p>${block.content || ''}</p>`;
+            break;
+          case 'image':
+            if (block.data_url) {
+              html += `<img src="${block.data_url}" alt="${block.caption || 'Image'}" />`;
+            }
+            break;
+          case 'code':
+            html += `<pre><code class="language-${block.language || 'text'}">${(block.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+            break;
+          case 'table':
+            html += `<table><thead><tr>${(block.headers || []).map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
+            for (const row of (block.rows || [])) {
+              html += `<tr>${row.map((cell: string) => `<td>${cell}</td>`).join('')}</tr>`;
+            }
+            html += `</tbody></table>`;
+            break;
+          case 'list':
+            const tag = block.ordered ? 'ol' : 'ul';
+            html += `<${tag}>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</${tag}>`;
+            break;
+          case 'incident_example':
+            html += `<h3>Incident example: ${block.incident_id || ''}</h3>`;
+            break;
+          case 'description_box':
+            html += `<blockquote><strong>${block.label || ''}</strong><ul>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</ul></blockquote>`;
+            break;
+        }
+      }
+
+      html += `</body></html>`;
+
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="report-${metadata.incident_id || 'export'}.html"`);
+      res.send(html);
+    } catch (error) {
+      console.error('Error generating HTML:', error);
+      res.status(500).json({ error: 'Failed to generate HTML' });
+    }
+  });
+
   // API to list saved reports
   app.get('/api/reports', async (req, res) => {
     try {
@@ -103,10 +214,26 @@ async function startServer() {
   });
 
   // API to delete report
-  app.delete('/api/delete/:filename', async (req, res) => {
+  app.delete('/api/delete/:filename?', async (req, res) => {
     try {
-      const filename = req.params.filename;
-      
+      let filename = req.params.filename;
+      const incidentId = req.query.incident_id as string;
+
+      // If incident_id is provided, find the latest file for that incident
+      if (incidentId && !filename) {
+        const files = await fs.readdir(reportsDir);
+        const incidentFiles = files.filter(f => f.includes(`incident_${incidentId}_`) && f.endsWith('.json'));
+        if (incidentFiles.length === 0) {
+          return res.status(404).json({ error: 'Report not found' });
+        }
+        // Get the latest file for this incident
+        filename = incidentFiles[incidentFiles.length - 1];
+      }
+
+      if (!filename) {
+        return res.status(400).json({ error: 'Filename or incident_id is required' });
+      }
+
       // Security: prevent directory traversal
       if (filename.includes('..') || filename.includes('/')) {
         return res.status(400).json({ error: 'Invalid filename' });

@@ -15,8 +15,8 @@ export function ReportViewer({ filename, onBack }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteReport = async () => {
-    // Extract incident_id from filename "incidents/inc00001/incident_inc00001_timestamp.json"
-    const incidentMatch = filename.match(/^incidents\/([^/]+)\//);
+    // Extract incident_id from simple filename "incident_inc0001_timestamp.json"
+    const incidentMatch = filename.match(/incident_([^_]+)_/);
     const incident_id = incidentMatch ? incidentMatch[1] : null;
 
     if (!incident_id) {
@@ -74,7 +74,7 @@ export function ReportViewer({ filename, onBack }: Props) {
   useEffect(() => {
     const fetchReport = async () => {
       try {
-        const response = await fetch(`/api/reports-content?filename=${encodeURIComponent(filename)}`);
+        const response = await fetch(`/api/reports/content/${encodeURIComponent(filename)}`);
         if (!response.ok) throw new Error('Failed to fetch report content');
         const data = await response.json();
         setReport(data);
