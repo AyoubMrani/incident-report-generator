@@ -41,9 +41,15 @@ export default function App() {
       if (!response.ok) throw new Error('Failed to load report');
       const reportData = await response.json();
       
+      // Ensure all blocks have IDs (for old reports that don't have them)
+      const blocksWithIds = reportData.blocks.map((block: ContentBlock) => ({
+        ...block,
+        id: block.id || crypto.randomUUID()
+      }));
+      
       // Load data into edit form
       setMetadata(reportData.metadata);
-      setBlocks(reportData.blocks);
+      setBlocks(blocksWithIds);
       setEditingFilename(filename);
       setView('edit');
     } catch (error) {

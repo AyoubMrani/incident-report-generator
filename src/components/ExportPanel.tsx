@@ -70,7 +70,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
     return md;
   };
 
-  const handleSaveAsNew = async () => {
+  const handleSaveReport = async () => {
     setIsSaving(true);
     
     try {
@@ -105,184 +105,16 @@ export function ExportPanel({ report, editingFilename }: Props) {
       
       const data = await response.json();
       
-      await Swal.fire({
-        icon: 'success',
-        title: 'Report Saved Successfully!',
-        html: `
-          <div style="text-align: left; margin: 20px 0;">
-            <p style="margin-bottom: 15px;">Your incident report has been saved as a new report. Download it now:</p>
-            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-              <a href="${data.jsonUrl}" download="${data.jsonFilename}" 
-                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                📄 JSON
-              </a>
-              <a href="${data.mdUrl}" download="${data.mdFilename}"
-                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                📝 Markdown
-              </a>
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'Done',
-        confirmButtonColor: '#3b82f6',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-      });
-    
-    } catch (error) {
-      console.error('Error saving:', error);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to save report to the server.',
-        confirmButtonColor: '#ef4444',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleOverwrite = async () => {
-    if (!editingFilename) return;
-
-    const result = await Swal.fire({
-      title: 'Confirm Overwrite',
-      text: 'Are you sure you want to replace the original report? This action cannot be undone.',
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Yes, Overwrite',
-      cancelButtonText: 'Cancel',
-    });
-
-    if (!result.isConfirmed) return;
-
-    setIsSaving(true);
-    
-    try {
-      const markdown = generateMarkdown();
-      
-      const response = await fetch('/api/reports/update', {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          filename: editingFilename,
-          report,
-          markdown
-        }),
-      });
-      
-      if (!response.ok) {
-        throw new Error('Failed to update report');
-      }
-      
-      const data = await response.json();
-      
-      await Swal.fire({
-        icon: 'success',
-        title: 'Report Updated!',
-        html: `
-          <div style="text-align: left; margin: 20px 0;">
-            <p style="margin-bottom: 15px;">The report has been successfully updated. Download it now:</p>
-            <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
-              <a href="${data.jsonUrl}" download="${data.jsonFilename}" 
-                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                📄 JSON
-              </a>
-              <a href="${data.mdUrl}" download="${data.mdFilename}"
-                 style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
-                📝 Markdown
-              </a>
-            </div>
-          </div>
-        `,
-        confirmButtonText: 'Done',
-        confirmButtonColor: '#3b82f6',
-        allowOutsideClick: false,
-        allowEscapeKey: false,
-      });
-    
-    } catch (error) {
-      console.error('Error updating:', error);
-      await Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'Failed to update report on the server.',
-        confirmButtonColor: '#ef4444',
-      });
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleSaveAndExport = async () => {
-    // If editing, ask user to save as new or overwrite
-    if (editingFilename) {
-      const result = await Swal.fire({
-        title: 'Save Changes',
-        text: 'How would you like to save this report?',
-        icon: 'question',
-        showCancelButton: true,
-        confirmButtonColor: '#3b82f6',
-        cancelButtonColor: '#6b7280',
-        confirmButtonText: 'Save as New Report',
-        cancelButtonText: 'Overwrite Original',
-      });
-
-      if (result.isConfirmed) {
-        // Save as new
-        await handleSaveAsNew();
-      } else if (result.isDismissed && result.dismiss === Swal.DismissReason.cancelButton) {
-        // Overwrite original
-        await handleOverwrite();
-      }
-      return;
-    }
-
-    // Regular save (create new report)
-    setIsSaving(true);
-    
-    try {
-      const markdown = generateMarkdown();
-      
-      const response = await fetch('/api/reports', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          report,
-          markdown
-        }),
-      });
-      
-      if (response.status === 409) {
-        const data = await response.json();
-        await Swal.fire({
-          icon: 'error',
-          title: 'Incident ID Already Exists',
-          text: `An incident report with ID "${data.incident_id}" already exists. Please change the incident ID and try again.`,
-          confirmButtonColor: '#3b82f6',
-        });
-        setIsSaving(false);
-        return;
-      }
-      
-      if (!response.ok) {
-        throw new Error('Failed to save report');
-      }
-      
-      const data = await response.json();
+      const successMessage = editingFilename 
+        ? 'Your edited report has been saved as a new report. Download it now:' 
+        : 'Your incident report has been saved. Download it now:';
       
       await Swal.fire({
         icon: 'success',
         title: 'Report Saved Successfully!',
         html: `
           <div style="text-align: left; margin: 20px 0;">
-            <p style="margin-bottom: 15px;">Your incident report has been saved. Download it now:</p>
+            <p style="margin-bottom: 15px;">${successMessage}</p>
             <div style="display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;">
               <a href="${data.jsonUrl}" download="${data.jsonFilename}" 
                  style="padding: 10px 16px; background-color: #1f2937; color: white; text-decoration: none; border-radius: 6px; font-size: 14px; font-weight: 500; cursor: pointer; display: inline-flex; align-items: center; gap: 6px;">
@@ -318,7 +150,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
     <div className="mt-8 pt-6 border-t border-gray-200">
       <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
         <button
-          onClick={handleSaveAndExport}
+          onClick={handleSaveReport}
           disabled={isSaving}
           className="flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-70"
         >
@@ -327,7 +159,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
           ) : (
             <Save className="w-5 h-5 mr-2" />
           )}
-          {isSaving ? 'Saving...' : editingFilename ? 'Save Changes' : 'Generate & Save Report'}
+          {isSaving ? 'Saving...' : editingFilename ? 'Save as New Report' : 'Generate & Save Report'}
         </button>
       </div>
     </div>

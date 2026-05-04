@@ -9,7 +9,7 @@ interface Props {
   onEdit: (filename: string) => void;
 }
 
-export function ReportViewer({ filename, onBack }: Props) {
+export function ReportViewer({ filename, onBack, onEdit }: Props) {
   const [report, setReport] = useState<IncidentReport | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
