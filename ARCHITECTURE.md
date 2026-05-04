@@ -1,36 +1,43 @@
 # Architecture & Data Flow Diagram
 
-## 🏗️ System Architecture
+## 🏗️ System Architecture (Localhost)
 
 ```
-┌─────────────────────────────────────────────────────────────────────────┐
-│                          YOUR USERS                                     │
-│                    (Browser/Mobile App)                                 │
-└────────────────────────────────────┬────────────────────────────────────┘
-                                     │
-                    HTTPS Connection │ (Secure)
-                                     │
-                    ┌────────────────▼────────────────┐
-                    │      VERCEL CDN                 │
-                    │  (Static Files - Fast Global)   │
-                    │  - index.html                   │
-                    │  - App.css                      │
-                    │  - App.js                       │
-                    └────────────────┬────────────────┘
-                                     │
-                                     │
-       ┌─────────────────────────────┴──────────────────────────────┐
-       │                                                           │
-       ▼                                                           ▼
-┌─────────────────────────┐                             ┌──────────────────────┐
-│  API FUNCTIONS          │                             │  SUPABASE STORAGE    │
-│  (Vercel Serverless)    │◄──────────────────────────►│  (Persistent Files)  │
-│                         │  Reads/Writes Files        │                      │
-│ • /api/reports          │                             │ • Bucket: reports    │
-│ • /api/reports-content  │                             │ • Your JSON files    │
-│ • /api/delete           │                             │ • Your MD files      │
-│ • /api/download         │                             │ • Auto Backups       │
-└─────────────────────────┘                             └──────────────────────┘
+┌──────────────────────────────────────────────────────────────────┐
+│                      BROWSER (Localhost)                         │
+│               http://localhost:3000                              │
+├──────────────────────────────────────────────────────────────────┤
+│                                                                  │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │         React App (Client-Side)                          │  │
+│  │  • UI Components                                          │  │
+│  │  • Form Handling                                          │  │
+│  │  • Local Storage (Custom Fields)                          │  │
+│  └──────────────────────┬──────────────────────────────────┘  │
+│                         │                                       │
+│                         │ HTTP Requests                         │
+│                         ▼                                       │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │         Express.js Server (Node.js)                      │  │
+│  │         Running on http://localhost:3000                 │  │
+│  │                                                            │  │
+│  │  ├─ POST /api/reports          (Save report)              │  │
+│  │  ├─ GET /api/reports           (List all reports)         │  │
+│  │  ├─ GET /api/reports/content   (Load report content)      │  │
+│  │  └─ GET /api/reports/download  (Download files)           │  │
+│  └──────────────────────┬──────────────────────────────────┘  │
+│                         │                                       │
+│                         │ File I/O                              │
+│                         ▼                                       │
+│  ┌───────────────────────────────────────────────────────────┐  │
+│  │       Local File System                                   │  │
+│  │       ./reports/ folder                                   │  │
+│  │       • incident_*.json files                             │  │
+│  │       • incident_*.md files                               │  │
+│  │       • images/ folder (embedded in JSON)                 │  │
+│  └───────────────────────────────────────────────────────────┘  │
+│                                                                  │
+└──────────────────────────────────────────────────────────────────┘
 ```
 
 ## 📱 Data Flow: Saving a Report
@@ -39,15 +46,83 @@
 1. User fills form & clicks "Save"
    └─► React App calls: fetch('/api/reports', { method: 'POST' })
 
-2. Request travels to Vercel Serverless Function
-   └─► /api/reports.ts receives the data
+2. Request sent to Express server
+   └─► /api/reports (POST handler)
 
-3. Function authenticates with Supabase
-   └─► Uses SUPABASE_SERVICE_ROLE_KEY (from Vercel env vars)
+3. Server receives the JSON data
+   └─► Extracts incident ID, blocks, metadata
 
-4. Function uploads to Supabase Storage
-   └─► Saves: incident_id_timestamp.json
-   └─► Saves: incident_id_timestamp.md
+4. Server creates files in ./reports/ folder
+   └─► Saves: incident_inc_XXXXXX_timestamp.json
+   └─► Saves: incident_inc_XXXXXX_timestamp.md
+
+5. Response sent back to React
+   └─► Shows success message
+   └─► Provides download links
+
+6. Data persists locally
+   └─► Files stay in ./reports/ folder
+   └─► Available until manually deleted
+```
+
+## 💾 Data Storage
+
+**All data stored locally** in the `./reports/` directory on your computer:
+- ✅ JSON report files (complete data)
+- ✅ Markdown files (formatted export)
+- ✅ Embedded images (base64 in JSON)
+- ✅ Custom fields (localStorage - per browser)
+
+**No external services required:**
+- ❌ No Supabase (PostgreSQL)
+- ❌ No Vercel (Serverless)
+- ❌ No Cloud Storage
+- ❌ No Internet connection needed
+
+## 🚀 Getting Started
+
+1. **Install dependencies:**
+   ```bash
+   npm install
+   ```
+
+2. **Start the dev server:**
+   ```bash
+   npm run dev
+   ```
+
+3. **Open in browser:**
+   ```
+   http://localhost:3000
+   ```
+
+4. **Reports automatically save to:** `./reports/` folder
+
+## 📦 Files Structure
+
+```
+incident-report-generator/
+├── reports/                    # ← Your data storage
+│   ├── incident_inc0001_1775754589000.json
+│   ├── incident_inc0001_1775754589000.md
+│   └── ...
+├── src/                        # React components
+│   ├── components/             # UI components
+│   ├── App.tsx                # Main app
+│   └── main.tsx               # Entry point
+├── server.ts                   # Express.js server
+├── package.json
+└── tsconfig.json
+```
+
+## 🔒 Security Notes
+
+- **Localhost only** - No external connections
+- **Local file storage** - Files on your computer
+- **Browser local storage** - Custom fields per browser
+- **No authentication** - Open to anyone on your network (if shared)
+- **CORS disabled** - Only localhost access
+
 
 5. Storage returns success
    └─► Function responds to browser with file URLs
