@@ -141,7 +141,8 @@ export function ExportPanel({ report, editingFilename }: Props) {
         },
         body: JSON.stringify({
           report,
-          markdown
+          markdown,
+          editingFilename
         }),
       });
       
@@ -163,8 +164,8 @@ export function ExportPanel({ report, editingFilename }: Props) {
       
       const data = await response.json();
       
-      const successMessage = editingFilename 
-        ? 'Your edited report has been saved as a new report. Download it now:' 
+      const successMessage = data.isUpdating
+        ? 'Your report has been successfully updated. Download it now:' 
         : 'Your incident report has been saved. Download it now:';
       
       await Swal.fire({
@@ -217,7 +218,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
           ) : (
             <Save className="w-5 h-5 mr-2" />
           )}
-          {isSaving ? 'Saving...' : editingFilename ? 'Save as New Report' : 'Generate & Save Report'}
+          {isSaving ? 'Saving...' : editingFilename ? 'Update Report' : 'Generate & Save Report'}
         </button>
       </div>
     </div>

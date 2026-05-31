@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { ReportMetadata, ContentBlock, IncidentReport } from './types';
+import { ReportMetadata, ContentBlock, IncidentReport, StoredMetadataField } from './types';
 import { MetadataEditor } from './components/MetadataEditor';
 import { BlockEditor } from './components/BlockEditor';
 import { ExportPanel } from './components/ExportPanel';
@@ -13,6 +13,7 @@ export default function App() {
   const [view, setView] = useState<ViewState>('create');
   const [selectedReportFile, setSelectedReportFile] = useState<string | null>(null);
   const [editingFilename, setEditingFilename] = useState<string | null>(null);
+  const [reportCustomFields, setReportCustomFields] = useState<StoredMetadataField[]>([]);
 
   const [metadata, setMetadata] = useState<ReportMetadata>({
     incident_id: '',
@@ -38,6 +39,13 @@ export default function App() {
   const handleEditReport = async (filename: string) => {
     try {
       const response = await fetch(`/api/reports/content/${encodeURIComponent(filename)}`);
+      
+      // Check if file exists (404 = file was deleted)
+      if (response.status === 404) {
+        alert('Report not found. It may have been deleted. Please refresh the list.');
+        return;
+      }
+      
       if (!response.ok) throw new Error('Failed to load report');
       const reportData = await response.json();
       
@@ -47,9 +55,20 @@ export default function App() {
         id: block.id || crypto.randomUUID()
       }));
       
+      // Extract custom fields from report metadata (any fields not in the standard set)
+      const standardMetadataKeys = new Set(['incident_id', 'title', 'caller', 'category', 'subcategory', 'date']);
+      const customFieldsFromReport: StoredMetadataField[] = Object.keys(reportData.metadata)
+        .filter(key => !standardMetadataKeys.has(key))
+        .map(key => ({
+          id: key,
+          name: key,
+          label: key
+        }));
+      
       // Load data into edit form
       setMetadata(reportData.metadata);
       setBlocks(blocksWithIds);
+      setReportCustomFields(customFieldsFromReport);
       setEditingFilename(filename);
       setView('edit');
     } catch (error) {
@@ -69,6 +88,7 @@ export default function App() {
       date: new Date().toISOString().split('T')[0],
     });
     setBlocks([]);
+    setReportCustomFields([]);
     setEditingFilename(null);
     setView('list');
   };
@@ -132,7 +152,7 @@ export default function App() {
                 </span>
               </div>
               
-              <MetadataEditor metadata={metadata} onChange={setMetadata} />
+              <MetadataEditor metadata={metadata} onChange={setMetadata} reportCustomFields={reportCustomFields} />
               
               <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
                 <h2 className="text-lg font-semibold mb-4 text-gray-800">Report Content</h2>

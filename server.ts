@@ -23,24 +23,82 @@ async function startServer() {
     await fs.mkdir(reportsDir, { recursive: true });
   }
 
-  // API to save report
+  // API to save or update report
   app.post('/api/reports', async (req, res) => {
     try {
-      const { report, markdown } = req.body;
+      const { report, markdown, editingFilename } = req.body;
       const incidentId = report.metadata.incident_id || `untitled-${Date.now()}`;
       const timestamp = Date.now();
       
       // Sanitize incident ID for filename
       const safeIncidentId = incidentId.replace(/[^a-z0-9]/gi, '_').toLowerCase();
       
-      const jsonFilename = `incident_${safeIncidentId}_${timestamp}.json`;
-      const mdFilename = `incident_${safeIncidentId}_${timestamp}.md`;
+      let jsonFilename: string;
+      let mdFilename: string;
+      let isUpdating = false;
       
-      await fs.writeFile(path.join(reportsDir, jsonFilename), JSON.stringify(report, null, 2));
-      await fs.writeFile(path.join(reportsDir, mdFilename), markdown);
+      if (editingFilename) {
+        // UPDATE MODE: Delete old files and use same filename pattern
+        isUpdating = true;
+        jsonFilename = editingFilename;
+        mdFilename = editingFilename.replace('.json', '.md');
+        
+        // Delete old JSON file
+        try {
+          await fs.unlink(path.join(reportsDir, jsonFilename));
+        } catch (err) {
+          // File might already be deleted, that's OK
+        }
+        
+        // Delete old MD file
+        try {
+          await fs.unlink(path.join(reportsDir, mdFilename));
+        } catch (err) {
+          // File might already be deleted, that's OK
+        }
+      } else {
+        // CREATE MODE: Check for duplicate incident ID
+        const existingFiles = await fs.readdir(reportsDir);
+        const duplicateFile = existingFiles.find(f => 
+          f.includes(`incident_${safeIncidentId}_`) && f.endsWith('.json')
+        );
+        
+        if (duplicateFile) {
+          return res.status(409).json({ 
+            incident_id: incidentId,
+            message: 'An incident with this ID already exists'
+          });
+        }
+        
+        // Create new files with timestamp
+        jsonFilename = `incident_${safeIncidentId}_${timestamp}.json`;
+        mdFilename = `incident_${safeIncidentId}_${timestamp}.md`;
+      }
+      
+      // Write files with transaction safety
+      try {
+        await fs.writeFile(path.join(reportsDir, jsonFilename), JSON.stringify(report, null, 2));
+      } catch (err) {
+        console.error('Error writing JSON file:', err);
+        throw err;
+      }
+      
+      try {
+        await fs.writeFile(path.join(reportsDir, mdFilename), markdown);
+      } catch (err) {
+        // If MD write fails, delete the JSON file to maintain consistency
+        console.error('Error writing MD file:', err);
+        try {
+          await fs.unlink(path.join(reportsDir, jsonFilename));
+        } catch (unlinkErr) {
+          console.error('Failed to rollback JSON file after MD write error:', unlinkErr);
+        }
+        throw err;
+      }
       
       res.json({
         success: true,
+        isUpdating,
         jsonUrl: `/api/reports/download/${jsonFilename}`,
         mdUrl: `/api/reports/download/${mdFilename}`,
         jsonFilename,
@@ -278,7 +336,11 @@ async function startServer() {
       const filename = req.params.filename;
       const content = await fs.readFile(path.join(reportsDir, filename), 'utf-8');
       res.json(JSON.parse(content));
-    } catch (error) {
+    } catch (error: any) {
+      if (error.code === 'ENOENT') {
+        // File not found - return 404
+        return res.status(404).json({ error: 'Report file not found' });
+      }
       console.error('Error reading report content:', error);
       res.status(500).json({ error: 'Failed to read report content' });
     }

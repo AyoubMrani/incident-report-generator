@@ -1,5 +1,5 @@
 import React, { useRef } from 'react';
-import { ContentBlock } from '../types';
+import { ContentBlock, CodeSnippet, CodeDescription } from '../types';
 import { Trash2, ArrowUp, ArrowDown, Image as ImageIcon } from 'lucide-react';
 import { QuillEditor } from './QuillEditor';
 
@@ -349,7 +349,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                 <div className="flex gap-2 pt-2">
                   <button
                     onClick={() => {
-                      const newItem: any = { id: crypto.randomUUID(), type: 'code', title: '', header: '', language: 'javascript', content: '' };
+                      const newItem: CodeSnippet = { id: crypto.randomUUID(), type: 'code', title: '', header: '', language: 'javascript', content: '' };
                       onChange({ ...block, items: [...block.items, newItem] });
                     }}
                     className="flex items-center gap-1 px-3 py-1 bg-blue-600 text-white hover:bg-blue-700 rounded text-sm"

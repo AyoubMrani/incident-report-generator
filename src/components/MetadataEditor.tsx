@@ -5,6 +5,7 @@ import { Plus, Trash2 } from 'lucide-react';
 interface Props {
   metadata: ReportMetadata;
   onChange: (metadata: ReportMetadata) => void;
+  reportCustomFields?: StoredMetadataField[];
 }
 
 const DEFAULT_CATEGORIES = [
@@ -15,7 +16,7 @@ const DEFAULT_CATEGORIES = [
   'Database',
 ];
 
-export function MetadataEditor({ metadata, onChange }: Props) {
+export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: Props) {
   const [customFields, setCustomFields] = useState<StoredMetadataField[]>([]);
   const [customCategories, setCustomCategories] = useState<StoredCategoryOption[]>([]);
   const [temporaryFieldIds, setTemporaryFieldIds] = useState<Set<string>>(new Set());
@@ -25,17 +26,32 @@ export function MetadataEditor({ metadata, onChange }: Props) {
   const [newFieldValue, setNewFieldValue] = useState('');
   const [saveNewField, setSaveNewField] = useState(false);
 
-  // Load custom categories and fields from localStorage
+  // Load custom categories and fields from localStorage and merge with report fields
   useEffect(() => {
     const stored = localStorage.getItem('customCategories');
     if (stored) {
       setCustomCategories(JSON.parse(stored));
     }
     const storedFields = localStorage.getItem('customMetadataFields');
-    if (storedFields) {
-      setCustomFields(JSON.parse(storedFields));
-    }
-  }, []);
+    const storedFieldsArray = storedFields ? JSON.parse(storedFields) : [];
+    
+    // Merge localStorage fields with report custom fields
+    // Use Set to avoid duplicates by field name
+    const fieldsByName = new Map<string, StoredMetadataField>();
+    
+    // Add stored fields first
+    storedFieldsArray.forEach((field: StoredMetadataField) => {
+      fieldsByName.set(field.name, field);
+    });
+    
+    // Add report fields (these take precedence if there's a name conflict)
+    reportCustomFields.forEach(field => {
+      fieldsByName.set(field.name, field);
+    });
+    
+    const mergedFields = Array.from(fieldsByName.values());
+    setCustomFields(mergedFields);
+  }, [reportCustomFields]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
