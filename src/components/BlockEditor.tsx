@@ -23,16 +23,13 @@ export function BlockEditor({ blocks, onChange }: Props) {
         newBlock = { ...newBlockBase, type: 'paragraph', content: '' };
         break;
       case 'list':
-        newBlock = { ...newBlockBase, type: 'list', ordered: false, items: [''] };
+        newBlock = { ...newBlockBase, type: 'list', ordered: false, items: [''], label: '' };
         break;
       case 'incident_example':
-        newBlock = { ...newBlockBase, type: 'incident_example', incident_id: '' };
-        break;
-      case 'description_box':
-        newBlock = { ...newBlockBase, type: 'description_box', label: '', items: [''] };
+        newBlock = { ...newBlockBase, type: 'incident_example', incident_id: '', link: '' };
         break;
       case 'code':
-        newBlock = { ...newBlockBase, type: 'code', language: 'sql', content: '' };
+        newBlock = { ...newBlockBase, type: 'code', items: [] };
         break;
       case 'image':
         newBlock = { ...newBlockBase, type: 'image', data_url: '', caption: '' };
@@ -89,9 +86,8 @@ export function BlockEditor({ blocks, onChange }: Props) {
             <div className="p-2 grid grid-cols-2 gap-1">
               <button onClick={() => addBlock('heading')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Heading</button>
               <button onClick={() => addBlock('paragraph')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Paragraph</button>
-              <button onClick={() => addBlock('list')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">List</button>
+              <button onClick={() => addBlock('list')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">List / Steps</button>
               <button onClick={() => addBlock('incident_example')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Incident Example</button>
-              <button onClick={() => addBlock('description_box')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Description Box</button>
               <button onClick={() => addBlock('code')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Code / SQL</button>
               <button onClick={() => addBlock('image')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Image</button>
               <button onClick={() => addBlock('table')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Table</button>

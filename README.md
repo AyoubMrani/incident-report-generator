@@ -17,7 +17,7 @@ A powerful, user-friendly web application for creating, managing, and exporting 
   - Tables with custom rows and columns
   - Images with captions (base64 embedded)
   - Incident examples
-  - Description boxes
+  - Steps / Lists
   
 ### Metadata Management
 - **Structured Metadata** - Track essential incident information:

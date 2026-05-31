@@ -3,7 +3,6 @@ export type BlockType =
   | 'paragraph' 
   | 'list' 
   | 'incident_example' 
-  | 'description_box' 
   | 'code' 
   | 'image' 
   | 'table';
@@ -17,46 +16,65 @@ export interface HeadingBlock extends BaseBlock {
   type: 'heading';
   level: 1 | 2 | 3 | 4;
   content: string;
+  title?: string;
 }
 
 export interface ParagraphBlock extends BaseBlock {
   type: 'paragraph';
-  content: string;
+  content: string; // Quill Delta format as JSON string, or plain text for backward compatibility
+  title?: string;
 }
 
 export interface ListBlock extends BaseBlock {
   type: 'list';
   ordered: boolean;
   items: string[];
+  label?: string; // Optional label - when set, renders as description box
+  title?: string;
 }
 
 export interface IncidentExampleBlock extends BaseBlock {
   type: 'incident_example';
   incident_id: string;
+  link?: string;
+  title?: string;
 }
 
-export interface DescriptionBoxBlock extends BaseBlock {
-  type: 'description_box';
-  label: string;
-  items: string[];
+export interface CodeSnippet {
+  id: string;
+  type: 'code';
+  title: string;
+  header: string;
+  language: string;
+  content: string;
 }
+
+export interface CodeDescription {
+  id: string;
+  type: 'description';
+  title: string;
+  content: string; // Quill HTML
+}
+
+export type CodeItem = CodeSnippet | CodeDescription;
 
 export interface CodeBlock extends BaseBlock {
   type: 'code';
-  language: string;
-  content: string;
+  items: CodeItem[];
 }
 
 export interface ImageBlock extends BaseBlock {
   type: 'image';
   data_url: string;
   caption: string;
+  title?: string;
 }
 
 export interface TableBlock extends BaseBlock {
   type: 'table';
   headers: string[];
   rows: string[][];
+  title?: string;
 }
 
 export type ContentBlock = 
@@ -64,7 +82,6 @@ export type ContentBlock =
   | ParagraphBlock 
   | ListBlock 
   | IncidentExampleBlock 
-  | DescriptionBoxBlock 
   | CodeBlock 
   | ImageBlock 
   | TableBlock;

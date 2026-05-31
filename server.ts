@@ -72,6 +72,18 @@ async function startServer() {
   // API to generate HTML report
   app.get('/api/html', async (req, res) => {
     try {
+      // Helper to escape HTML special characters
+      const escapeHtml = (text: string): string => {
+        const map: { [key: string]: string } = {
+          '&': '&amp;',
+          '<': '&lt;',
+          '>': '&gt;',
+          '"': '&quot;',
+          "'": '&#039;'
+        };
+        return String(text).replace(/[&<>"']/g, m => map[m]);
+      };
+
       const filename = req.query.filename as string;
       if (!filename) {
         return res.status(400).json({ error: 'Filename is required' });
@@ -80,6 +92,16 @@ async function startServer() {
       const content = await fs.readFile(path.join(reportsDir, filename), 'utf-8');
       const report = JSON.parse(content);
       const metadata = report.metadata || {};
+
+      // Extract custom metadata fields (non-standard fields)
+      const standardFields = ['incident_id', 'title', 'caller', 'category', 'subcategory', 'date'];
+      const customMetadataItems: string[] = [];
+      for (const [key, value] of Object.entries(metadata)) {
+        if (!standardFields.includes(key) && value) {
+          customMetadataItems.push(`<div class="metadata-item"><span class="metadata-label">${escapeHtml(key)}:</span> ${escapeHtml(String(value))}</div>`);
+        }
+      }
+      const customMetadataHTML = customMetadataItems.length > 0 ? `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">Custom Fields</h3>${customMetadataItems.join('')}` : '';
 
       // Build HTML
       let html = `<!DOCTYPE html>
@@ -116,6 +138,7 @@ async function startServer() {
     <div class="metadata-item"><span class="metadata-label">Date:</span> ${metadata.date || 'N/A'}</div>
     <div class="metadata-item"><span class="metadata-label">Category:</span> ${metadata.category || 'N/A'}</div>
     ${metadata.subcategory ? `<div class="metadata-item"><span class="metadata-label">Subcategory:</span> ${metadata.subcategory}</div>` : ''}
+    ${customMetadataHTML}
   </div>
 
   <hr />
@@ -126,20 +149,55 @@ async function startServer() {
       for (const block of blocks) {
         switch (block.type) {
           case 'heading':
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
             html += `<h${block.level || 2}>${block.content || ''}</h${block.level || 2}>`;
             break;
           case 'paragraph':
-            html += `<p>${block.content || ''}</p>`;
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
+            // Quill stores content as HTML, so we can use it directly
+            html += `<div class="paragraph-content">${block.content || '<p></p>'}</div>`;
             break;
           case 'image':
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
             if (block.data_url) {
               html += `<img src="${block.data_url}" alt="${block.caption || 'Image'}" />`;
             }
             break;
           case 'code':
-            html += `<pre><code class="language-${block.language || 'text'}">${(block.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+            (block.items || []).forEach((item: any) => {
+              if (item.type === 'code') {
+                let codeHtml = `<div style="background: #111827; padding: 1rem; border-radius: 0.375rem; margin: 1rem 0; border: 1px solid #374151; overflow-x: auto;">`;
+                if (item.title) {
+                  codeHtml += `<h2 style="background: #2563eb; color: white; padding: 0.5rem; margin: -1rem -1rem 0.5rem -1rem; border-radius: 0.375rem 0.375rem 0 0; font-size: 0.875rem;">${escapeHtml(item.title)}</h2>`;
+                }
+                if (item.header) {
+                  codeHtml += `<h3 style="color: white; margin: 0 0 0.5rem 0; font-size: 1rem;">${escapeHtml(item.header)}</h3>`;
+                }
+                codeHtml += `<div style="font-size: 0.75rem; color: #9ca3af; margin-bottom: 0.5rem;">Language: ${escapeHtml(item.language || 'text')}</div>`;
+                codeHtml += `<pre style="margin: 0;"><code style="color: #4ade80; font-family: monospace; font-size: 0.875rem;">${(item.content || '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></pre>`;
+                codeHtml += `</div>`;
+                html += codeHtml;
+              } else if (item.type === 'description') {
+                let descHtml = `<div style="margin: 1rem 0; border: 1px solid #e5e7eb; border-radius: 0.375rem; overflow: hidden;">`;
+                if (item.title) {
+                  descHtml += `<h2 style="background: #a855f7; color: white; padding: 0.5rem; margin: 0; font-size: 0.875rem;">${escapeHtml(item.title)}</h2>`;
+                }
+                descHtml += `<div style="padding: 1rem; color: #1f2937;">${item.content || ''}</div>`;
+                descHtml += `</div>`;
+                html += descHtml;
+              }
+            });
             break;
           case 'table':
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
             html += `<table><thead><tr>${(block.headers || []).map(h => `<th>${h}</th>`).join('')}</tr></thead><tbody>`;
             for (const row of (block.rows || [])) {
               html += `<tr>${row.map((cell: string) => `<td>${cell}</td>`).join('')}</tr>`;
@@ -147,14 +205,27 @@ async function startServer() {
             html += `</tbody></table>`;
             break;
           case 'list':
-            const tag = block.ordered ? 'ol' : 'ul';
-            html += `<${tag}>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</${tag}>`;
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
+            const isDescBox = block.label && block.label.trim() !== '';
+            if (isDescBox) {
+              html += `<blockquote><strong>${block.label || ''}</strong><ul>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</ul></blockquote>`;
+            } else {
+              const tag = block.ordered ? 'ol' : 'ul';
+              html += `<${tag}>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</${tag}>`;
+            }
             break;
           case 'incident_example':
-            html += `<h3>Incident example: ${block.incident_id || ''}</h3>`;
-            break;
-          case 'description_box':
-            html += `<blockquote><strong>${block.label || ''}</strong><ul>${(block.items || []).map((item: string) => `<li>${item}</li>`).join('')}</ul></blockquote>`;
+            if (block.title) {
+              html += `<h3 style="color: #374151; margin-top: 20px; margin-bottom: 10px;">${escapeHtml(block.title)}</h3>`;
+            }
+            html += `<div class="incident-example" style="background: #eff6ff; padding: 1rem; border-radius: 0.375rem; border: 1px solid #bfdbfe; margin: 1rem 0;">`;
+            html += `<h3 style="margin: 0 0 0.5rem 0; color: #1e40af;">Incident example: ${block.incident_id || ''}</h3>`;
+            if (block.link) {
+              html += `<p style="margin: 0;"><a href="${block.link}" style="color: #2563eb; text-decoration: underline;" target="_blank" rel="noopener noreferrer">${block.link}</a></p>`;
+            }
+            html += `</div>`;
             break;
         }
       }

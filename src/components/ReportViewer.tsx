@@ -191,6 +191,25 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
               <span className="font-medium text-gray-900">{metadata.subcategory || '-'}</span>
             </div>
           </div>
+
+          {/* Custom Metadata Fields */}
+          {(() => {
+            const standardFields = ['incident_id', 'title', 'caller', 'category', 'subcategory', 'date'];
+            const customFields = Object.keys(metadata).filter(key => !standardFields.includes(key));
+            return customFields.length > 0 ? (
+              <div className="mt-6 pt-6 border-t border-gray-100">
+                <h3 className="text-sm font-semibold text-gray-700 mb-3">Custom Fields</h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-8 text-sm">
+                  {customFields.map(field => (
+                    <div key={field}>
+                      <span className="block text-gray-500 mb-1 capitalize">{field}</span>
+                      <span className="font-medium text-gray-900">{metadata[field] || '-'}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : null;
+          })()}
         </div>
 
         {/* Content Blocks */}
@@ -202,61 +221,134 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                                   block.level === 2 ? 'text-xl mt-6 mb-3' : 
                                   block.level === 3 ? 'text-lg mt-4 mb-2' : 'text-base mt-4 mb-2';
                 const className = `font-bold text-gray-900 ${sizeClass}`;
-                if (block.level === 1) return <h1 key={index} className={className}>{block.content}</h1>;
-                if (block.level === 2) return <h2 key={index} className={className}>{block.content}</h2>;
-                if (block.level === 3) return <h3 key={index} className={className}>{block.content}</h3>;
-                return <h4 key={index} className={className}>{block.content}</h4>;
+                const headingElement = 
+                  block.level === 1 ? <h1 className={className}>{block.content}</h1> :
+                  block.level === 2 ? <h2 className={className}>{block.content}</h2> :
+                  block.level === 3 ? <h3 className={className}>{block.content}</h3> : 
+                  <h4 className={className}>{block.content}</h4>;
+                return (
+                  <div key={index}>
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-1 uppercase">{block.title}</div>}
+                    {headingElement}
+                  </div>
+                );
               
               case 'paragraph':
-                return <p key={index} className="leading-relaxed">{block.content}</p>;
+                return (
+                  <div key={index}>
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                    <div 
+                      className="prose prose-sm max-w-none"
+                      dangerouslySetInnerHTML={{ __html: block.content || '' }}
+                    />
+                  </div>
+                );
               
               case 'list':
+                const isDescBox = block.label && block.label.trim() !== '';
+                if (isDescBox) {
+                  return (
+                    <div key={index}>
+                      {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                      <div className="border-l-4 border-gray-300 pl-4 py-3 bg-gray-50 rounded-r my-4">
+                        <div className="font-semibold text-gray-900 mb-2">{block.label}</div>
+                        <ul className="space-y-1 text-gray-700">
+                          {block.items.map((item, i) => (
+                            <li key={i} className="flex gap-2">
+                              <span className="text-gray-400">-</span>
+                              <span>{item}</span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
+                    </div>
+                  );
+                }
                 const ListTag = block.ordered ? 'ol' : 'ul';
                 const listClass = block.ordered ? 'list-decimal' : 'list-disc';
                 return (
-                  <ListTag key={index} className={`${listClass} pl-5 space-y-1`}>
-                    {block.items.map((item, i) => <li key={i}>{item}</li>)}
-                  </ListTag>
+                  <div key={index}>
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                    <ListTag className={`${listClass} pl-5 space-y-1`}>
+                      {block.items.map((item, i) => <li key={i}>{item}</li>)}
+                    </ListTag>
+                  </div>
                 );
               
               case 'incident_example':
                 return (
-                  <div key={index} className="bg-blue-50 p-4 rounded-md border border-blue-100 my-4">
-                    <span className="font-semibold text-blue-900">Incident example: </span>
-                    <span className="text-blue-800 font-mono">{block.incident_id}</span>
+                  <div key={index}>
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                    <div className="bg-blue-50 p-4 rounded-md border border-blue-100 my-4">
+                      <div className="flex items-center gap-2 mb-2">
+                        <span className="font-semibold text-blue-900">Incident ID:</span>
+                        <span className="text-blue-800 font-mono">{block.incident_id}</span>
+                      </div>
+                      {block.link && (
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold text-blue-900">Link:</span>
+                          <a
+                            href={block.link}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+                          >
+                            {block.link}
+                          </a>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               
-              case 'description_box':
-                return (
-                  <div key={index} className="border-l-4 border-gray-300 pl-4 py-3 bg-gray-50 rounded-r my-4">
-                    <div className="font-semibold text-gray-900 mb-2">{block.label}</div>
-                    <ul className="space-y-1 text-gray-700">
-                      {block.items.map((item, i) => (
-                        <li key={i} className="flex gap-2">
-                          <span className="text-gray-400">-</span>
-                          <span>{item}</span>
-                        </li>
-                      ))}
-                    </ul>
-                  </div>
-                );
-              
+
               case 'code':
                 return (
-                  <div key={index} className="my-4 rounded-md overflow-hidden bg-gray-900">
-                    <div className="bg-gray-800 px-4 py-1 text-xs text-gray-400 font-mono">
-                      {block.language || 'text'}
-                    </div>
-                    <pre className="p-4 overflow-x-auto text-sm text-green-400 font-mono">
-                      <code>{block.content}</code>
-                    </pre>
+                  <div key={index} className="space-y-4 my-4">
+                    {block.items.map((item) => (
+                      <div key={item.id} className={item.type === 'code' ? 'rounded-md overflow-hidden bg-gray-900 border border-gray-800' : ''}>
+                        {item.type === 'code' ? (
+                          <>
+                            {item.title && (
+                              <div className="px-4 py-2 bg-blue-600 border-b border-blue-700">
+                                <h4 className="font-semibold text-white">{item.title}</h4>
+                              </div>
+                            )}
+                            {item.header && (
+                              <div className="px-4 py-2 bg-gray-800 border-b border-gray-700">
+                                <h4 className="font-semibold text-white">{item.header}</h4>
+                              </div>
+                            )}
+                            <div>
+                              <div className="px-4 py-1 bg-gray-800 text-xs text-gray-400 font-mono border-b border-gray-700">
+                                {item.language || 'text'}
+                              </div>
+                              <pre className="p-4 overflow-x-auto text-sm text-green-400 font-mono">
+                                <code>{item.content}</code>
+                              </pre>
+                            </div>
+                          </>
+                        ) : (
+                          <div className="space-y-2">
+                            {item.title && (
+                              <div className="px-4 py-2 bg-purple-600">
+                                <h4 className="font-semibold text-white">{item.title}</h4>
+                              </div>
+                            )}
+                            <div className="px-4 py-4 prose prose-sm max-w-none text-gray-700">
+                              <div dangerouslySetInnerHTML={{ __html: item.content || '' }} />
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    ))}
                   </div>
                 );
               
               case 'image':
                 return (
                   <figure key={index} className="my-6">
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
                     <img src={block.data_url} alt={block.caption} className="max-w-full h-auto rounded-md border border-gray-200" />
                     {block.caption && (
                       <figcaption className="text-center text-sm text-gray-500 mt-2">{block.caption}</figcaption>
@@ -266,25 +358,28 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
               
               case 'table':
                 return (
-                  <div key={index} className="overflow-x-auto my-4">
-                    <table className="min-w-full border-collapse border border-gray-300 text-sm">
-                      <thead className="bg-gray-50">
-                        <tr>
-                          {block.headers.map((h, i) => (
-                            <th key={i} className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-900">{h}</th>
-                          ))}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {block.rows.map((row, i) => (
-                          <tr key={i} className="hover:bg-gray-50">
-                            {row.map((cell, j) => (
-                              <td key={j} className="border border-gray-300 px-4 py-2">{cell}</td>
+                  <div key={index} className="my-4">
+                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                    <div className="overflow-x-auto">
+                      <table className="min-w-full border-collapse border border-gray-300 text-sm">
+                        <thead className="bg-gray-50">
+                          <tr>
+                            {block.headers.map((h, i) => (
+                              <th key={i} className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-900">{h}</th>
                             ))}
                           </tr>
-                        ))}
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {block.rows.map((row, i) => (
+                            <tr key={i} className="hover:bg-gray-50">
+                              {row.map((cell, j) => (
+                                <td key={j} className="border border-gray-300 px-4 py-2">{cell}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
                 );
               

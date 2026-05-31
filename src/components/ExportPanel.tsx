@@ -14,7 +14,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
   const generateMarkdown = () => {
     let md = `# Incident Report: ${report.metadata.title || 'Untitled'}\n\n`;
     
-    // Metadata
+    // Standard Metadata
     md += `**Incident ID:** ${report.metadata.incident_id}\n`;
     md += `**Caller:** ${report.metadata.caller}\n`;
     md += `**Date:** ${report.metadata.date}\n`;
@@ -22,41 +22,99 @@ export function ExportPanel({ report, editingFilename }: Props) {
     if (report.metadata.subcategory) {
       md += `**Subcategory:** ${report.metadata.subcategory}\n`;
     }
+    
+    // Custom Metadata Fields
+    const standardFields = ['incident_id', 'title', 'caller', 'category', 'subcategory', 'date'];
+    const customFields = Object.keys(report.metadata).filter(key => !standardFields.includes(key));
+    if (customFields.length > 0) {
+      md += `\n## Custom Fields\n`;
+      customFields.forEach(field => {
+        md += `**${field}:** ${report.metadata[field]}\n`;
+      });
+    }
+    
     md += `\n---\n\n`;
+
+    // Helper to convert HTML to plain text
+    const htmlToPlainText = (html: string): string => {
+      const div = document.createElement('div');
+      div.innerHTML = html;
+      return div.textContent || div.innerText || '';
+    };
 
     // Blocks
     report.blocks.forEach(block => {
       switch (block.type) {
         case 'heading':
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
           md += `${'#'.repeat(block.level)} ${block.content}\n\n`;
           break;
         case 'paragraph':
-          md += `${block.content}\n\n`;
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
+          const plainText = htmlToPlainText(block.content);
+          md += `${plainText}\n\n`;
           break;
         case 'list':
-          block.items.forEach((item, i) => {
-            md += `${block.ordered ? `${i + 1}.` : '-'} ${item}\n`;
-          });
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
+          const isDescBox = block.label && block.label.trim() !== '';
+          if (isDescBox) {
+            md += `> **${block.label}**\n`;
+            block.items.forEach(item => {
+              md += `> - ${item}\n`;
+            });
+          } else {
+            block.items.forEach((item, i) => {
+              md += `${block.ordered ? `${i + 1}.` : '-'} ${item}\n`;
+            });
+          }
           md += '\n';
           break;
         case 'incident_example':
-          md += `### Incident example: ${block.incident_id}\n\n`;
-          break;
-        case 'description_box':
-          md += `> **${block.label}**\n`;
-          block.items.forEach(item => {
-            md += `> - ${item}\n`;
-          });
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
+          md += `### Incident example: ${block.incident_id}\n`;
+          if (block.link) {
+            md += `[View Incident](${block.link})\n`;
+          }
           md += '\n';
           break;
         case 'code':
-          md += `\`\`\`${block.language}\n${block.content}\n\`\`\`\n\n`;
+          block.items.forEach((item: any) => {
+            if (item.type === 'code') {
+              if (item.title) {
+                md += `## ${item.title}\n\n`;
+              }
+              if (item.header) {
+                md += `### ${item.header}\n\n`;
+              }
+              md += `\`\`\`${item.language}\n${item.content}\n\`\`\`\n\n`;
+            } else if (item.type === 'description') {
+              if (item.title) {
+                md += `## ${item.title}\n\n`;
+              }
+              const plainText = htmlToPlainText(item.content);
+              md += `${plainText}\n\n`;
+            }
+          });
           break;
         case 'image':
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
           const imgSrc = block.data_url.length > 1000 ? '[Base64 Image Data Omitted for Readability]' : block.data_url;
           md += `![${block.caption}](${imgSrc})\n\n`;
           break;
         case 'table':
+          if (block.title) {
+            md += `### ${block.title}\n\n`;
+          }
           md += `| ${block.headers.join(' | ')} |\n`;
           md += `| ${block.headers.map(() => '---').join(' | ')} |\n`;
           block.rows.forEach(row => {
