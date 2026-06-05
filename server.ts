@@ -3,6 +3,7 @@ import { createServer as createViteServer } from 'vite';
 import fs from 'fs/promises';
 import path from 'path';
 import { fileURLToPath } from 'url';
+import SharePoint from './src/sharepoint';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
@@ -94,6 +95,15 @@ async function startServer() {
           console.error('Failed to rollback JSON file after MD write error:', unlinkErr);
         }
         throw err;
+      }
+
+            // Upload both files to SharePoint
+      try {
+        await SharePoint.uploadToRadia(jsonFilename, path.join(reportsDir, jsonFilename), report.metadata.category || 'General');
+        await SharePoint.uploadToRadia(mdFilename, path.join(reportsDir, mdFilename), report.metadata.category || 'General');
+      } catch (spErr) {
+        console.error('SharePoint upload failed:', spErr);
+        // Non-blocking: report is still saved locally even if SP upload fails
       }
       
       res.json({
