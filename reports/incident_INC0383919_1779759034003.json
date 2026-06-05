@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "incident_id": "INC0383919",
+    "title": "Delete Duplicate OPV Records Flagged in Yellow",
+    "caller": "Robin Carlos Steffen",
+    "category": "NRI Operations",
+    "subcategory": "Duplicate Record Cleanup",
+    "date": "2026-05-26"
+  },
+  "blocks": [
+    {"id":"b1","type":"heading","level":1,"content":"Incident Summary"},
+    {"id":"b2","type":"paragraph","content":"The attachment contains yellow-highlighted duplicate rows that should be removed using the duplicate cleanup function or a manual fallback if the function fails."},
+    {"id":"b3","type":"heading","level":2,"content":"Duplicate Group"},
+    {"id":"b4","type":"table","headers":["Home ID","Update Date","Duplicate Group"],"rows":[["CDE001112223334","2026-05-21","Group A"],["CDE001112223334","2026-05-21","Group A"],["CDE001112223335","2026-05-21","Group A"]]},
+    {"id":"b5","type":"heading","level":2,"content":"Procedure"},
+    {"id":"b6","type":"list","ordered":true,"items":["Open the spreadsheet and isolate yellow-highlighted rows.","Group duplicates by update date.","Call support_remove_opv_duplicate for each date group.","If the function errors, delete the records manually and log the action."]},
+    {"id":"b7","type":"code","language":"sql","content":"SELECT public.support_remove_opv_duplicate('CDE001112223334,CDE001112223334,CDE001112223335', '2026-05-21', 0, true);"},
+    {"id":"b8","type":"description_box","label":"Validation Checklist","items":["Only yellow rows processed","Duplicate group handled by date","Output confirmed in fm_opv","support_tasks_log updated"]},
+    {"id":"b9","type":"incident_example","incident_id":"INC0383919"}
+  ]
+}

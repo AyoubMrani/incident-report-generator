@@ -1,0 +1,11 @@
+streamlit
+python-docx
+sentence-transformers
+torchvision
+langchain
+langchain-community
+ollama
+pytesseract
+Pillow
+mlx-lm
+mlx-vlm

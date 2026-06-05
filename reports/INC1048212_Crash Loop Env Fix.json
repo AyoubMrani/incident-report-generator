@@ -1,0 +1,70 @@
+{
+  "editingFilename": null,
+  "markdown": "# Crash Loop Env Fix\n\nthe pod kept restarting because an environment variable was renamed in the chart but the container still required the old value. The deployment was corrected by restoring the missing variable and rolling out the updated manifest.\n\n1. Inspect pod logs and events for the crash reason\n\n2. Fix the missing or renamed environment variable\n\n3. Roll out the corrected deployment manifest\n\n4. Wait for the pod to become Ready and stable\n\nSet env and restart deployment\n```bash\nkubectl -n payments set env deployment/gateway SERVICE_MODE=production\nkubectl -n payments rollout restart deployment/gateway\nkubectl -n payments describe pod gateway-7d9c8f4b7c-2kq9m\n```\n\n![Crash loop event capture](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nScreenshot from kubectl describe and pod events.\n\n![Evidence Capture](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nVisual evidence from the incident timeline.",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048212",
+      "title": "Crash Loop Env Fix",
+      "caller": "Hassan Ali",
+      "category": "Platform Engineering",
+      "subcategory": "Kubernetes Pod Crash Loop",
+      "date": "2025-03-04"
+    },
+    "blocks": [
+      {
+        "id": "100dc172-ba85-4280-abdf-5c807db4af80",
+        "type": "heading",
+        "level": 1,
+        "content": "Crash Loop Env Fix",
+        "title": "Crash Loop Env Fix"
+      },
+      {
+        "id": "6c7ef158-9457-44fc-a6aa-b7a665867b32",
+        "type": "paragraph",
+        "content": "<p>the pod kept restarting because an environment variable was renamed in the chart but the container still required the old value. The deployment was corrected by restoring the missing variable and rolling out the updated manifest.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "2785b0a8-02a4-4658-a8a2-c16a00b63546",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Inspect pod logs and events for the crash reason",
+          "Fix the missing or renamed environment variable",
+          "Roll out the corrected deployment manifest",
+          "Wait for the pod to become Ready and stable"
+        ]
+      },
+      {
+        "id": "92218bd7-49e4-4972-93b3-e974e1aa1d9f",
+        "type": "code",
+        "items": [
+          {
+            "id": "46bff0ce-8054-424a-95c8-1f9943c76d4a",
+            "type": "code",
+            "title": "Kubernetes Repair",
+            "header": "Set env and restart deployment",
+            "content": "kubectl -n payments set env deployment/gateway SERVICE_MODE=production\nkubectl -n payments rollout restart deployment/gateway\nkubectl -n payments describe pod gateway-7d9c8f4b7c-2kq9m",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "1404e154-6bce-43c6-8f8f-f4f146bb3a8a",
+        "type": "image",
+        "title": "Crash loop event capture",
+        "caption": "Screenshot from kubectl describe and pod events.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      },
+      {
+        "id": "48cbab4a-f48d-409b-a4ea-98ae26dfd688",
+        "type": "image",
+        "title": "Evidence Capture",
+        "caption": "Visual evidence from the incident timeline.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    ]
+  }
+}

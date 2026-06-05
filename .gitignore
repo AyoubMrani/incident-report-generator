@@ -9,3 +9,17 @@ coverage/
 
 # Local Netlify folder
 .netlify
+
+
+.DS_Store
+__pycache__/
+# .venv/
+models/
+# reports/
+reports_backup/
+docs/
+# .streamlit
+incident-report-generator/
+data.jsonl
+script.py
+sh.sh

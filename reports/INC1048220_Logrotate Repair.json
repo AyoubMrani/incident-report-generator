@@ -1,0 +1,63 @@
+{
+  "editingFilename": null,
+  "markdown": "## Logrotate Repair\n\nlogs were filling the disk because logrotate stopped running after a malformed include file was introduced. The rotation config was fixed, a manual run was successful, and the log files resumed normal compression and retention.\n\n1. Validate the logrotate configuration syntax\n\n2. Force one clean rotation to clear the backlog\n\n3. Restart the timer or cron job that runs rotation\n\n4. Confirm log files are compressing and aging out\n\nCheck and force log rotation\n```bash\n/usr/sbin/logrotate -d /etc/logrotate.conf\n/usr/sbin/logrotate -f /etc/logrotate.conf\nsystemctl restart logrotate.timer\n```\n\nRelated incident: INC1048320",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048220",
+      "title": "Logrotate Repair",
+      "caller": "Ava Martinez",
+      "category": "Linux Operations",
+      "subcategory": "Log Rotation Failure",
+      "date": "2026-04-19"
+    },
+    "blocks": [
+      {
+        "id": "81dd4a30-e990-49b5-97ca-1cb47474e57f",
+        "type": "heading",
+        "level": 2,
+        "content": "Logrotate Repair",
+        "title": "Logrotate Repair"
+      },
+      {
+        "id": "1c5edd3f-95ff-4deb-91f1-bb936f8c06f3",
+        "type": "paragraph",
+        "content": "<p>logs were filling the disk because logrotate stopped running after a malformed include file was introduced. The rotation config was fixed, a manual run was successful, and the log files resumed normal compression and retention.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "429589f5-2dd4-40e2-8e9e-3d4a5c67cf27",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Validate the logrotate configuration syntax",
+          "Force one clean rotation to clear the backlog",
+          "Restart the timer or cron job that runs rotation",
+          "Confirm log files are compressing and aging out"
+        ]
+      },
+      {
+        "id": "38f1e8c5-acb4-4129-a392-e6c925b54c4a",
+        "type": "code",
+        "items": [
+          {
+            "id": "f6ee280d-5be8-4420-82ac-8427c584669e",
+            "type": "code",
+            "title": "Rotation Recovery",
+            "header": "Check and force log rotation",
+            "content": "/usr/sbin/logrotate -d /etc/logrotate.conf\n/usr/sbin/logrotate -f /etc/logrotate.conf\nsystemctl restart logrotate.timer",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "4e407bbe-8d21-4ffc-9496-c2df4245d3dd",
+        "type": "incident_example",
+        "title": "Rotation failure reference",
+        "incident_id": "INC1048320",
+        "link": ""
+      }
+    ]
+  }
+}

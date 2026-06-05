@@ -1,0 +1,63 @@
+{
+  "editingFilename": null,
+  "markdown": "# Yellow Duplicate Cleanup\n\nduplicate customer rows were inserted by an upstream import job that retried after a timeout. The stored function was used to keep the latest canonical row and delete only yellow-highlighted duplicates that matched the same external_reference.\n\n1. Export the duplicate set from the staging spreadsheet\n\n2. Validate the function scope against the import batch ID\n\n3. Execute the stored function for the duplicate group\n\n4. Re-run the count query to confirm only one canonical row remains\n\nStored function invocation\n```sql\nselect dedupe_cleanup.remove_duplicate_customers('cust_import_2024_03_07');\n```\n\nRelated incident: INC1048301",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048202",
+      "title": "Yellow Duplicate Cleanup",
+      "caller": "Owen Patel",
+      "category": "Data Quality",
+      "subcategory": "Duplicate Record Cleanup",
+      "date": "2024-03-07"
+    },
+    "blocks": [
+      {
+        "id": "4802e45c-09a6-4c89-a7e9-03e2d69b517c",
+        "type": "heading",
+        "level": 1,
+        "content": "Yellow Duplicate Cleanup",
+        "title": "Yellow Duplicate Cleanup"
+      },
+      {
+        "id": "47fc1a74-196a-4f0d-895b-d7618affd5b0",
+        "type": "paragraph",
+        "content": "<p>duplicate customer rows were inserted by an upstream import job that retried after a timeout. The stored function was used to keep the latest canonical row and delete only yellow-highlighted duplicates that matched the same external_reference.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "30e7fcb3-ba96-46f6-a139-77a64a658034",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Export the duplicate set from the staging spreadsheet",
+          "Validate the function scope against the import batch ID",
+          "Execute the stored function for the duplicate group",
+          "Re-run the count query to confirm only one canonical row remains"
+        ]
+      },
+      {
+        "id": "85883fb4-487b-474c-9149-3ccace451ece",
+        "type": "code",
+        "items": [
+          {
+            "id": "bff74969-5430-4bd2-89c8-293ea7421d10",
+            "type": "code",
+            "title": "Function Call",
+            "header": "Stored function invocation",
+            "content": "select dedupe_cleanup.remove_duplicate_customers('cust_import_2024_03_07');",
+            "language": "sql"
+          }
+        ]
+      },
+      {
+        "id": "d9155ac9-1799-49c3-9b9e-f9d9713173ac",
+        "type": "incident_example",
+        "title": "Related cleanup reference",
+        "incident_id": "INC1048301",
+        "link": ""
+      }
+    ]
+  }
+}

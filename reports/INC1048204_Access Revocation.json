@@ -1,0 +1,83 @@
+{
+  "editingFilename": null,
+  "markdown": "# Access Revocation\n\nthe user account stayed active in the directory after offboarding because the disable workflow failed before revoking group memberships. The root cause was an interrupted IAM job, so the account had to be disabled and every associated permission removed explicitly.\n\n### Remediation\n\n1. Disable the directory account\n\n2. Remove all group and role assignments\n\n3. Invalidate active sessions and tokens\n\n4. Confirm the account is no longer able to authenticate\n\nDisable account and remove memberships\n```powershell\nGet-ADUser -Identity j.smith | Disable-ADAccount\nGet-ADPrincipalGroupMembership j.smith | Remove-ADGroupMember -Members j.smith -Confirm:$false\n```\n\n| control | result |\n| --- | --- |\n| account status | disabled |\n| group membership | removed |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048204",
+      "title": "Access Revocation",
+      "caller": "Daniel Brooks",
+      "category": "Identity Management",
+      "subcategory": "User Access Revocation",
+      "date": "2024-06-18",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "3fa07270-f279-4c15-b396-d33ac5ba0271",
+        "type": "heading",
+        "level": 1,
+        "content": "Access Revocation",
+        "title": "Access Revocation"
+      },
+      {
+        "id": "126f0bce-f03c-4684-b2ce-24d4f272bcc1",
+        "type": "paragraph",
+        "content": "<p>the user account stayed active in the directory after offboarding because the disable workflow failed before revoking group memberships. The root cause was an interrupted IAM job, so the account had to be disabled and every associated permission removed explicitly.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "2795370f-1096-4049-b7b5-f0413ec85307",
+        "type": "heading",
+        "level": 3,
+        "content": "Remediation",
+        "title": "Remediation"
+      },
+      {
+        "id": "e9b42db9-bb07-467c-b0b9-ee3856e86f41",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Disable the directory account",
+          "Remove all group and role assignments",
+          "Invalidate active sessions and tokens",
+          "Confirm the account is no longer able to authenticate"
+        ]
+      },
+      {
+        "id": "9d87f9f6-963e-4d74-9e34-a000e4c7679e",
+        "type": "code",
+        "items": [
+          {
+            "id": "022fa2ed-64cf-440b-adc0-9ddc47c3ec22",
+            "type": "code",
+            "title": "Revocation Commands",
+            "header": "Disable account and remove memberships",
+            "content": "Get-ADUser -Identity j.smith | Disable-ADAccount\nGet-ADPrincipalGroupMembership j.smith | Remove-ADGroupMember -Members j.smith -Confirm:$false",
+            "language": "powershell"
+          }
+        ]
+      },
+      {
+        "id": "98f5e3b2-c33e-4911-8b37-03e0890c61dd",
+        "type": "table",
+        "title": "revocation checklist",
+        "headers": [
+          "control",
+          "result"
+        ],
+        "rows": [
+          [
+            "account status",
+            "disabled"
+          ],
+          [
+            "group membership",
+            "removed"
+          ]
+        ]
+      }
+    ]
+  }
+}

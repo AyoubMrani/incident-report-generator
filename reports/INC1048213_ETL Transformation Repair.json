@@ -1,0 +1,83 @@
+{
+  "editingFilename": null,
+  "markdown": "## ETL Transformation Repair\n\nthe transformation step failed because a schema change introduced a null field where the job expected an integer. The pipeline was updated to coerce the new column safely and skip bad rows during the nightly run.\n\n1. Locate the failing transformation stage\n\n2. Patch the schema conversion logic\n\n3. Re-run the batch with a quarantined error path\n\n4. Validate the curated output row counts\n\nLaunch the transformation job\n```bash\npython transform_orders.py --input s3://landing/orders/ --output s3://curated/orders/\n# cast new_amount safely and quarantine malformed rows\n```\n\n| stage | status | duration |\n| --- | --- | --- |\n| ingest | ok | 4m |\n| transform | failed | 1m |\n| load | pending | - |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048213",
+      "title": "ETL Transformation Repair",
+      "caller": "Isabella Rossi",
+      "category": "Data Platform",
+      "subcategory": "ETL Pipeline Failure",
+      "date": "2025-04-17"
+    },
+    "blocks": [
+      {
+        "id": "983c222f-0d99-4367-9492-ccc0fb797bfe",
+        "type": "heading",
+        "level": 2,
+        "content": "ETL Transformation Repair",
+        "title": "ETL Transformation Repair"
+      },
+      {
+        "id": "38521a22-47ef-4996-ba94-bfdf05e85ec8",
+        "type": "paragraph",
+        "content": "<p>the transformation step failed because a schema change introduced a null field where the job expected an integer. The pipeline was updated to coerce the new column safely and skip bad rows during the nightly run.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "f1258d00-bdd7-4b06-bc6a-5947ff58b10f",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Locate the failing transformation stage",
+          "Patch the schema conversion logic",
+          "Re-run the batch with a quarantined error path",
+          "Validate the curated output row counts"
+        ]
+      },
+      {
+        "id": "3520d4f5-29b9-4f4a-9bd8-194d29060d9e",
+        "type": "code",
+        "items": [
+          {
+            "id": "b6a3ed19-9025-4f74-96b2-43d3a37068d3",
+            "type": "code",
+            "title": "ETL Run",
+            "header": "Launch the transformation job",
+            "content": "python transform_orders.py --input s3://landing/orders/ --output s3://curated/orders/\n# cast new_amount safely and quarantine malformed rows",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "0c9bd76f-4af0-4eb1-ab6a-2e1631a15afd",
+        "type": "table",
+        "title": "pipeline stage check",
+        "headers": [
+          "stage",
+          "status",
+          "duration"
+        ],
+        "rows": [
+          [
+            "ingest",
+            "ok",
+            "4m"
+          ],
+          [
+            "transform",
+            "failed",
+            "1m"
+          ],
+          [
+            "load",
+            "pending",
+            "-"
+          ]
+        ]
+      }
+    ]
+  }
+}

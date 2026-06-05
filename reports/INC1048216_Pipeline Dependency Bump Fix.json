@@ -1,0 +1,80 @@
+{
+  "editingFilename": null,
+  "markdown": "## Pipeline Dependency Bump Fix\n\nthe deployment pipeline failed after a dependency version bump broke an older test helper. Pinning the package and updating the test fixture restored the build and allowed the release job to complete.\n\n1. Identify the failing stage in the pipeline\n\n2. Pin the incompatible dependency version\n\n3. Update any fixtures or mocks that rely on old behavior\n\n4. Run the pipeline again to confirm green status\n\nRe-run install, test, and deploy steps\n```bash\nnpm ci\nnpm test\n# pin the incompatible package and refresh lockfile\n```\n\n| job | result |\n| --- | --- |\n| install | passed |\n| test | passed |\n| deploy | passed |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048216",
+      "title": "Pipeline Dependency Bump Fix",
+      "caller": "Elijah Brown",
+      "category": "Build and Release",
+      "subcategory": "CI/CD Pipeline Broken",
+      "date": "2025-07-28",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "fc1a0ab6-cbee-47c2-953a-71e4e2d7a516",
+        "type": "heading",
+        "level": 2,
+        "content": "Pipeline Dependency Bump Fix",
+        "title": "Pipeline Dependency Bump Fix"
+      },
+      {
+        "id": "fa6bdcd2-378b-4131-981f-356d003e686d",
+        "type": "paragraph",
+        "content": "<p>the deployment pipeline failed after a dependency version bump broke an older test helper. Pinning the package and updating the test fixture restored the build and allowed the release job to complete.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "28a5ae33-fe3e-41c4-a622-c77986c1aff7",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify the failing stage in the pipeline",
+          "Pin the incompatible dependency version",
+          "Update any fixtures or mocks that rely on old behavior",
+          "Run the pipeline again to confirm green status"
+        ]
+      },
+      {
+        "id": "c1cd26b6-c43e-44f9-8629-afdda6b4f8a2",
+        "type": "code",
+        "items": [
+          {
+            "id": "e898c72e-7cfd-454f-95ea-e96a44d151fc",
+            "type": "code",
+            "title": "Build Fix",
+            "header": "Re-run install, test, and deploy steps",
+            "content": "npm ci\nnpm test\n# pin the incompatible package and refresh lockfile",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "34aad50a-c8cf-4f51-a9c8-fc32ded5042f",
+        "type": "table",
+        "title": "pipeline status",
+        "headers": [
+          "job",
+          "result"
+        ],
+        "rows": [
+          [
+            "install",
+            "passed"
+          ],
+          [
+            "test",
+            "passed"
+          ],
+          [
+            "deploy",
+            "passed"
+          ]
+        ]
+      }
+    ]
+  }
+}

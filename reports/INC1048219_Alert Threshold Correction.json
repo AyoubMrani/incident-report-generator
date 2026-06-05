@@ -1,0 +1,97 @@
+{
+  "editingFilename": null,
+  "markdown": "## Alert Threshold Correction\n\nthe alert storm came from a threshold that was set far too low after a metric label change. The rule was corrected to use a percentile-based alert and the false positives dropped immediately.\n\n### Remediation\n\n1. Review the alert rule and recent metric changes\n\n2. Raise the threshold or switch to a percentile-based rule\n\n3. Mute the noisy notification channel temporarily\n\n4. Verify the false positive rate returns to normal\n\nUpdated alert rule snippet\n```yaml\ngroups:\n  - name: api_latency\n    rules:\n    - alert: HighLatency\n      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.8\n```\n\nSecondary command or config excerpt\n```bash\npromtool check rules alert-rules.yml\n```\n\n| Field | Value |\n| --- | --- |\n| status | resolved |\n| owner | Emma Davis |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048219",
+      "title": "Alert Threshold Correction",
+      "caller": "Emma Davis",
+      "category": "Observability",
+      "subcategory": "Monitoring Alert Storm",
+      "date": "2025-11-06",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "c646b524-a87b-4fff-a34f-5062e705d556",
+        "type": "heading",
+        "level": 2,
+        "content": "Alert Threshold Correction",
+        "title": "Alert Threshold Correction"
+      },
+      {
+        "id": "2e0c9d48-64c1-48c3-9932-b889456838c2",
+        "type": "paragraph",
+        "content": "<p>the alert storm came from a threshold that was set far too low after a metric label change. The rule was corrected to use a percentile-based alert and the false positives dropped immediately.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "f5356686-9270-4b8d-8e3c-22e3e1cf7de3",
+        "type": "heading",
+        "level": 3,
+        "content": "Remediation",
+        "title": "Remediation"
+      },
+      {
+        "id": "900ef763-0231-4184-9c10-808695b93bfd",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Review the alert rule and recent metric changes",
+          "Raise the threshold or switch to a percentile-based rule",
+          "Mute the noisy notification channel temporarily",
+          "Verify the false positive rate returns to normal"
+        ]
+      },
+      {
+        "id": "1002e3ea-e81b-4b6c-9844-06d685185749",
+        "type": "code",
+        "items": [
+          {
+            "id": "de16cf4f-eb45-41db-8188-81a12b594de0",
+            "type": "code",
+            "title": "Prometheus Rule",
+            "header": "Updated alert rule snippet",
+            "content": "groups:\n  - name: api_latency\n    rules:\n    - alert: HighLatency\n      expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.8",
+            "language": "yaml"
+          }
+        ]
+      },
+      {
+        "id": "ce21d64f-6187-4826-b899-f34b31db96b7",
+        "type": "code",
+        "items": [
+          {
+            "id": "dcf0dd5c-9753-4bf8-89f3-310506d68a12",
+            "type": "code",
+            "title": "rule validation",
+            "header": "Secondary command or config excerpt",
+            "content": "promtool check rules alert-rules.yml",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "2e7fea2b-fca0-433a-866e-803dc9730793",
+        "type": "table",
+        "title": "Supporting evidence",
+        "headers": [
+          "Field",
+          "Value"
+        ],
+        "rows": [
+          [
+            "status",
+            "resolved"
+          ],
+          [
+            "owner",
+            "Emma Davis"
+          ]
+        ]
+      }
+    ]
+  }
+}

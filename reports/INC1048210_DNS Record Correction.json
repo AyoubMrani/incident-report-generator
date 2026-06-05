@@ -1,0 +1,89 @@
+{
+  "editingFilename": null,
+  "markdown": "## DNS Record Correction\n\nthe subdomain routed to the wrong origin because the CNAME still pointed at an old load balancer after the migration. Updating the zone file and waiting out the short TTL restored normal traffic.\n\n1. Confirm the intended target for the subdomain\n\n2. Replace the stale DNS record with the new origin\n\n3. Verify propagation from multiple resolvers\n\n4. Check that application traffic resolves correctly\n\nDNS change applied with nsupdate\n```bash\ndig app.example.net CNAME +short\nnsupdate -k /etc/bind/tsig.key <<EOF\nserver dns1.example.net\nupdate delete app.example.net CNAME\nupdate add app.example.net 300 CNAME app-new.lb.example.net\nsend\nEOF\n```\n\nSecondary command or config excerpt\n```bash\ndig @8.8.8.8 app.example.net A +short\n```\n\n| Field | Value |\n| --- | --- |\n| status | resolved |\n| owner | Ethan Walker |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048210",
+      "title": "DNS Record Correction",
+      "caller": "Ethan Walker",
+      "category": "Network Services",
+      "subcategory": "DNS Misconfiguration",
+      "date": "2025-01-08"
+    },
+    "blocks": [
+      {
+        "id": "beb1deab-bd47-491e-bbda-c39e26227acb",
+        "type": "heading",
+        "level": 2,
+        "content": "DNS Record Correction",
+        "title": "DNS Record Correction"
+      },
+      {
+        "id": "63589de4-76e1-4226-acaf-976fc56039a1",
+        "type": "paragraph",
+        "content": "<p>the subdomain routed to the wrong origin because the CNAME still pointed at an old load balancer after the migration. Updating the zone file and waiting out the short TTL restored normal traffic.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "15ec89b1-f7f5-4989-bfb7-d173a73c75b8",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the intended target for the subdomain",
+          "Replace the stale DNS record with the new origin",
+          "Verify propagation from multiple resolvers",
+          "Check that application traffic resolves correctly"
+        ]
+      },
+      {
+        "id": "85532660-5b16-4d7a-a7d1-6f36c271ac42",
+        "type": "code",
+        "items": [
+          {
+            "id": "44828c22-8d2c-4935-b7d1-69ec552e9bbf",
+            "type": "code",
+            "title": "Zone Update",
+            "header": "DNS change applied with nsupdate",
+            "content": "dig app.example.net CNAME +short\nnsupdate -k /etc/bind/tsig.key <<EOF\nserver dns1.example.net\nupdate delete app.example.net CNAME\nupdate add app.example.net 300 CNAME app-new.lb.example.net\nsend\nEOF",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "2566d640-dcd2-457e-a280-522fd5c5b922",
+        "type": "code",
+        "items": [
+          {
+            "id": "bed20677-88a0-42d6-a110-fa1174f10ef6",
+            "type": "code",
+            "title": "validation lookup",
+            "header": "Secondary command or config excerpt",
+            "content": "dig @8.8.8.8 app.example.net A +short",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "6e661fb8-4cdd-48c6-ab63-611c39b4df15",
+        "type": "table",
+        "title": "Supporting evidence",
+        "headers": [
+          "Field",
+          "Value"
+        ],
+        "rows": [
+          [
+            "status",
+            "resolved"
+          ],
+          [
+            "owner",
+            "Ethan Walker"
+          ]
+        ]
+      }
+    ]
+  }
+}

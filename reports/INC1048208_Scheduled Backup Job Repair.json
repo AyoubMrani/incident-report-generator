@@ -1,0 +1,63 @@
+{
+  "editingFilename": null,
+  "markdown": "# Scheduled Backup Job Repair\n\nthe backup job stopped because the scheduler entry pointed to an expired credentials file. Once the secret path was corrected, the job resumed and the nightly dump completed without errors.\n\n1. Inspect the backup scheduler and cron entry\n\n2. Update the credentials reference to the current secret\n\n3. Run a manual backup to validate the fix\n\n4. Confirm the automated job succeeds on the next cycle\n\nManual dump and scheduler check\n```bash\npg_dump -Fc appdb > /backups/appdb_$(date +%F).dump\ncrontab -l | grep backup\nsystemctl restart backup-scheduler\n```\n\nRelated incident: INC1048310",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048208",
+      "title": "Scheduled Backup Job Repair",
+      "caller": "Noah Kim",
+      "category": "Database Administration",
+      "subcategory": "Database Backup Failure",
+      "date": "2024-10-03"
+    },
+    "blocks": [
+      {
+        "id": "6b47250f-9858-479c-97be-9e0cc9915242",
+        "type": "heading",
+        "level": 1,
+        "content": "Scheduled Backup Job Repair",
+        "title": "Scheduled Backup Job Repair"
+      },
+      {
+        "id": "45acce20-92f0-4d78-b671-7d1d7f51c50f",
+        "type": "paragraph",
+        "content": "<p>the backup job stopped because the scheduler entry pointed to an expired credentials file. Once the secret path was corrected, the job resumed and the nightly dump completed without errors.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "e1621834-6d86-4a30-8526-128e614f9f12",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Inspect the backup scheduler and cron entry",
+          "Update the credentials reference to the current secret",
+          "Run a manual backup to validate the fix",
+          "Confirm the automated job succeeds on the next cycle"
+        ]
+      },
+      {
+        "id": "8bf19571-2e38-4cec-8a67-6dd14de0d2f6",
+        "type": "code",
+        "items": [
+          {
+            "id": "5c7a790b-5b42-4cbe-8102-aef3a8648861",
+            "type": "code",
+            "title": "Backup Verification",
+            "header": "Manual dump and scheduler check",
+            "content": "pg_dump -Fc appdb > /backups/appdb_$(date +%F).dump\ncrontab -l | grep backup\nsystemctl restart backup-scheduler",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "634d1c0e-78a3-427c-99b1-270993ed5e06",
+        "type": "incident_example",
+        "title": "Historical backup failure reference",
+        "incident_id": "INC1048310",
+        "link": ""
+      }
+    ]
+  }
+}

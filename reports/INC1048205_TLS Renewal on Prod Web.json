@@ -1,0 +1,89 @@
+{
+  "editingFilename": null,
+  "markdown": "# TLS Renewal on Prod Web\n\nthe production certificate was nearing expiration and the deploy script kept referencing the old PEM bundle. The new certificate chain was installed on the web server and the service reloaded after the keystore path was corrected.\n\n1. Check certificate expiry and chain details\n\n2. Replace the expiring certificate and key bundle\n\n3. Reload the web server to pick up the new chain\n\n4. Verify HTTPS requests return the renewed certificate\n\nExpiry check and reload\n```bash\nopenssl x509 -in /etc/pki/tls/certs/app-prod.crt -noout -dates\ncp app-prod-2026.crt /etc/pki/tls/certs/app-prod.crt\nsystemctl reload nginx\n```\n\nSecondary command or config excerpt\n```bash\nnginx -t && systemctl reload nginx\n```\n\n| Field | Value |\n| --- | --- |\n| status | resolved |\n| owner | Fatima El Amrani |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048205",
+      "title": "TLS Renewal on Prod Web",
+      "caller": "Fatima El Amrani",
+      "category": "Web Infrastructure",
+      "subcategory": "SSL Certificate Renewal",
+      "date": "2024-07-09"
+    },
+    "blocks": [
+      {
+        "id": "11ebc49b-5753-48ae-a4db-ec4a2723e35c",
+        "type": "heading",
+        "level": 1,
+        "content": "TLS Renewal on Prod Web",
+        "title": "TLS Renewal on Prod Web"
+      },
+      {
+        "id": "6e4dd987-f7a8-4ec2-9ccd-7904f7c7eb2e",
+        "type": "paragraph",
+        "content": "<p>the production certificate was nearing expiration and the deploy script kept referencing the old PEM bundle. The new certificate chain was installed on the web server and the service reloaded after the keystore path was corrected.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "65a51d6e-878e-4bc9-a1fd-e4126440c242",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Check certificate expiry and chain details",
+          "Replace the expiring certificate and key bundle",
+          "Reload the web server to pick up the new chain",
+          "Verify HTTPS requests return the renewed certificate"
+        ]
+      },
+      {
+        "id": "ff013f05-fdf0-40f6-8f5d-27b30e3e6f61",
+        "type": "code",
+        "items": [
+          {
+            "id": "908d0964-501d-43a3-9bcb-39f244d4060a",
+            "type": "code",
+            "title": "TLS Validation",
+            "header": "Expiry check and reload",
+            "content": "openssl x509 -in /etc/pki/tls/certs/app-prod.crt -noout -dates\ncp app-prod-2026.crt /etc/pki/tls/certs/app-prod.crt\nsystemctl reload nginx",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "00901f90-f262-4f21-82c6-b56d1a137989",
+        "type": "code",
+        "items": [
+          {
+            "id": "45df7837-cdca-446a-bd02-11f99c7a1583",
+            "type": "code",
+            "title": "nginx reload command",
+            "header": "Secondary command or config excerpt",
+            "content": "nginx -t && systemctl reload nginx",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "139e0974-32e9-4e1b-9f90-27cfaf5366c6",
+        "type": "table",
+        "title": "Supporting evidence",
+        "headers": [
+          "Field",
+          "Value"
+        ],
+        "rows": [
+          [
+            "status",
+            "resolved"
+          ],
+          [
+            "owner",
+            "Fatima El Amrani"
+          ]
+        ]
+      }
+    ]
+  }
+}

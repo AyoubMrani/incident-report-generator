@@ -1,0 +1,71 @@
+{
+  "editingFilename": null,
+  "markdown": "# Linux Disk Recovery\n\nthe server filled its root filesystem because archived logs and a leftover core dump were never rotated out. The cleanup removed the largest stale artifacts and restored headroom for the scheduled jobs.\n\n### Remediation\n\n1. Identify the largest directories on the mounted filesystem\n\n2. Remove stale archives and obsolete core files\n\n3. Verify free space after cleanup\n\n4. Tune retention to prevent the issue recurring\n\nFind large files and prune logs\n```bash\ndu -sh /var/log/* /opt/app/* 2>/dev/null | sort -h\nfind /var/log -type f -name \"*.gz\" -mtime +30 -delete\n```\n\n![Disk usage before cleanup](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nScreenshot of the disk utilization graph.",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048207",
+      "title": "Linux Disk Recovery",
+      "caller": "Sofia Alvarez",
+      "category": "Linux Operations",
+      "subcategory": "Disk Space Recovery",
+      "date": "2024-09-12",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "37ca68a4-92dd-4d38-847d-1c8cc1691773",
+        "type": "heading",
+        "level": 1,
+        "content": "Linux Disk Recovery",
+        "title": "Linux Disk Recovery"
+      },
+      {
+        "id": "fdf6d9a3-71d4-4503-85e5-7e49b079fde5",
+        "type": "paragraph",
+        "content": "<p>the server filled its root filesystem because archived logs and a leftover core dump were never rotated out. The cleanup removed the largest stale artifacts and restored headroom for the scheduled jobs.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "514c66cc-e8fa-48bb-aae7-0a8d7ebb43bc",
+        "type": "heading",
+        "level": 3,
+        "content": "Remediation",
+        "title": "Remediation"
+      },
+      {
+        "id": "068415ef-4dc4-4edd-851c-c1ba2accdd68",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify the largest directories on the mounted filesystem",
+          "Remove stale archives and obsolete core files",
+          "Verify free space after cleanup",
+          "Tune retention to prevent the issue recurring"
+        ]
+      },
+      {
+        "id": "4c8c119d-f988-4dec-989d-61c290afe378",
+        "type": "code",
+        "items": [
+          {
+            "id": "9184d149-17f9-4966-bfc4-14ddd0c10b8d",
+            "type": "code",
+            "title": "Disk Audit",
+            "header": "Find large files and prune logs",
+            "content": "du -sh /var/log/* /opt/app/* 2>/dev/null | sort -h\nfind /var/log -type f -name \"*.gz\" -mtime +30 -delete",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "d70b83d2-7568-405d-98e9-e896fdfeaaab",
+        "type": "image",
+        "title": "Disk usage before cleanup",
+        "caption": "Screenshot of the disk utilization graph.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    ]
+  }
+}
