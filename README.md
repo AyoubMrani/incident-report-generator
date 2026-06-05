@@ -1,7 +1,7 @@
 STG app
 
 Primary entrypoint:
-`/Users/ayoub/work/STG/stg_app/Rapp.py`
+`/Users/$USER/work/STG/stg_app/Rapp.py`
 
 Legacy backup entrypoints:
 - `stg_app/backup/app.py`
@@ -10,7 +10,7 @@ Legacy backup entrypoints:
 First-time setup (only if `.venv` is new or incomplete):
 
 ```bash
-cd /Users/ayoub/work/STG/stg_app
+cd /Users/$USER/work/STG/stg_app
 python3 -m venv .venv
 .venv/bin/pip install -r requirements.txt
 ```
@@ -18,7 +18,7 @@ python3 -m venv .venv
 Run (always use the **stg_app** `.venv` — streamlit + mlx_vlm live here):
 
 ```bash
-cd /Users/ayoub/work/STG/stg_app
+cd /Users/$USER/work/STG/stg_app
 ./run.sh
 ```
 
@@ -27,7 +27,7 @@ cd /Users/ayoub/work/STG/stg_app
 Equivalent:
 
 ```bash
-/Users/ayoub/work/STG/stg_app/.venv/bin/python -m streamlit run Rapp.py
+/Users/$USER/work/STG/stg_app/.venv/bin/python -m streamlit run Rapp.py
 ```
 
 ### Vision (VLM) not working?
@@ -39,7 +39,7 @@ If you see `mlx_vlm is not importable`, Streamlit is almost always using the **w
 3. Verify in a terminal:
 
 ```bash
-/Users/ayoub/work/STG/stg_app/.venv/bin/python -c "import mlx_vlm; print('ok')"
+/Users/$USER/work/STG/stg_app/.venv/bin/python -c "import mlx_vlm; print('ok')"
 ```
 
 Weights must exist at `stg_app/models/qwen2.5-vl-7b-4bit-vlm/` (see `incident_chatbot/config.py`).
