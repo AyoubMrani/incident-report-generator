@@ -13,7 +13,7 @@ coverage/
 
 .DS_Store
 __pycache__/
-# .venv/
+.venv/
 models/
 # reports/
 reports_backup/
