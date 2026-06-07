@@ -1,4 +1,4 @@
-STG app
+<!-- STG app
 
 Primary entrypoint:
 `/Users/$USER/work/STG/stg_app/Rapp.py`
@@ -53,4 +53,23 @@ Project structure:
 Notes:
 - Use `incident-report-generator` to create documentation dynamically.
 - Export every generated report in both Markdown (`.md`) and JSON (`.json`) formats.
-- The old static Word document has been removed from `stg_app/docs/`.
+- The old static Word document has been removed from `stg_app/docs/`. -->
+
+
+# 1. Install Ollama (download from ollama.com, run installer)
+
+# 2. Pull both models (one time, then cached)
+ollama pull llama3:8b
+ollama pull qwen2.5vl:3b
+
+# for a better quality model, use:
+# then u must change the config.py file to use the better quality model
+# ollama pull qwen2.5vl:7b
+# OLLAMA_VISION_MODEL = "qwen2.5vl:7b"
+
+# 3. Install Python deps
+pip install -r requirements.txt
+
+# 4. Run
+streamlit run Rapp.py
+<!-- ollama pull qwen2.5vl:7b -->
