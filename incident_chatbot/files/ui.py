@@ -17,7 +17,15 @@ from incident_chatbot.config   import TOP_K, QWEN_MLX_PATH
 from incident_chatbot.ingestion import build_knowledge_base
 from incident_chatbot.retrieval import search
 from incident_chatbot.llm       import understand_text, understand_screenshot, ask_ollama
-from incident_chatbot.prompts   import RESOLUTION_PROMPT, FALLBACK_PROMPT, VLM_UNDERSTAND_PROMPT
+from incident_chatbot.prompts   import (
+    RESOLUTION_PROMPT,
+    FALLBACK_PROMPT,
+    VLM_UNDERSTAND_PROMPT,
+    RESOLUTION_PROMPT_REQUIRED,
+    FALLBACK_PROMPT_REQUIRED,
+    NO_IMAGE_ANALYSIS,
+    format_prompt,
+)
 from incident_chatbot.resolution import parse_resolution, render_guided_steps
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -34,13 +42,13 @@ def _tmp_save(img: Image.Image) -> str:
     img.save(f, format="PNG")
     return f.name
 
-def _score_badge(score: float) -> str:
-    pct = int(score * 100)
-    if pct >= 80:
-        return f"🟢 {pct}%"
-    if pct >= 60:
-        return f"🟡 {pct}%"
-    return f"🔴 {pct}%"
+# def _score_badge(score: float) -> str:
+#     pct = int(score * 100)
+#     if pct >= 80:
+#         return f"🟢 {pct}%"
+#     if pct >= 60:
+#         return f"🟡 {pct}%"
+#     return f"🔴 {pct}%"
 
 CONFIDENCE_THRESHOLD = 0.50   # below this → fallback prompt
 
@@ -54,7 +62,8 @@ def render_report_list(results: list[dict]):
     )
 
     for i, r in enumerate(results):
-        header = f"{_score_badge(r['score'])}  **{r['title']}**  —  `{r['source']}`"
+        # header = f"{_score_badge(r['score'])}  **{r['title']}**  —  `{r['source']}`"
+        header = f"  **{r['title']}**  —  `{r['source']}`"
         with st.expander(header, expanded=(i == 0)):
             st.markdown("**Most relevant excerpt:**")
             excerpt = r["text"]
@@ -130,6 +139,7 @@ def run():
 
             tmp_path = None
             problem = ""
+            image_analysis = NO_IMAGE_ANALYSIS
 
             # Step 1 — understand
             with st.spinner("Understanding the problem…"):
@@ -137,8 +147,14 @@ def run():
                     tmp_path = _tmp_write(uploaded)
                     try:
                         vlm_out = understand_screenshot(tmp_path)
-                        st.info(f"**Vision model read:** {vlm_out}")
-                        problem = (user_text.strip() + "\n\n" + vlm_out).strip()
+                        if vlm_out.startswith("⚠️"):
+                            st.warning(vlm_out)
+                            problem = user_text.strip()
+                        else:
+                            st.info(f"**Vision model read:** {vlm_out}")
+                            image_analysis = vlm_out
+                            parts = [user_text.strip(), vlm_out]
+                            problem = "\n\n".join(p for p in parts if p)
                     except Exception as e:
                         st.warning(f"Vision model unavailable ({e}) — using text only.")
                         problem = user_text.strip()
@@ -148,12 +164,11 @@ def run():
                 else:
                     problem = user_text.strip()
 
-                # If still no problem text, run text understanding
-                if problem:
-                    understood = understand_text(problem)
-                else:
+                if not problem:
                     st.error("Could not extract a problem description.")
                     st.stop()
+
+                understood = understand_text(problem)
 
             with st.expander("🔍 Problem understood as:", expanded=False):
                 st.write(understood)
@@ -173,22 +188,32 @@ def run():
             st.subheader("🔧 Resolution guide")
 
             with st.spinner("Generating resolution…"):
-                if top_score >= CONFIDENCE_THRESHOLD:
-                    knowledge = "\n\n---\n".join(
-                        f"[{c['title']}]\n{c['text']}" for c in results[:3]
-                    )
-                    raw = ask_ollama(
-                        RESOLUTION_PROMPT.format(problem=understood, knowledge=knowledge)
-                    )
-                    parsed = parse_resolution(raw)
-                    render_guided_steps(parsed)
-                else:
+                if top_score < CONFIDENCE_THRESHOLD:
                     st.warning(
                         f"Best match score is {int(top_score*100)}% — below confidence threshold. "
                         "Showing general guidance only."
                     )
-                    raw = ask_ollama(FALLBACK_PROMPT.format(problem=understood))
-                    st.markdown(raw)
+                    prompt = format_prompt(
+                        FALLBACK_PROMPT,
+                        FALLBACK_PROMPT_REQUIRED,
+                        problem=understood,
+                        image_analysis=image_analysis,
+                    )
+                else:
+                    knowledge = "\n\n---\n".join(
+                        f"[{c['title']}]\n{c['text']}" for c in results[:3]
+                    )
+                    prompt = format_prompt(
+                        RESOLUTION_PROMPT,
+                        RESOLUTION_PROMPT_REQUIRED,
+                        problem=understood,
+                        image_analysis=image_analysis,
+                        knowledge=knowledge,
+                    )
+
+                raw = ask_ollama(prompt)
+                parsed = parse_resolution(raw)
+                render_guided_steps(parsed)
 
             # Step 4 — similar reports
             st.divider()
@@ -210,7 +235,8 @@ def run():
         if q:
             hits = search(q, embed_model, embeddings, documents, metadata, top_k=5)
             for h in hits:
-                with st.expander(f"{_score_badge(h['score'])} {h['title']} — `{h['source']}`"):
+                # with st.expander(f"{_score_badge(h['score'])} {h['title']} — `{h['source']}`"):
+                with st.expander(f" {h['title']} — `{h['source']}`"):
                     st.text(h["text"][:500])
 
     # ── VLM TEST ──────────────────────────────────────────────────────────────

@@ -1,3 +1,31 @@
+import re
+
+_PLACEHOLDER_RE = re.compile(r"(?<!\{)\{([a-zA-Z_][a-zA-Z0-9_]*)\}(?!\})")
+
+UNDERSTAND_PROMPT_REQUIRED = ("text",)
+RESOLUTION_PROMPT_REQUIRED = ("problem", "image_analysis", "knowledge")
+FALLBACK_PROMPT_REQUIRED = ("problem", "image_analysis")
+
+NO_IMAGE_ANALYSIS = "None"
+
+
+def format_prompt(template: str, required: tuple[str, ...], **kwargs: str) -> str:
+    """Format a prompt template after validating all required placeholders are supplied."""
+    missing = [name for name in required if name not in kwargs]
+    if missing:
+        raise ValueError(
+            f"Missing required prompt variables: {', '.join(missing)}. "
+            f"Required: {list(required)}. Provided: {sorted(kwargs)}"
+        )
+    for name in required:
+        if kwargs[name] is None:
+            raise ValueError(
+                f"Prompt variable {name!r} must not be None. "
+                f"Required: {list(required)}."
+            )
+    return template.format(**{name: kwargs[name] for name in required})
+
+
 # ── Step 1: Understand ────────────────────────────────────────────────────────
 
 UNDERSTAND_PROMPT = """\

@@ -40,7 +40,8 @@ def format_retrieval_context(results: list[dict], limit: int = 5) -> str:
     """Format retrieval hits with scores for the resolution prompt."""
     blocks: list[str] = []
     for chunk in results[:limit]:
-        score_pct = int(float(chunk.get("score", 0)) * 100)
+        raw_score = chunk.get("semantic_score", chunk.get("score", 0))
+        score_pct = int(float(raw_score) * 100)
         blocks.append(
             "\n".join([
                 f"RETRIEVAL_SIMILARITY: {score_pct}%",
@@ -55,14 +56,15 @@ def format_retrieval_context(results: list[dict], limit: int = 5) -> str:
 
 def _extract_json_blob(raw: str) -> dict | None:
     text = raw.strip()
-    fence = re.search(r"```(?:json)?\s*(\{.*?\})\s*```", text, re.DOTALL | re.IGNORECASE)
+    fence = re.search(r"```(?:json)?\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
     if fence:
-        text = fence.group(1)
-    else:
-        start = text.find("{")
-        end = text.rfind("}")
-        if start != -1 and end > start:
-            text = text[start : end + 1]
+        text = fence.group(1).strip()
+
+    start = text.find("{")
+    end = text.rfind("}")
+    if start == -1 or end <= start:
+        return None
+    text = text[start : end + 1]
     try:
         data = json.loads(text)
     except json.JSONDecodeError:

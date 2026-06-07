@@ -78,6 +78,34 @@ def test_format_retrieval_context_includes_scores():
     assert "INC0383918" in ctx
 
 
+def test_parse_json_inside_markdown_fence_with_nested_objects():
+    raw = """```json
+{
+  "incident_summary": "Duplicate OPV cleanup",
+  "incident_type": "Duplicate Record Cleanup",
+  "confidence": 65,
+  "similar_incidents": [],
+  "recommended_resolution": [
+    {
+      "step": 1,
+      "title": "Find duplicates",
+      "purpose": "Scope",
+      "action": "Query support tables",
+      "validation": "Count matches ticket",
+      "evidence": []
+    }
+  ],
+  "supporting_sql": [],
+  "reasoning": "General duplicate cleanup pattern",
+  "alternative_resolution": []
+}
+```"""
+    parsed = parse_resolution(raw)
+    assert parsed["incident_summary"] == "Duplicate OPV cleanup"
+    assert len(parsed["recommended_resolution"]) == 1
+    assert parsed["insufficient"] is False
+
+
 def test_parse_legacy_nri_json_still_works():
     raw = """{
   "problem_summary": "Provision cleanup",

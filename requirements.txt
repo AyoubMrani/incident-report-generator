@@ -1,11 +1,11 @@
-streamlit
-python-docx
-sentence-transformers
-torchvision
-langchain
-langchain-community
-ollama
-pytesseract
-Pillow
-mlx-lm
-mlx-vlm
+# Core
+streamlit>=1.35.0
+python-docx>=1.0.0
+numpy>=1.26.0
+Pillow>=10.0.0
+
+# Embeddings
+sentence-transformers>=3.0.0
+
+# Ollama client (text + vision)
+ollama>=0.2.0
