@@ -1,0 +1,13 @@
+# Keep the Docker build context small and reproducible: never ship host-built
+# artifacts or deps — the image builds the frontend and installs Python deps itself.
+**/node_modules
+**/.venv
+**/venv
+**/__pycache__
+**/*.pyc
+**/.pytest_cache
+frontend/dist
+.git
+.DS_Store
+**/.env
+**/.env.local

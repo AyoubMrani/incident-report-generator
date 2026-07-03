@@ -1,75 +1,120 @@
-<!-- STG app
+# NTT Incident Platform
 
-Primary entrypoint:
-`/Users/$USER/work/STG/stg_app/Rapp.py`
+Unified application merging the **incident-report-generator** (React/TS) and the
+**Chatbot** (Python RAG over incident reports) into one product: a single React
+frontend with two modules (Report Generator, Chatbot) backed by one FastAPI
+service.
 
-Legacy backup entrypoints:
-- `stg_app/backup/app.py`
-- `stg_app/backup/app_mlx.py`
+## Why this shape
 
-First-time setup (only if `.venv` is new or incomplete):
+The two original projects already share a data contract — the
+`{ metadata, blocks[] }` report JSON that the generator *writes* and the chatbot
+*ingests*. That shared schema (codified in `backend/app/shared/schema.py` ↔
+`frontend/src/types.ts`) is the integration seam. The frontend stays React; the
+Python chatbot becomes a headless FastAPI service; the old Express `server.ts`
+is replaced by `backend/app/routers/reports.py`.
 
-```bash
-cd /Users/$USER/work/STG/stg_app
-python3 -m venv .venv
-.venv/bin/pip install -r requirements.txt
+Architecture: **modular monolith** — one backend process, clean module
+boundaries (`chatbot/`, `reports/`, `shared/`), no microservice overhead.
+
+## Layout
+
+```
+ntt-incident-platform/
+├── frontend/                 # React 18 + Vite + Tailwind (from the generator app)
+├── backend/
+│   ├── app/
+│   │   ├── main.py           # FastAPI entrypoint (replaces server.ts)
+│   │   ├── routers/          # HTTP layer: reports.py (done), chat.py (Phase 2)
+│   │   ├── reports/          # report CRUD + HTML export (ported from server.ts)
+│   │   ├── chatbot/          # RAG/LLM pipeline (Phase 2: from incident_chatbot)
+│   │   └── shared/           # schema.py (contract) + llm/ (swappable providers)
+│   ├── tests/
+│   └── requirements.txt
+├── reports/                  # shared report data (→ SharePoint adapter later)
+└── infra/                    # Dockerfile.backend, docker-compose.yml
 ```
 
-Run (always use the **stg_app** `.venv` — streamlit + mlx_vlm live here):
+## Run the full app locally
+
+Prereq for real chatbot answers: `ollama serve` running with
+`ollama pull llama3:8b && ollama pull qwen2.5vl:3b`.
+
+**Option A — Docker, one command (recommended).** Builds the frontend and backend
+into one image; FastAPI serves the SPA. Talks to your host Ollama by default.
 
 ```bash
-cd /Users/$USER/work/STG/stg_app
-./run.sh
+docker compose -f infra/docker-compose.yml up --build   # http://localhost:8000
 ```
 
-`./run.sh` will run `pip install -r requirements.txt` automatically if Streamlit is missing.
+See [infra/README.md](infra/README.md) for the Ollama-in-a-container variant and
+config knobs.
 
-Equivalent:
+**Option B — no Docker, one server (prod-like).** FastAPI serves the built SPA:
 
 ```bash
-/Users/$USER/work/STG/stg_app/.venv/bin/python -m streamlit run Rapp.py
+cd frontend && npm install && npm run build   # produces frontend/dist
+cd ../backend && ./dev.sh                      # http://localhost:8000  (whole app)
 ```
 
-### Vision (VLM) not working?
-
-If you see `mlx_vlm is not importable`, Streamlit is almost always using the **wrong Python** (e.g. conda base) instead of `stg_app/.venv`.
-
-1. Check the sidebar **Python interpreter** path in the app.
-2. Stop Streamlit and start again with `./run.sh` or the command above.
-3. Verify in a terminal:
+**Option C — no Docker, two servers (hot-reload dev).** Vite proxies /api:
 
 ```bash
-/Users/$USER/work/STG/stg_app/.venv/bin/python -c "import mlx_vlm; print('ok')"
+cd backend && ./dev.sh                          # backend on :8000
+cd frontend && npm install && npx vite          # UI on :5173, proxies /api -> :8000
 ```
 
-Weights must exist at `stg_app/models/qwen2.5-vl-7b-4bit-vlm/` (see `incident_chatbot/config.py`).
+Backend tests: `cd backend && ./.venv/bin/pytest` (18 tests, no Ollama needed —
+the chatbot pipeline is exercised with fakes).
 
-Project structure:
-- `stg_app/incident_chatbot/` — modular application code split by concern
-- `stg_app/reports/` — generated incident reports in `.json` and `.md`
-- `stg_app/docs/` — kept empty for legacy compatibility only
-- `incident-report-generator/` — untouched third-party report generator
+## API (report endpoints, ported 1:1 from server.ts)
 
-Notes:
-- Use `incident-report-generator` to create documentation dynamically.
-- Export every generated report in both Markdown (`.md`) and JSON (`.json`) formats.
-- The old static Word document has been removed from `stg_app/docs/`. -->
+| Method | Path | Notes |
+|---|---|---|
+| POST | `/api/reports` | create or update; `409` on duplicate incident_id |
+| GET | `/api/reports` | list, newest first |
+| GET | `/api/reports/content/{filename}` | parsed JSON; `404` if missing |
+| GET | `/api/reports/download/{filename}` | download raw file |
+| GET | `/api/download?filename=` | download (query variant) |
+| GET | `/api/html?filename=` | standalone HTML export |
+| DELETE | `/api/delete/{filename}` | delete json+md pair |
+| DELETE | `/api/delete?incident_id=` | delete latest for an incident |
 
+## Migration status
 
-# 1. Install Ollama (download from ollama.com, run installer)
+- [x] **Phase 0** — unified repo skeleton
+- [x] **Phase 1** — FastAPI backend; reports router (server.ts port); shared schema
+- [x] **Phase 2** — chatbot ported into `app/chatbot/`, Streamlit removed;
+      `/api/chat` live; swappable Ollama/Gemini LLM providers
+- [x] **Phase 3** — frontend moved into `frontend/`; chatbot module (chat UI) +
+      report module under one sidebar-navigated React shell
+- [x] **Phase 4** — `docker compose up` runs it all locally (see `infra/`)
+- [ ] **Phase 5** — hardening (auth, SharePoint adapter) — deferred
 
-# 2. Pull both models (one time, then cached)
-ollama pull llama3:8b
-ollama pull qwen2.5vl:3b
+### Chatbot module (Phase 2)
 
-# for a better quality model, use:
-# then u must change the config.py file to use the better quality model
-# ollama pull qwen2.5vl:7b
-# OLLAMA_VISION_MODEL = "qwen2.5vl:7b"
+`POST /api/chat` — body `{ "query": "...", "image_b64": null }` — runs
+understand → hybrid retrieval over the shared reports KB → expert-resolution LLM
+call → parsed structured response. Returns `503` if the chatbot didn't
+initialise (missing model/Ollama); `/api/health` reports `chatbot_ready`.
 
-# 3. Install Python deps
-pip install -r requirements.txt
+- LLM provider is swappable via `CHATBOT_PROVIDER=ollama|gemini` (default
+  `ollama`, self-hosted). See `app/shared/llm/`.
+- The embedding model + KB index are built once in the app lifespan (where the
+  old Streamlit `@st.cache_resource` singletons moved to).
+- Set `DISABLE_CHATBOT=1` to boot the reports-only surface without loading the
+  embedding model (used by the reports tests).
 
-# 4. Run
-streamlit run Rapp.py
-<!-- ollama pull qwen2.5vl:7b -->
+Run Ollama for real answers: `ollama pull llama3:8b && ollama pull qwen2.5vl:3b`.
+
+## Notes for Phase 2
+
+- `backend/app/shared/llm/provider.py` defines the swappable `LLMProvider`
+  interface. Implement `OllamaProvider` (wrap the chatbot's `ask_ollama` /
+  `run_vlm`) and `GeminiProvider` (move the generator's browser-side Gemini
+  calls server-side), then wire `get_provider`.
+- The chatbot currently imports `streamlit` inside `llm.py`, `ingestion.py`, and
+  `resolution.py` — not just `ui.py`. Removing that is the main work: replace
+  `@st.cache_resource` singletons (embedding model, KB index) with objects built
+  in `main.py`'s lifespan, and `st.session_state` with request-scoped data.
+```
