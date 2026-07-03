@@ -135,6 +135,7 @@ class ChatbotService:
             self.kb.documents,
             self.kb.metadata,
             top_k=TOP_K,
+            bm25=self.kb.bm25,   # fuse lexical BM25 with vector search (RRF)
         )
 
         # Build the resolution prompt: prior-turn memory + untrusted-fenced input.

@@ -117,19 +117,58 @@ def _fuse_query_scores(
     return np.zeros(len(embeddings), dtype="float32")
 
 
+# Reciprocal Rank Fusion constant. 60 is the standard value from the RRF paper;
+# larger k = flatter contribution from rank position.
+_RRF_K = 60
+
+
+def _rrf_fuse(
+    semantic_scores: np.ndarray,
+    bm25_ranking: list[int] | None,
+) -> dict[int, float]:
+    """Fuse the vector ranking and the BM25 ranking with Reciprocal Rank Fusion.
+
+    RRF ranks by 1/(k + rank) summed across the two lists. It needs no score-
+    scale calibration between cosine similarity and BM25 (their magnitudes are
+    unrelated), which makes the fusion robust and parameter-light. Returns a
+    per-document fused score (index -> score).
+    """
+    fused: dict[int, float] = {}
+
+    # Vector ranking: order all docs by semantic score descending.
+    vec_order = sorted(range(len(semantic_scores)),
+                       key=lambda i: float(semantic_scores[i]), reverse=True)
+    for rank, idx in enumerate(vec_order):
+        fused[idx] = fused.get(idx, 0.0) + 1.0 / (_RRF_K + rank)
+
+    # Lexical ranking (only docs BM25 actually matched — zeros were dropped).
+    for rank, idx in enumerate(bm25_ranking or []):
+        fused[idx] = fused.get(idx, 0.0) + 1.0 / (_RRF_K + rank)
+
+    return fused
+
+
 def _best_chunk_per_source(
     scores: np.ndarray,
     documents: list[str],
     metadata: list[dict],
     queries: list[str],
+    bm25_ranking: list[int] | None = None,
 ) -> list[dict]:
+    # Fuse semantic + lexical rankings if a BM25 ranking is provided; otherwise
+    # fall back to pure semantic + the legacy additive lexical boost.
+    fused = _rrf_fuse(scores, bm25_ranking) if bm25_ranking is not None else None
+
     best_by_source: dict[str, dict] = {}
 
     for idx, semantic_score in enumerate(scores):
         meta = metadata[idx]
         source = meta["source"]
         lexical = _lexical_boost(queries, documents[idx], meta)
-        combined = float(semantic_score) + lexical
+        if fused is not None:
+            combined = fused.get(idx, 0.0) + lexical * 0.1  # small tie-breaker
+        else:
+            combined = float(semantic_score) + lexical
 
         entry = {
             "text": documents[idx],
@@ -161,13 +200,16 @@ def search(
     secondary_query: str | None = None,
     text_weight: float = RETRIEVAL_TEXT_WEIGHT,
     image_weight: float = RETRIEVAL_IMAGE_WEIGHT,
+    bm25=None,
 ):
     """
     Hybrid retrieval over chunked reports.
 
-    When ``secondary_query`` is set, semantic scores are a weighted blend of the
-    primary (text) and secondary (image) embeddings. Lexical boosts are computed
-    from both queries. One best-scoring chunk is returned per source file.
+    Semantic embedding search is fused with a BM25 lexical ranking (when a
+    ``bm25`` index is provided) via Reciprocal Rank Fusion, so exact terms
+    (INC ids, table/function names) and meaning both count. When
+    ``secondary_query`` is set, semantic scores blend the primary (text) and
+    secondary (image) embeddings. One best-scoring chunk per source is returned.
     """
     primary = (query or "").strip()
     secondary = (secondary_query or "").strip()
@@ -185,7 +227,10 @@ def search(
     )
 
     queries = [q for q in (primary, secondary) if q]
-    ranked = _best_chunk_per_source(scores, documents, metadata, queries)
+    # BM25 runs on the combined query text (primary + secondary).
+    bm25_ranking = bm25.rank(" ".join(queries)) if bm25 is not None else None
+
+    ranked = _best_chunk_per_source(scores, documents, metadata, queries, bm25_ranking)
     return ranked[:top_k]
 
 
@@ -197,6 +242,7 @@ def search_multimodal(
     documents,
     metadata,
     top_k: int = TOP_K,
+    bm25=None,
 ):
     """Convenience wrapper for text-only, image-only, and text+image retrieval."""
     text_query = (text_query or "").strip()
@@ -211,9 +257,12 @@ def search_multimodal(
             metadata,
             top_k=top_k,
             secondary_query=image_query,
+            bm25=bm25,
         )
     if text_query:
-        return search(text_query, embed_model, embeddings, documents, metadata, top_k=top_k)
+        return search(text_query, embed_model, embeddings, documents, metadata,
+                      top_k=top_k, bm25=bm25)
     if image_query:
-        return search(image_query, embed_model, embeddings, documents, metadata, top_k=top_k)
+        return search(image_query, embed_model, embeddings, documents, metadata,
+                      top_k=top_k, bm25=bm25)
     return []

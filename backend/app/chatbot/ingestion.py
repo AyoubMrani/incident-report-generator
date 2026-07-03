@@ -39,6 +39,7 @@ class KnowledgeBase:
     documents: list[str]
     metadata: list[dict]
     n_files: int
+    bm25: object | None = None   # BM25Index over `documents`; fused with vectors
     warnings: list[str] = field(default_factory=list)
 
 
@@ -285,11 +286,18 @@ def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
         model.encode(documents, convert_to_numpy=True, show_progress_bar=False)
         .astype("float32")
     )
+    # Build the lexical BM25 index over the same chunks so retrieval can fuse
+    # exact-term matching (INC ids, table/function names) with semantic search.
+    from .bm25 import BM25Index
+
+    bm25 = BM25Index(documents)
+
     return KnowledgeBase(
         embed_model=model,
         embeddings=embeddings,
         documents=documents,
         metadata=metadata,
         n_files=n_files,
+        bm25=bm25,
         warnings=warnings,
     )
