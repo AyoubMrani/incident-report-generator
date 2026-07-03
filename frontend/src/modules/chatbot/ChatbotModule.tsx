@@ -1,0 +1,489 @@
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  Send, Bot, User, AlertTriangle, Loader2, Database, ImagePlus, X,
+  Plus, MessageSquare, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
+} from 'lucide-react';
+import {
+  streamChat, listConversations, listMessages, deleteConversation,
+  getActiveConversationId, setActiveConversationId,
+  ChatAnswer, SourceLink, Conversation, StoredMessage,
+} from '../../api/chat';
+import { ReportViewer } from '../reports/components/ReportViewer';
+import { CodeBlock, splitFencedCode } from './CodeBlock';
+
+// Render assistant prose, promoting any ```fenced``` code to highlighted blocks.
+function RichText({ text }: { text: string }) {
+  const segments = splitFencedCode(text);
+  return (
+    <div className="space-y-2">
+      {segments.map((seg, i) =>
+        seg.type === 'code'
+          ? <CodeBlock key={i} code={seg.content} language={seg.lang} />
+          : seg.content.trim() && <p key={i} className="text-sm text-gray-700 whitespace-pre-wrap">{seg.content.trim()}</p>,
+      )}
+    </div>
+  );
+}
+
+// ── local view model ──────────────────────────────────────────────────────────
+interface UserMessage { role: 'user'; text: string; hasImage?: boolean; links?: string[] }
+interface AssistantMessage { role: 'assistant'; answer: ChatAnswer }
+interface ChatMessage { role: 'chat'; text: string }              // greeting/smalltalk reply
+interface StreamingMessage { role: 'streaming'; text: string }    // tokens as they arrive
+interface ErrorMessage { role: 'error'; text: string }
+type Message = UserMessage | AssistantMessage | ChatMessage | StreamingMessage | ErrorMessage;
+
+function confidenceBadge(confidence: number) {
+  if (confidence >= 75) return { label: `${confidence}% confidence`, cls: 'bg-green-100 text-green-800' };
+  if (confidence >= 50) return { label: `${confidence}% confidence`, cls: 'bg-yellow-100 text-yellow-800' };
+  return { label: `${confidence}% confidence`, cls: 'bg-red-100 text-red-800' };
+}
+
+// Turn a stored DB message into the local view model (for replay on reload).
+function fromStored(m: StoredMessage): Message | null {
+  if (m.role === 'assistant' && m.payload && 'incident_type' in m.payload) {
+    const answer = m.payload as ChatAnswer;
+    // A stored greeting/smalltalk reply replays as a plain chat bubble.
+    if (answer.is_chat) return { role: 'chat', text: answer.answer || m.text };
+    return { role: 'assistant', answer };
+  }
+  if (m.role === 'user') {
+    const links = (m.payload && 'links' in m.payload ? m.payload.links : undefined) as string[] | undefined;
+    return { role: 'user', text: m.text, hasImage: m.has_image, links };
+  }
+  if (m.role === 'error') return { role: 'error', text: m.text };
+  return null;
+}
+
+// Extract external URLs from free text so they render as openable links.
+function extractLinks(text: string): string[] {
+  const m = text.match(/https?:\/\/[^\s)]+/g);
+  return m ? Array.from(new Set(m)) : [];
+}
+
+// Flag destructive SQL so the UI can warn before the user runs it.
+function isDestructiveSql(sql: string): boolean {
+  const s = sql.toUpperCase();
+  if (/\b(DROP|TRUNCATE|DELETE)\b/.test(s)) return true;
+  // UPDATE without a WHERE clause = full-table write.
+  if (/\bUPDATE\b/.test(s) && !/\bWHERE\b/.test(s)) return true;
+  return false;
+}
+
+// ── source citations (open matched report in-app; dedup + clean labels) ───────
+function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (filename: string) => void }) {
+  if (!retrieval.length) return null;
+
+  // Dedupe: retrieval can return several chunks of the same report. Key by
+  // filename (or incident_id/title), keeping the highest-scoring instance.
+  const seen = new Map<string, SourceLink>();
+  for (const s of retrieval) {
+    const key = s.filename || s.incident_id || s.title || JSON.stringify(s);
+    const prev = seen.get(key);
+    if (!prev || (s.score ?? 0) > (prev.score ?? 0)) seen.set(key, s);
+  }
+  const sources = Array.from(seen.values());
+
+  return (
+    <div className="pt-2 border-t border-gray-100">
+      <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-gray-500">
+        <Database className="w-3.5 h-3.5" /> Sources
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        {sources.map((s, i) => {
+          // Prefer a human title; show incident id as a subtle prefix.
+          const title = s.title || s.filename || 'report';
+          const openable = !!(s.open_url && s.filename);
+          const common = 'inline-flex items-center gap-1 text-xs px-2 py-1 rounded-md border max-w-[240px]';
+          if (openable) {
+            return (
+              <button
+                key={i}
+                onClick={() => onOpen(s.filename!)}
+                title={`Open ${title} in-app`}
+                className={`${common} bg-blue-50 text-blue-700 border-blue-100 hover:bg-blue-100`}
+              >
+                <FileText className="w-3 h-3 shrink-0" />
+                {s.incident_id && <span className="font-medium">{s.incident_id}</span>}
+                <span className="truncate text-blue-600/80">{title}</span>
+              </button>
+            );
+          }
+          // Non-openable (e.g. a .md hit with no JSON view): show, don't fake a link.
+          return (
+            <span
+              key={i}
+              title="This source has no in-app view"
+              className={`${common} bg-gray-50 text-gray-500 border-gray-200`}
+            >
+              {s.incident_id && <span className="font-medium">{s.incident_id}</span>}
+              <span className="truncate">{title}</span>
+            </span>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+function AssistantCard({ answer, onOpen }: { answer: ChatAnswer; onOpen: (filename: string) => void }) {
+  const badge = confidenceBadge(answer.confidence);
+  const linksInReasoning = extractLinks(answer.raw || '');
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="text-sm font-semibold text-gray-900">{answer.incident_type}</span>
+        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+        {answer.low_confidence && (
+          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+            <AlertTriangle className="w-3.5 h-3.5" /> low confidence — verify before acting
+          </span>
+        )}
+      </div>
+
+      {answer.security_note && (
+        <div className="flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-800">
+          <ShieldAlert className="w-3.5 h-3.5 mt-0.5 shrink-0" /> {answer.security_note}
+        </div>
+      )}
+
+      {answer.answer && <RichText text={answer.answer} />}
+
+      {answer.supporting_sql.some(isDestructiveSql) && (
+        <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
+          <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+          Some suggested SQL is destructive (DROP/DELETE/TRUNCATE/UPDATE). Review carefully and back up before running.
+        </div>
+      )}
+
+      {answer.steps.length > 0 && (
+        <ol className="space-y-3">
+          {answer.steps.map((s) => (
+            <li key={s.step} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+              <div className="text-sm font-medium text-gray-900">Step {s.step}: {s.title}</div>
+              {s.purpose && <div className="mt-0.5 text-xs text-gray-500">Purpose: {s.purpose}</div>}
+              <div className="mt-1 text-sm text-gray-700">{s.action}</div>
+              {s.validation && <div className="mt-1 text-xs text-gray-600 italic">Validate: {s.validation}</div>}
+              {s.evidence && s.evidence.length > 0 && (
+                <div className="mt-1 text-xs text-blue-700">Evidence: {s.evidence.join(', ')}</div>
+              )}
+            </li>
+          ))}
+        </ol>
+      )}
+
+      {answer.supporting_sql.length > 0 && (
+        <div>
+          <div className="text-xs font-semibold text-gray-600 mb-1">Supporting SQL</div>
+          {answer.supporting_sql.map((sql, i) => (
+            <CodeBlock key={i} code={sql} language="sql" />
+          ))}
+        </div>
+      )}
+
+      <Sources retrieval={answer.retrieval} onOpen={onOpen} />
+
+      {linksInReasoning.length > 0 && (
+        <div className="flex flex-wrap gap-1.5">
+          {linksInReasoning.map((url) => (
+            <a key={url} href={url} target="_blank" rel="noopener noreferrer"
+               className="inline-flex items-center gap-1 text-xs text-blue-600 hover:underline">
+              <ExternalLink className="w-3 h-3" /> {url.replace(/^https?:\/\//, '').slice(0, 40)}
+            </a>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function ChatbotModule() {
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [activeId, setActiveId] = useState<string | null>(getActiveConversationId());
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [input, setInput] = useState('');
+  const [image, setImage] = useState<{ b64: string; name: string } | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [openReport, setOpenReport] = useState<string | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  // Load the conversation list + restore the active thread on mount.
+  useEffect(() => { refreshConversations(); }, []);
+  useEffect(() => { if (activeId) restoreMessages(activeId); else setMessages([]); }, [activeId]);
+  useEffect(() => {
+    scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
+  }, [messages, loading]);
+
+  async function refreshConversations() {
+    try { setConversations(await listConversations()); } catch { /* store may be empty */ }
+  }
+
+  async function restoreMessages(id: string) {
+    try {
+      const stored = await listMessages(id);
+      setMessages(stored.map(fromStored).filter(Boolean) as Message[]);
+    } catch {
+      // Conversation vanished (deleted elsewhere) — reset to a clean slate.
+      setActiveId(null); setActiveConversationId(null);
+    }
+  }
+
+  function selectConversation(id: string | null) {
+    setActiveId(id);
+    setActiveConversationId(id);
+  }
+
+  async function removeConversation(id: string) {
+    await deleteConversation(id);
+    if (id === activeId) selectConversation(null);
+    refreshConversations();
+  }
+
+  function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const b64 = String(reader.result).split(',')[1] ?? '';
+      setImage({ b64, name: file.name });
+    };
+    reader.readAsDataURL(file);
+  }
+
+  const submit = async () => {
+    const query = input.trim();
+    if ((!query && !image) || loading) return; // supports text-only, image+text, image-only
+    const links = extractLinks(query);
+    setInput('');
+    const sentImage = image;
+    setImage(null);
+    setMessages((m) => [...m, { role: 'user', text: query, hasImage: !!sentImage, links }]);
+    setLoading(true);
+
+    // A single placeholder bubble that grows with tokens, then is replaced by the
+    // final card (or a chat bubble). Tracked by index for in-place updates.
+    let streamIndex = -1;
+    const replaceAt = (list: Message[], idx: number, msg: Message): Message[] => {
+      const next = list.slice();
+      next[idx] = msg;
+      return next;
+    };
+    const putStreaming = (msg: Message) =>
+      setMessages((m) => {
+        if (streamIndex === -1) { streamIndex = m.length; return [...m, msg]; }
+        return replaceAt(m, streamIndex, msg);
+      });
+
+    let acc = '';
+    try {
+      await streamChat(query, { imageB64: sentImage?.b64 ?? null, conversationId: activeId, links }, {
+        onMeta: (cid) => {
+          if (!activeId) { setActiveId(cid); setActiveConversationId(cid); }
+        },
+        // Greeting/smalltalk arrives whole; incident answers stream as tokens.
+        onChat: (text) => putStreaming({ role: 'chat', text }),
+        onToken: (t) => { acc += t; putStreaming({ role: 'streaming', text: acc }); },
+        onError: (detail) => {
+          // Loud failure instead of a fake answer.
+          setMessages((m) => {
+            const err: Message = { role: 'error', text: detail };
+            return streamIndex === -1 ? [...m, err] : replaceAt(m, streamIndex, err);
+          });
+        },
+        onDone: (answer) => {
+          const finalMsg: Message = answer.is_chat
+            ? { role: 'chat', text: answer.answer }
+            : { role: 'assistant', answer };
+          setMessages((m) => (streamIndex === -1 ? [...m, finalMsg] : replaceAt(m, streamIndex, finalMsg)));
+          refreshConversations();
+        },
+      });
+    } catch (err) {
+      setMessages((m) => [...m, { role: 'error', text: (err as Error).message }]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+  };
+
+  return (
+    <div className="flex h-[calc(100vh-4rem)] gap-4">
+      {/* Conversation sidebar (persistent history) */}
+      <div className="w-60 shrink-0 flex flex-col border-r border-gray-200 pr-3">
+        <button
+          onClick={() => selectConversation(null)}
+          className="mb-3 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
+        >
+          <Plus className="w-4 h-4" /> New chat
+        </button>
+        <div className="flex-1 overflow-y-auto space-y-1">
+          {conversations.length === 0 && (
+            <p className="text-xs text-gray-400 px-2 py-4">No conversations yet.</p>
+          )}
+          {conversations.map((c) => (
+            <div
+              key={c.id}
+              className={`group flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer ${
+                c.id === activeId ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              onClick={() => selectConversation(c.id)}
+            >
+              <MessageSquare className="w-4 h-4 shrink-0" />
+              <span className="flex-1 truncate text-sm">{c.title}</span>
+              <button
+                onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
+                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600"
+                title="Delete conversation"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Conversation panel + input */}
+      <div className="flex flex-col flex-1 min-w-0 max-w-3xl">
+        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pb-4">
+          {messages.length === 0 && (
+            <div className="text-center text-gray-400 mt-16">
+              <Bot className="w-10 h-10 mx-auto mb-3 text-gray-300" />
+              <p className="text-sm">Ask about an incident, attach a screenshot, or both.</p>
+            </div>
+          )}
+
+          {messages.map((msg, i) => {
+            if (msg.role === 'user') {
+              return (
+                <div key={i} className="flex justify-end">
+                  <div className="flex items-start gap-2 max-w-[85%]">
+                    <div className="rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
+                      {msg.hasImage && (
+                        <div className="mb-1 inline-flex items-center gap-1 text-xs text-blue-100">
+                          <ImagePlus className="w-3 h-3" /> screenshot attached
+                        </div>
+                      )}
+                      {msg.text || <span className="italic text-blue-100">(image only)</span>}
+                      {msg.links && msg.links.length > 0 && (
+                        <div className="mt-1 space-y-0.5">
+                          {msg.links.map((u) => (
+                            <a key={u} href={u} target="_blank" rel="noopener noreferrer"
+                               className="flex items-center gap-1 text-xs text-blue-100 underline">
+                              <Link2 className="w-3 h-3" /> {u.replace(/^https?:\/\//, '').slice(0, 36)}
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    <div className="p-1.5 bg-blue-600 text-white rounded-full mt-0.5"><User className="w-4 h-4" /></div>
+                  </div>
+                </div>
+              );
+            }
+            if (msg.role === 'error') {
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="p-1.5 bg-red-100 text-red-600 rounded-full mt-0.5"><AlertTriangle className="w-4 h-4" /></div>
+                  <div className="rounded-2xl rounded-tl-sm bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700 max-w-[85%]">{msg.text}</div>
+                </div>
+              );
+            }
+            if (msg.role === 'chat') {
+              // Greeting / smalltalk / meta — a plain assistant bubble, no card.
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
+                  <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-2.5 text-sm text-gray-700 shadow-sm max-w-[85%]">
+                    {msg.text}
+                  </div>
+                </div>
+              );
+            }
+            if (msg.role === 'streaming') {
+              // Tokens arriving live (before the structured answer is finalized).
+              return (
+                <div key={i} className="flex items-start gap-2">
+                  <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
+                  <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 text-sm text-gray-500 shadow-sm max-w-[85%] inline-flex items-center gap-2">
+                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> Analyzing…
+                  </div>
+                </div>
+              );
+            }
+            return (
+              <div key={i} className="flex items-start gap-2">
+                <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
+                <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 shadow-sm max-w-[85%]">
+                  <AssistantCard answer={msg.answer} onOpen={setOpenReport} />
+                </div>
+              </div>
+            );
+          })}
+
+          {loading && !messages.some((m) => m.role === 'streaming') && (
+            <div className="flex items-start gap-2">
+              <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
+              <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 text-sm text-gray-500 inline-flex items-center gap-2">
+                <Loader2 className="w-4 h-4 animate-spin" /> Thinking…
+              </div>
+            </div>
+          )}
+        </div>
+
+        {/* Input row: image attach + text, supports all three modes */}
+        <div className="border-t border-gray-200 pt-3">
+          {image && (
+            <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">
+              <ImagePlus className="w-3.5 h-3.5" /> {image.name}
+              <button onClick={() => setImage(null)} className="text-gray-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+            </div>
+          )}
+          <div className="flex items-end gap-2 rounded-xl border border-gray-300 bg-white p-2 shadow-sm focus-within:border-blue-500">
+            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
+            <button
+              onClick={() => fileRef.current?.click()}
+              className="p-2 text-gray-400 hover:text-blue-600" title="Attach a screenshot"
+            >
+              <ImagePlus className="w-5 h-5" />
+            </button>
+            <textarea
+              value={input}
+              onChange={(e) => setInput(e.target.value)}
+              onKeyDown={onKeyDown}
+              rows={1}
+              placeholder="Ask about an incident… (paste a link to attach it)"
+              className="flex-1 resize-none bg-transparent px-1 py-1.5 text-sm outline-none max-h-40"
+            />
+            <button
+              onClick={submit}
+              disabled={loading || (!input.trim() && !image)}
+              className="inline-flex items-center justify-center rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-40"
+              aria-label="Send"
+            >
+              <Send className="w-4 h-4" />
+            </button>
+          </div>
+          <p className="mt-1.5 text-center text-xs text-gray-400">Enter to send · Shift+Enter for a new line · 📎 to attach a screenshot</p>
+        </div>
+      </div>
+
+      {/* In-app report viewer for a cited source */}
+      {openReport && (
+        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 overflow-y-auto" onClick={() => setOpenReport(null)}>
+          <div className="w-full max-w-4xl bg-gray-50 rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex justify-end p-2">
+              <button onClick={() => setOpenReport(null)} className="p-1.5 text-gray-500 hover:text-gray-900"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="px-4 pb-6">
+              <ReportViewer filename={openReport} onBack={() => setOpenReport(null)} onEdit={() => setOpenReport(null)} />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
