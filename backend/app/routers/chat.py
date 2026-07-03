@@ -103,6 +103,7 @@ class Message(BaseModel):
     text: str
     has_image: bool
     payload: dict | None = None
+    feedback: int | None = None   # thumbs: 1 up, -1 down, None none
     created_at: float
 
 
@@ -259,6 +260,34 @@ def chat_stream(
 def _sse(obj: dict) -> str:
     """Encode one Server-Sent Event line."""
     return f"data: {json.dumps(obj)}\n\n"
+
+
+# ── feedback (thumbs) ─────────────────────────────────────────────────────────
+
+
+class FeedbackRequest(BaseModel):
+    value: int | None = None   # 1 up, -1 down, null to clear
+
+
+@router.post("/api/messages/{message_id}/feedback")
+def set_feedback(
+    message_id: str,
+    body: FeedbackRequest,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    if body.value not in (1, -1, None):
+        raise HTTPException(status_code=400, detail="value must be 1, -1, or null")
+    ok = _store(request).set_feedback(_client_id(x_client_id), message_id, body.value)
+    if not ok:
+        raise HTTPException(status_code=404, detail="Message not found")
+    return {"success": True}
+
+
+@router.get("/api/feedback/summary")
+def feedback_summary(request: Request) -> dict:
+    # Aggregate metrics for tuning — which answers land, which don't.
+    return _store(request).feedback_summary()
 
 
 # ── conversation CRUD ─────────────────────────────────────────────────────────

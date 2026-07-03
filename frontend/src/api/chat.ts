@@ -78,6 +78,7 @@ export interface StoredMessage {
   text: string;
   has_image: boolean;
   payload: (ChatAnswer & { links?: string[] }) | { links?: string[] } | null;
+  feedback: number | null;
   created_at: number;
 }
 
@@ -121,7 +122,7 @@ export interface StreamHandlers {
   onMeta?: (conversationId: string) => void;
   onToken?: (text: string) => void;
   onChat?: (text: string) => void;
-  onDone?: (answer: ChatAnswer) => void;
+  onDone?: (answer: ChatAnswer, assistantMessageId: string) => void;
   onError?: (detail: string) => void;
 }
 
@@ -162,7 +163,7 @@ export async function streamChat(
       if (ev.type === 'meta') h.onMeta?.(ev.conversation_id);
       else if (ev.type === 'token') h.onToken?.(ev.text);
       else if (ev.type === 'chat') h.onChat?.(ev.text);
-      else if (ev.type === 'done') h.onDone?.(ev.answer);
+      else if (ev.type === 'done') h.onDone?.(ev.answer, ev.assistant_message_id);
       else if (ev.type === 'error') h.onError?.(ev.detail);
     }
   }
@@ -184,6 +185,13 @@ export async function renameConversation(id: string, title: string): Promise<voi
 
 export async function deleteConversation(id: string): Promise<void> {
   await json(await fetch(`/api/conversations/${id}`, { method: 'DELETE', headers: headers() }));
+}
+
+// Thumbs feedback on an assistant message (1 up, -1 down, null clears).
+export async function sendFeedback(messageId: string, value: 1 | -1 | null): Promise<void> {
+  await json(await fetch(`/api/messages/${messageId}/feedback`, {
+    method: 'POST', headers: headers(), body: JSON.stringify({ value }),
+  }));
 }
 
 // Fetch a cited report's JSON (for opening in-app).

@@ -2,9 +2,10 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Send, Bot, User, AlertTriangle, Loader2, Database, ImagePlus, X,
   Plus, MessageSquare, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
+  ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import {
-  streamChat, listConversations, listMessages, deleteConversation,
+  streamChat, listConversations, listMessages, deleteConversation, sendFeedback,
   getActiveConversationId, setActiveConversationId,
   ChatAnswer, SourceLink, Conversation, StoredMessage,
 } from '../../api/chat';
@@ -27,7 +28,7 @@ function RichText({ text }: { text: string }) {
 
 // ── local view model ──────────────────────────────────────────────────────────
 interface UserMessage { role: 'user'; text: string; hasImage?: boolean; links?: string[] }
-interface AssistantMessage { role: 'assistant'; answer: ChatAnswer }
+interface AssistantMessage { role: 'assistant'; answer: ChatAnswer; messageId?: string; feedback?: number | null }
 interface ChatMessage { role: 'chat'; text: string }              // greeting/smalltalk reply
 interface StreamingMessage { role: 'streaming'; text: string }    // tokens as they arrive
 interface ErrorMessage { role: 'error'; text: string }
@@ -45,7 +46,7 @@ function fromStored(m: StoredMessage): Message | null {
     const answer = m.payload as ChatAnswer;
     // A stored greeting/smalltalk reply replays as a plain chat bubble.
     if (answer.is_chat) return { role: 'chat', text: answer.answer || m.text };
-    return { role: 'assistant', answer };
+    return { role: 'assistant', answer, messageId: m.id, feedback: m.feedback };
   }
   if (m.role === 'user') {
     const links = (m.payload && 'links' in m.payload ? m.payload.links : undefined) as string[] | undefined;
@@ -59,6 +60,13 @@ function fromStored(m: StoredMessage): Message | null {
 function extractLinks(text: string): string[] {
   const m = text.match(/https?:\/\/[^\s)]+/g);
   return m ? Array.from(new Set(m)) : [];
+}
+
+// Replace one message in the list immutably (used for live updates).
+function replaceAt(list: Message[], idx: number, msg: Message): Message[] {
+  const next = list.slice();
+  next[idx] = msg;
+  return next;
 }
 
 // Flag destructive SQL so the UI can warn before the user runs it.
@@ -126,7 +134,32 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
   );
 }
 
-function AssistantCard({ answer, onOpen }: { answer: ChatAnswer; onOpen: (filename: string) => void }) {
+function FeedbackButtons({ value, onRate }: { value?: number | null; onRate: (v: 1 | -1) => void }) {
+  return (
+    <div className="flex items-center gap-1 pt-1">
+      <span className="text-[11px] text-gray-400 mr-1">Was this helpful?</span>
+      <button
+        onClick={() => onRate(1)}
+        title="Helpful"
+        className={`p-1 rounded hover:bg-gray-100 ${value === 1 ? 'text-green-600' : 'text-gray-400'}`}
+      >
+        <ThumbsUp className="w-3.5 h-3.5" />
+      </button>
+      <button
+        onClick={() => onRate(-1)}
+        title="Not helpful"
+        className={`p-1 rounded hover:bg-gray-100 ${value === -1 ? 'text-red-600' : 'text-gray-400'}`}
+      >
+        <ThumbsDown className="w-3.5 h-3.5" />
+      </button>
+    </div>
+  );
+}
+
+function AssistantCard({ answer, onOpen, feedback, onRate }: {
+  answer: ChatAnswer; onOpen: (filename: string) => void;
+  feedback?: number | null; onRate?: (v: 1 | -1) => void;
+}) {
   const badge = confidenceBadge(answer.confidence);
   const linksInReasoning = extractLinks(answer.raw || '');
   return (
@@ -193,6 +226,8 @@ function AssistantCard({ answer, onOpen }: { answer: ChatAnswer; onOpen: (filena
           ))}
         </div>
       )}
+
+      {onRate && <FeedbackButtons value={feedback} onRate={onRate} />}
     </div>
   );
 }
@@ -251,6 +286,17 @@ export default function ChatbotModule() {
     reader.readAsDataURL(file);
   }
 
+  // Rate an assistant answer; toggles off if the same thumb is clicked again.
+  async function rate(index: number, messageId: string, current: number | null | undefined, value: 1 | -1) {
+    const next = current === value ? null : value;
+    setMessages((m) => {
+      const msg = m[index];
+      if (msg.role !== 'assistant') return m;
+      return replaceAt(m, index, { ...msg, feedback: next });
+    });
+    try { await sendFeedback(messageId, next); } catch { /* non-critical */ }
+  }
+
   const submit = async () => {
     const query = input.trim();
     if ((!query && !image) || loading) return; // supports text-only, image+text, image-only
@@ -264,11 +310,6 @@ export default function ChatbotModule() {
     // A single placeholder bubble that grows with tokens, then is replaced by the
     // final card (or a chat bubble). Tracked by index for in-place updates.
     let streamIndex = -1;
-    const replaceAt = (list: Message[], idx: number, msg: Message): Message[] => {
-      const next = list.slice();
-      next[idx] = msg;
-      return next;
-    };
     const putStreaming = (msg: Message) =>
       setMessages((m) => {
         if (streamIndex === -1) { streamIndex = m.length; return [...m, msg]; }
@@ -291,10 +332,10 @@ export default function ChatbotModule() {
             return streamIndex === -1 ? [...m, err] : replaceAt(m, streamIndex, err);
           });
         },
-        onDone: (answer) => {
+        onDone: (answer, assistantMessageId) => {
           const finalMsg: Message = answer.is_chat
             ? { role: 'chat', text: answer.answer }
-            : { role: 'assistant', answer };
+            : { role: 'assistant', answer, messageId: assistantMessageId, feedback: null };
           setMessages((m) => (streamIndex === -1 ? [...m, finalMsg] : replaceAt(m, streamIndex, finalMsg)));
           refreshConversations();
         },
@@ -418,7 +459,12 @@ export default function ChatbotModule() {
               <div key={i} className="flex items-start gap-2">
                 <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
                 <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 shadow-sm max-w-[85%]">
-                  <AssistantCard answer={msg.answer} onOpen={setOpenReport} />
+                  <AssistantCard
+                    answer={msg.answer}
+                    onOpen={setOpenReport}
+                    feedback={msg.feedback}
+                    onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
+                  />
                 </div>
               </div>
             );

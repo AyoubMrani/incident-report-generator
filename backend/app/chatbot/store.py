@@ -38,6 +38,7 @@ CREATE TABLE IF NOT EXISTS messages (
     text             TEXT NOT NULL DEFAULT '',
     has_image        INTEGER NOT NULL DEFAULT 0,
     payload          TEXT,                   -- JSON: assistant answer / attachments / links
+    feedback         INTEGER,                -- thumbs: 1 (up), -1 (down), NULL (none)
     created_at       REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at);
@@ -58,6 +59,14 @@ class ChatStore:
         Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         with self._conn() as c:
             c.executescript(_SCHEMA)
+            self._migrate(c)
+
+    @staticmethod
+    def _migrate(c: sqlite3.Connection) -> None:
+        """Additive migrations for DBs created before a column existed."""
+        cols = {r["name"] for r in c.execute("PRAGMA table_info(messages)")}
+        if "feedback" not in cols:
+            c.execute("ALTER TABLE messages ADD COLUMN feedback INTEGER")
 
     def _conn(self) -> sqlite3.Connection:
         conn = sqlite3.connect(self.db_path, timeout=5.0)
@@ -131,11 +140,35 @@ class ChatStore:
             if not owns:
                 return []
             rows = c.execute(
-                "SELECT id, role, text, has_image, payload, created_at "
+                "SELECT id, role, text, has_image, payload, feedback, created_at "
                 "FROM messages WHERE conversation_id=? ORDER BY created_at",
                 (conversation_id,),
             ).fetchall()
         return [self._row_to_message(r) for r in rows]
+
+    def set_feedback(self, client_id: str, message_id: str, value: int | None) -> bool:
+        """Set a thumbs rating (1 / -1 / None) on an assistant message the client
+        owns. Ownership is enforced by joining back to the conversation."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT m.id FROM messages m "
+                "JOIN conversations c ON c.id = m.conversation_id "
+                "WHERE m.id=? AND c.client_id=?",
+                (message_id, client_id),
+            ).fetchone()
+            if not row:
+                return False
+            c.execute(
+                "UPDATE messages SET feedback=? WHERE id=?", (value, message_id)
+            )
+            return True
+
+    def feedback_summary(self) -> dict:
+        """Aggregate thumbs across all assistant messages (for a metrics view)."""
+        with self._conn() as c:
+            up = c.execute("SELECT COUNT(*) FROM messages WHERE feedback=1").fetchone()[0]
+            down = c.execute("SELECT COUNT(*) FROM messages WHERE feedback=-1").fetchone()[0]
+        return {"up": up, "down": down, "total_rated": up + down}
 
     def add_message(
         self,
@@ -179,5 +212,6 @@ class ChatStore:
             "text": r["text"],
             "has_image": bool(r["has_image"]),
             "payload": json.loads(r["payload"]) if r["payload"] else None,
+            "feedback": r["feedback"],
             "created_at": r["created_at"],
         }
