@@ -1,0 +1,34 @@
+#  Stage 1: build the frontend 
+FROM node:20-slim AS frontend
+WORKDIR /frontend
+
+# Install deps first for layer caching.
+COPY frontend/package.json frontend/package-lock.json ./
+RUN npm ci
+
+# Build the SPA.
+COPY frontend/ ./
+RUN npm run build            # -> /frontend/dist
+
+#  Stage 2: backend 
+FROM python:3.11-slim
+WORKDIR /app
+
+# Python deps first for layer caching.
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
+
+# App code.
+COPY backend/ ./backend/
+
+COPY --from=frontend /frontend/dist ./frontend/dist
+
+WORKDIR /app/backend
+ENV PYTHONUNBUFFERED=1
+# reports/ is bind-mounted from the repo in compose; REPORTS_DIR points at it.
+ENV REPORTS_DIR=/data/reports
+# Cache the sentence-transformers model on a mounted volume across restarts.
+ENV HF_HOME=/data/hf-cache
+
+EXPOSE 8000
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

@@ -1,0 +1,62 @@
+# Local "one app" stack for the unified NTT incident platform.
+#
+#   docker compose -f infra/docker-compose.yml up --build
+#
+# Brings up the backend (FastAPI) serving the built React SPA — the whole app on
+# http://localhost:8000. The frontend is built inside the image (see
+# Dockerfile.backend), so no host-side npm is needed.
+#
+# LLM: by default the backend talks to OLLAMA ON THE HOST (host.docker.internal),
+# because the user already runs `ollama serve` with the models pulled and it gets
+# Metal GPU acceleration there. On macOS a containerized Ollama would be CPU-only
+# and start with no models. To run Ollama in a container instead, use the
+# "with-ollama" profile:
+#
+#   docker compose -f infra/docker-compose.yml --profile with-ollama up --build
+#   docker compose -f infra/docker-compose.yml exec ollama ollama pull llama3:8b
+#   docker compose -f infra/docker-compose.yml exec ollama ollama pull qwen2.5vl:3b
+#
+# and set OLLAMA_HOST=http://ollama:11434 for the backend (commented below).
+#
+# The reports/ directory is bind-mounted so the generator and chatbot share the
+# same data on disk (the integration seam). Later: swap for a SharePoint adapter.
+
+services:
+  backend:
+    build:
+      context: ..
+      dockerfile: infra/Dockerfile.backend
+    ports:
+      - "8000:8000"
+    environment:
+      - REPORTS_DIR=/data/reports
+      - HF_HOME=/data/hf-cache
+      - CHAT_DB=/data/chat/chat.db     # persistent conversation history (SQLite)
+      - CHATBOT_PROVIDER=ollama
+      # Default: reach the host's Ollama. The ollama client reads OLLAMA_HOST.
+      - OLLAMA_HOST=http://host.docker.internal:11434
+      # To use the containerized Ollama instead (with-ollama profile), swap to:
+      # - OLLAMA_HOST=http://ollama:11434
+    extra_hosts:
+      # Lets host.docker.internal resolve on Linux too (already works on macOS).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - ../reports:/data/reports
+      - hf-cache:/data/hf-cache
+      - chat-db:/data/chat          # persists conversation history across restarts
+    restart: unless-stopped
+
+  # Opt-in containerized Ollama (profile: with-ollama). Off by default.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["with-ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
+    restart: unless-stopped
+
+volumes:
+  hf-cache:       # persists the sentence-transformers embedding model
+  chat-db:        # persists chat conversation history (SQLite)
+  ollama-models:  # persists pulled Ollama models (with-ollama profile)
