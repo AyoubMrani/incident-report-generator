@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Kafka consumer group lag growing without bound\n\nDownstream data is increasingly stale; events are being produced faster than they are processed.\n\nA slow message handler exceeded max.poll.interval.ms, causing the consumer to be kicked from the group; the resulting constant rebalancing meant almost no progress was made.\n\n1. Confirm growing lag and repeated rebalances in the consumer group\n2. Reduce max.poll.records and move slow work off the poll thread\n3. Increase max.poll.interval.ms to a safe bound\n4. Redeploy and watch lag drain to zero\n\nError Details\n```\nconsumer lag = 1.2M messages; group coordinator: 'Member rebalance timed out'; error CommitFailedException: 'cannot complete commit since group already rebalanced'\n```\n\nTags: messaging, kafka, consumer-lag, rebalance, max-poll",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012017",
+      "title": "Kafka consumer group lag growing without bound",
+      "caller": "System Generated",
+      "category": "messaging",
+      "subcategory": "Kafka Consumer (events pipeline)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "64c1aedb-fbef-4151-97c6-8b8b3fef7114",
+        "type": "heading",
+        "level": 1,
+        "content": "Kafka consumer group lag growing without bound",
+        "title": "Kafka consumer group lag growing without bound"
+      },
+      {
+        "id": "b5500049-ea8d-4205-bacb-1490045da0eb",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Downstream data is increasingly stale; events are being produced faster than they are processed.</p>"
+      },
+      {
+        "id": "88636526-78f6-49ea-a5f4-458c6fce4ce3",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A slow message handler exceeded max.poll.interval.ms, causing the consumer to be kicked from the group; the resulting constant rebalancing meant almost no progress was made.</p>"
+      },
+      {
+        "id": "71206398-db94-4544-a2d3-8bdf3d38477b",
+        "type": "code",
+        "items": [
+          {
+            "id": "c720dccd-381b-4fe1-a70b-6d212950025c",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Kafka Consumer (events pipeline) \u2014 error / log snippet",
+            "content": "consumer lag = 1.2M messages; group coordinator: 'Member rebalance timed out'; error CommitFailedException: 'cannot complete commit since group already rebalanced'",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "867016cc-682b-46b5-9741-5fff9708ec43",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm growing lag and repeated rebalances in the consumer group",
+          "Reduce max.poll.records and move slow work off the poll thread",
+          "Increase max.poll.interval.ms to a safe bound",
+          "Redeploy and watch lag drain to zero"
+        ]
+      },
+      {
+        "id": "6ae4fd5d-a9f4-479a-bdff-7ed1da0db34c",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>messaging, kafka, consumer-lag, rebalance, max-poll</p>"
+      }
+    ]
+  }
+}

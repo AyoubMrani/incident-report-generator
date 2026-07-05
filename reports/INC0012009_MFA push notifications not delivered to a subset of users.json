@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# MFA push notifications not delivered to a subset of users\n\nSome users never receive the MFA push prompt and are locked out after the timeout; SMS fallback works.\n\nAfter a mobile OS update, device push tokens were rotated but the MFA app failed to re-register the new token with the provider, so pushes went to dead tokens.\n\n1. Correlate affected users to a recent device OS upgrade\n2. Force the MFA app to re-register push tokens on next launch\n3. Purge invalidated tokens (APNs 410 / FCM NotRegistered) from the provider\n4. Confirm push delivery for a re-registered test device\n\nError Details\n```\nMFA provider log: APNs response 410 'Unregistered'; FCM error 'NotRegistered'; push token invalidated after device OS upgrade\n```\n\nTags: auth, mfa, push, apns-410, token-registration",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012009",
+      "title": "MFA push notifications not delivered to a subset of users",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "MFA Push Service",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "4c71980c-b8af-4f35-853f-4ffb0bc42094",
+        "type": "heading",
+        "level": 1,
+        "content": "MFA push notifications not delivered to a subset of users",
+        "title": "MFA push notifications not delivered to a subset of users"
+      },
+      {
+        "id": "2ad683b6-c5cd-472a-8baf-bb2e2334ea41",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Some users never receive the MFA push prompt and are locked out after the timeout; SMS fallback works.</p>"
+      },
+      {
+        "id": "afccb3d9-adad-4a2a-831e-bdf9c820af74",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>After a mobile OS update, device push tokens were rotated but the MFA app failed to re-register the new token with the provider, so pushes went to dead tokens.</p>"
+      },
+      {
+        "id": "abdec3c9-bb15-4d6b-aef7-bebd5aeb4c20",
+        "type": "code",
+        "items": [
+          {
+            "id": "62a68167-127f-422e-b4dd-bd615e458519",
+            "type": "code",
+            "title": "Error Details",
+            "header": "MFA Push Service \u2014 error / log snippet",
+            "content": "MFA provider log: APNs response 410 'Unregistered'; FCM error 'NotRegistered'; push token invalidated after device OS upgrade",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "8445b24e-3cf7-40ed-abbb-a3af411e1862",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Correlate affected users to a recent device OS upgrade",
+          "Force the MFA app to re-register push tokens on next launch",
+          "Purge invalidated tokens (APNs 410 / FCM NotRegistered) from the provider",
+          "Confirm push delivery for a re-registered test device"
+        ]
+      },
+      {
+        "id": "5a032e56-e65a-4d16-8f0c-cc1e9b57c598",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, mfa, push, apns-410, token-registration</p>"
+      }
+    ]
+  }
+}

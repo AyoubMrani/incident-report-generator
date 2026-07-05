@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Payment API returning 503 due to upstream connection pool exhaustion\n\nPayment API sporadically returns errors; error rate climbs with traffic and recovers when traffic drops.\n\nA new reporting job opened long-lived connections without returning them to the pool, starving the payment service which shared the same 50-connection Hikari pool.\n\n1. Inspect HikariCP metrics to confirm active connections pinned at max\n2. Identify the reporting job holding connections via pg_stat_activity\n3. Move the reporting workload to a separate pool / read replica\n4. Add a leak-detection threshold and connection max-lifetime\n\nError Details\n```\nHTTP/1.1 503; HikariPool-1 - Connection is not available, request timed out after 30000ms; active=50 idle=0 waiting=37\n```\n\nTags: database, connection-pool, hikaricp, 503, exhaustion",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012004",
+      "title": "Payment API returning 503 due to upstream connection pool exhaustion",
+      "caller": "System Generated",
+      "category": "database",
+      "subcategory": "Payment API / PostgreSQL",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "eeab298e-034c-4be6-acf4-88e9402040cc",
+        "type": "heading",
+        "level": 1,
+        "content": "Payment API returning 503 due to upstream connection pool exhaustion",
+        "title": "Payment API returning 503 due to upstream connection pool exhaustion"
+      },
+      {
+        "id": "675b104d-dbc6-410c-8fab-df8387bfbd96",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Payment API sporadically returns errors; error rate climbs with traffic and recovers when traffic drops.</p>"
+      },
+      {
+        "id": "fce1df81-9522-4170-8282-73c2860e0031",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A new reporting job opened long-lived connections without returning them to the pool, starving the payment service which shared the same 50-connection Hikari pool.</p>"
+      },
+      {
+        "id": "9cfc67d9-7a3d-4e85-b8e1-b6221088265b",
+        "type": "code",
+        "items": [
+          {
+            "id": "aa1c7b99-b363-415c-8b41-7b9020c036e8",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Payment API / PostgreSQL \u2014 error / log snippet",
+            "content": "HTTP/1.1 503; HikariPool-1 - Connection is not available, request timed out after 30000ms; active=50 idle=0 waiting=37",
+            "language": "http"
+          }
+        ]
+      },
+      {
+        "id": "83ff8108-764c-4763-9c9d-4247adbd6a73",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Inspect HikariCP metrics to confirm active connections pinned at max",
+          "Identify the reporting job holding connections via pg_stat_activity",
+          "Move the reporting workload to a separate pool / read replica",
+          "Add a leak-detection threshold and connection max-lifetime"
+        ]
+      },
+      {
+        "id": "71b5ee47-af0a-422c-8af3-969a00c348d3",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>database, connection-pool, hikaricp, 503, exhaustion</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Database primary failover did not promote a replica\n\nThe primary database went down and the application stayed down instead of failing over.\n\nThe only healthy replica exceeded maximum_lag_on_failover at the moment of failure, so Patroni refused to promote it to avoid data loss, leaving the cluster leaderless.\n\n1. Confirm the failover was blocked by replica lag exceeding the threshold\n2. Manually promote the least-lagged replica after assessing data loss risk\n3. Repoint the application to the new primary\n4. Tune maximum_lag_on_failover and add a second synchronous replica\n\nError Details\n```\nPatroni: 'no promotable member found'; replica in state 'streaming' but lag > maximum_lag_on_failover; leader lock not acquired\n```\n\nTags: database, failover, patroni, replica-lag, ha",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012028",
+      "title": "Database primary failover did not promote a replica",
+      "caller": "System Generated",
+      "category": "database",
+      "subcategory": "PostgreSQL HA Cluster (Patroni)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "cd561b3b-8972-4578-a882-1df33f4b357d",
+        "type": "heading",
+        "level": 1,
+        "content": "Database primary failover did not promote a replica",
+        "title": "Database primary failover did not promote a replica"
+      },
+      {
+        "id": "37b25af7-da3b-401b-aa01-3e0b0245b0da",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>The primary database went down and the application stayed down instead of failing over.</p>"
+      },
+      {
+        "id": "569cf349-fae8-43de-858d-6dead8bd140b",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The only healthy replica exceeded maximum_lag_on_failover at the moment of failure, so Patroni refused to promote it to avoid data loss, leaving the cluster leaderless.</p>"
+      },
+      {
+        "id": "c20e8d2b-8d72-44fa-a993-8d419f5a1d68",
+        "type": "code",
+        "items": [
+          {
+            "id": "4b2c3133-4cb1-46d9-84db-ff0e3daba477",
+            "type": "code",
+            "title": "Error Details",
+            "header": "PostgreSQL HA Cluster (Patroni) \u2014 error / log snippet",
+            "content": "Patroni: 'no promotable member found'; replica in state 'streaming' but lag > maximum_lag_on_failover; leader lock not acquired",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "847b61d3-b34f-4821-9eaa-f6129b9abc44",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the failover was blocked by replica lag exceeding the threshold",
+          "Manually promote the least-lagged replica after assessing data loss risk",
+          "Repoint the application to the new primary",
+          "Tune maximum_lag_on_failover and add a second synchronous replica"
+        ]
+      },
+      {
+        "id": "5b62c7ff-7aa5-4ef5-9095-e2b8203610c3",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>database, failover, patroni, replica-lag, ha</p>"
+      }
+    ]
+  }
+}

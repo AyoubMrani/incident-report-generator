@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# SSO outage from expired SAML signing certificate\n\nNo one can log in to any SSO-protected application company-wide.\n\nUnlike the earlier SSO loop (wrong pinned cert after rotation), here the IdP's signing certificate simply expired with no rotation performed, so every assertion it signed was invalid.\n\n1. Confirm the IdP signing certificate is expired (not merely rotated)\n2. Generate and install a new IdP signing certificate\n3. Publish updated IdP metadata and refresh it on all SPs\n4. Add an IdP signing-cert expiry alert at 30 days\n\nError Details\n```\nSAML: 'The signing certificate is expired'; IdP metadata notAfter passed; SP rejects assertion with 'certificate_expired'; distinct from the earlier metadata-rotation loop\n```\n\nTags: auth, sso, saml, certificate-expiry, idp-signing-cert",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012040",
+      "title": "SSO outage from expired SAML signing certificate",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "Identity Provider (SAML IdP)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "0a70c61f-8f99-4162-b879-1ebcd61cfa3d",
+        "type": "heading",
+        "level": 1,
+        "content": "SSO outage from expired SAML signing certificate",
+        "title": "SSO outage from expired SAML signing certificate"
+      },
+      {
+        "id": "8a2a6de6-ae3c-410e-9fa4-fe09dff91311",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>No one can log in to any SSO-protected application company-wide.</p>"
+      },
+      {
+        "id": "6201ec91-bef1-4617-9a31-1ed76c3901e2",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>Unlike the earlier SSO loop (wrong pinned cert after rotation), here the IdP's signing certificate simply expired with no rotation performed, so every assertion it signed was invalid.</p>"
+      },
+      {
+        "id": "d4951b29-6a5a-40d0-9db4-278f34c4f3a0",
+        "type": "code",
+        "items": [
+          {
+            "id": "3e1cc2ff-c77a-41e0-9608-5ca36a3b9d18",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Identity Provider (SAML IdP) \u2014 error / log snippet",
+            "content": "SAML: 'The signing certificate is expired'; IdP metadata notAfter passed; SP rejects assertion with 'certificate_expired'; distinct from the earlier metadata-rotation loop",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "309cdb99-a9d9-4f2e-8c9a-69f97abfb665",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the IdP signing certificate is expired (not merely rotated)",
+          "Generate and install a new IdP signing certificate",
+          "Publish updated IdP metadata and refresh it on all SPs",
+          "Add an IdP signing-cert expiry alert at 30 days"
+        ]
+      },
+      {
+        "id": "506f3567-ac16-4bb1-8701-aed3cf482e61",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, sso, saml, certificate-expiry, idp-signing-cert</p>"
+      }
+    ]
+  }
+}

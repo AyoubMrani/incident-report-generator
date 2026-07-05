@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# DNS misconfiguration routing internal traffic to the internet\n\nRequests to an internal service are unexpectedly slow and occasionally hit a public error page.\n\nA wildcard CNAME in the public zone shadowed the internal record after a split-horizon DNS view was accidentally removed, so internal names resolved to public addresses.\n\n1. Trace the resolution path and confirm the public CNAME is returned\n2. Restore the split-horizon internal view for the affected zone\n3. Remove or scope the offending wildcard record\n4. Validate internal names resolve to internal IPs from client subnets\n\nError Details\n```\ndig internal-api.corp -> returns a public IP (CNAME to a parked domain); resolution path leaked to public resolver 8.8.8.8; no NXDOMAIN as expected\n```\n\nTags: networking, dns, split-horizon, cname, misroute",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012027",
+      "title": "DNS misconfiguration routing internal traffic to the internet",
+      "caller": "System Generated",
+      "category": "networking",
+      "subcategory": "Corporate DNS (split-horizon)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "342a5f73-95c4-4526-8988-dcd2620ab868",
+        "type": "heading",
+        "level": 1,
+        "content": "DNS misconfiguration routing internal traffic to the internet",
+        "title": "DNS misconfiguration routing internal traffic to the internet"
+      },
+      {
+        "id": "222681c5-c908-41c6-8f78-372250dabdb6",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Requests to an internal service are unexpectedly slow and occasionally hit a public error page.</p>"
+      },
+      {
+        "id": "51c61925-2f1d-4973-a531-17ad68ecf510",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A wildcard CNAME in the public zone shadowed the internal record after a split-horizon DNS view was accidentally removed, so internal names resolved to public addresses.</p>"
+      },
+      {
+        "id": "da8697b6-8dc5-457e-924e-f539d6e0f835",
+        "type": "code",
+        "items": [
+          {
+            "id": "dfb299a6-db2b-4665-8dfe-353b0b901133",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Corporate DNS (split-horizon) \u2014 error / log snippet",
+            "content": "dig internal-api.corp -> returns a public IP (CNAME to a parked domain); resolution path leaked to public resolver 8.8.8.8; no NXDOMAIN as expected",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "2d4f95c4-a5a4-49ec-9bba-5e37efb4cf2c",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Trace the resolution path and confirm the public CNAME is returned",
+          "Restore the split-horizon internal view for the affected zone",
+          "Remove or scope the offending wildcard record",
+          "Validate internal names resolve to internal IPs from client subnets"
+        ]
+      },
+      {
+        "id": "7d61238c-ec6e-4572-9a5a-17d3a4fd6724",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>networking, dns, split-horizon, cname, misroute</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Memory leak in Node.js API growing across days\n\nA Node service slows down and must be restarted every few days to stay responsive.\n\nAn event-emitter listener was added per request but never removed, so listeners and their closures accumulated, leaking memory that GC could not reclaim.\n\n1. Take heap snapshots over time and diff retained objects\n2. Find the growing listener count and remove listeners on request end\n3. Deploy the fix and watch RSS flatten\n4. Add a memory-growth alert and periodic snapshot in staging\n\nError Details\n```\nFATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory; process RSS climbing linearly; --max-old-space-size hit\n```\n\nTags: infra, memory-leak, nodejs, heap-oom, event-listener",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012030",
+      "title": "Memory leak in Node.js API growing across days",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Gateway API (Node.js)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "34e2576a-7984-46c1-aa30-57a799fe65b0",
+        "type": "heading",
+        "level": 1,
+        "content": "Memory leak in Node.js API growing across days",
+        "title": "Memory leak in Node.js API growing across days"
+      },
+      {
+        "id": "134d4462-2cdb-4d6b-bcf9-c5307420d99c",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A Node service slows down and must be restarted every few days to stay responsive.</p>"
+      },
+      {
+        "id": "e76c56ff-0008-4880-9802-2bda98fc8553",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>An event-emitter listener was added per request but never removed, so listeners and their closures accumulated, leaking memory that GC could not reclaim.</p>"
+      },
+      {
+        "id": "a8d35de9-6992-4136-bf16-3acf647a069e",
+        "type": "code",
+        "items": [
+          {
+            "id": "1491908f-e253-4037-aeec-734d838384d8",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Gateway API (Node.js) \u2014 error / log snippet",
+            "content": "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory; process RSS climbing linearly; --max-old-space-size hit",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "06dc4007-84ed-4614-bd70-fa2a7134048e",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Take heap snapshots over time and diff retained objects",
+          "Find the growing listener count and remove listeners on request end",
+          "Deploy the fix and watch RSS flatten",
+          "Add a memory-growth alert and periodic snapshot in staging"
+        ]
+      },
+      {
+        "id": "912be39c-fdb2-47fd-b606-097e2ad40a30",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, memory-leak, nodejs, heap-oom, event-listener</p>"
+      }
+    ]
+  }
+}

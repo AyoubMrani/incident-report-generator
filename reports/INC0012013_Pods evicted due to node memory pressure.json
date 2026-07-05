@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Pods evicted due to node memory pressure\n\nRandom pods disappear and reschedule during busy periods; some requests fail during the shuffle.\n\nPods had no memory limits set, so a few noisy neighbors consumed node memory until kubelet triggered eviction of lower-priority pods (exit 137).\n\n1. Identify the node under memory pressure and the top-consuming pods\n2. Set requests and limits on the offending workloads\n3. Add pod priority classes so critical pods survive eviction\n4. Verify no further evictions during peak load\n\nError Details\n```\nPod evicted: reason 'Evicted' message 'The node was low on resource: memory'; kubelet: attempting to reclaim memory; OOMKilled containers exit code 137\n```\n\nTags: infra, kubernetes, eviction, exit-137, memory-pressure",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012013",
+      "title": "Pods evicted due to node memory pressure",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Worker Node Pool (Kubernetes)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "0cfa6ecc-db72-4400-94af-b2d7780202a4",
+        "type": "heading",
+        "level": 1,
+        "content": "Pods evicted due to node memory pressure",
+        "title": "Pods evicted due to node memory pressure"
+      },
+      {
+        "id": "31933948-4ef0-4014-aa77-36e3686b763d",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Random pods disappear and reschedule during busy periods; some requests fail during the shuffle.</p>"
+      },
+      {
+        "id": "21f1731e-c250-45ed-8e9e-746cf47ccc1d",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>Pods had no memory limits set, so a few noisy neighbors consumed node memory until kubelet triggered eviction of lower-priority pods (exit 137).</p>"
+      },
+      {
+        "id": "4f4525f2-2c5c-48c0-a573-0618edd27c09",
+        "type": "code",
+        "items": [
+          {
+            "id": "658f9c70-154a-424a-bdab-1c6dce62329b",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Worker Node Pool (Kubernetes) \u2014 error / log snippet",
+            "content": "Pod evicted: reason 'Evicted' message 'The node was low on resource: memory'; kubelet: attempting to reclaim memory; OOMKilled containers exit code 137",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "a83220c3-1efe-44fa-a526-3c5df0c36f8f",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify the node under memory pressure and the top-consuming pods",
+          "Set requests and limits on the offending workloads",
+          "Add pod priority classes so critical pods survive eviction",
+          "Verify no further evictions during peak load"
+        ]
+      },
+      {
+        "id": "083661c6-5e9a-4bf8-9a31-81be2ff5bfff",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, kubernetes, eviction, exit-137, memory-pressure</p>"
+      }
+    ]
+  }
+}

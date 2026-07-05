@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Alert storm from a single failing node flooding on-call\n\nOn-call is paged dozens of times in minutes for what appears to be one underlying problem.\n\nA single node going down triggered every dependent service's individual alert with no inhibition/grouping rules, burying the real signal in noise.\n\n1. Confirm all alerts trace back to one node-down event\n2. Add an Alertmanager inhibition rule so HostDown suppresses dependent TargetDown alerts\n3. Group alerts by node and add a repeat-interval\n4. Test by simulating a node failure in staging\n\nError Details\n```\nPagerDuty: 143 alerts in 4 minutes; Alertmanager: no inhibition rule matched; 'HostDown' fired alongside 40 dependent 'TargetDown' alerts\n```\n\nTags: monitoring, alert-storm, inhibition, alert-fatigue, alertmanager",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012022",
+      "title": "Alert storm from a single failing node flooding on-call",
+      "caller": "System Generated",
+      "category": "monitoring",
+      "subcategory": "Alertmanager / PagerDuty",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "74b5caf3-b9c6-4f02-be09-09f564340408",
+        "type": "heading",
+        "level": 1,
+        "content": "Alert storm from a single failing node flooding on-call",
+        "title": "Alert storm from a single failing node flooding on-call"
+      },
+      {
+        "id": "b2624996-5711-4a82-a96d-a65b1d7db55c",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>On-call is paged dozens of times in minutes for what appears to be one underlying problem.</p>"
+      },
+      {
+        "id": "4da0a214-4bbf-42e3-b88a-70f3fb8f33de",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A single node going down triggered every dependent service's individual alert with no inhibition/grouping rules, burying the real signal in noise.</p>"
+      },
+      {
+        "id": "704303a8-3c7d-4408-b316-3a1d8308430d",
+        "type": "code",
+        "items": [
+          {
+            "id": "1dfedc24-e07c-4602-8260-c2fd3272e569",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Alertmanager / PagerDuty \u2014 error / log snippet",
+            "content": "PagerDuty: 143 alerts in 4 minutes; Alertmanager: no inhibition rule matched; 'HostDown' fired alongside 40 dependent 'TargetDown' alerts",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "975afcea-8be6-4118-8f27-37a00e964ec2",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm all alerts trace back to one node-down event",
+          "Add an Alertmanager inhibition rule so HostDown suppresses dependent TargetDown alerts",
+          "Group alerts by node and add a repeat-interval",
+          "Test by simulating a node failure in staging"
+        ]
+      },
+      {
+        "id": "fd3f8fc5-5027-446e-9ec1-6461fb5bc615",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>monitoring, alert-storm, inhibition, alert-fatigue, alertmanager</p>"
+      }
+    ]
+  }
+}

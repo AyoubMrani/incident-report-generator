@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Messages piling up in the dead letter queue\n\nA monitoring alert fires that the DLQ depth is rising; some customer notifications are not being sent.\n\nA producer was upgraded to a new Avro schema without registering it, so consumers using the old schema hit an unknown magic byte and routed every message to the DLQ.\n\n1. Sample a DLQ message and confirm the deserialization/magic-byte error\n2. Register the new schema version in the schema registry\n3. Deploy consumers compatible with the new schema\n4. Replay the DLQ back into the main topic and confirm it drains\n\nError Details\n```\nDLQ depth 8,432 and rising; consumer error: 'Deserialization error for partition notifications-3'; SerializationException: unknown magic byte!\n```\n\nTags: messaging, kafka, dlq, avro, magic-byte",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012018",
+      "title": "Messages piling up in the dead letter queue",
+      "caller": "System Generated",
+      "category": "messaging",
+      "subcategory": "Notifications Queue (Kafka + Schema Registry)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "df698d60-70dd-4dd4-b50b-e13175beac0b",
+        "type": "heading",
+        "level": 1,
+        "content": "Messages piling up in the dead letter queue",
+        "title": "Messages piling up in the dead letter queue"
+      },
+      {
+        "id": "b83df328-a261-4efd-b921-1ef896eb2f26",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A monitoring alert fires that the DLQ depth is rising; some customer notifications are not being sent.</p>"
+      },
+      {
+        "id": "75a8b45f-93c1-4f30-a650-94a845763750",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A producer was upgraded to a new Avro schema without registering it, so consumers using the old schema hit an unknown magic byte and routed every message to the DLQ.</p>"
+      },
+      {
+        "id": "05e68df6-7fa8-4cc7-b982-4ed4c36c25b3",
+        "type": "code",
+        "items": [
+          {
+            "id": "b258116f-6785-4f44-a658-47a13df7840d",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Notifications Queue (Kafka + Schema Registry) \u2014 error / log snippet",
+            "content": "DLQ depth 8,432 and rising; consumer error: 'Deserialization error for partition notifications-3'; SerializationException: unknown magic byte!",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "541fc333-4765-410e-ba72-fb96856469eb",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Sample a DLQ message and confirm the deserialization/magic-byte error",
+          "Register the new schema version in the schema registry",
+          "Deploy consumers compatible with the new schema",
+          "Replay the DLQ back into the main topic and confirm it drains"
+        ]
+      },
+      {
+        "id": "fc7d01e3-ba03-4ddf-974e-d0941ccfd81a",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>messaging, kafka, dlq, avro, magic-byte</p>"
+      }
+    ]
+  }
+}

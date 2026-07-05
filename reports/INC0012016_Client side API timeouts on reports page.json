@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Client-side API timeouts on reports page\n\nThe reports page spinner runs forever for large date ranges; small ranges load fine.\n\nThe client's 10s Axios timeout was shorter than the backend's response time for large report queries, so the client aborted a request the server would have completed.\n\n1. Confirm the backend completes the query (just slowly) via server logs\n2. Raise the client timeout for the reports endpoint and show progress UI\n3. Add server-side pagination for large date ranges\n4. Verify large-range reports load without client abort\n\nError Details\n```\nAxiosError: timeout of 10000ms exceeded (ECONNABORTED); network tab shows request pending then cancelled; backend responds in ~14s\n```\n\nTags: frontend, timeout, econnaborted, axios, client-side",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012016",
+      "title": "Client-side API timeouts on reports page",
+      "caller": "System Generated",
+      "category": "frontend",
+      "subcategory": "Reports UI",
+      "date": "2026-07-05",
+      "priority": "P3"
+    },
+    "blocks": [
+      {
+        "id": "b2e36391-ad2b-4282-96ac-6fcf8c9c05b5",
+        "type": "heading",
+        "level": 1,
+        "content": "Client-side API timeouts on reports page",
+        "title": "Client-side API timeouts on reports page"
+      },
+      {
+        "id": "df6bd01f-72c6-4489-8e3d-87c8721554f0",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>The reports page spinner runs forever for large date ranges; small ranges load fine.</p>"
+      },
+      {
+        "id": "fb9b063e-6092-42ba-b763-cd68ad37b4ab",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The client's 10s Axios timeout was shorter than the backend's response time for large report queries, so the client aborted a request the server would have completed.</p>"
+      },
+      {
+        "id": "53f24736-5613-4a03-bd1d-87ab2f505887",
+        "type": "code",
+        "items": [
+          {
+            "id": "cc08f90a-e6c3-4e20-955f-c6306e146ca4",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Reports UI \u2014 error / log snippet",
+            "content": "AxiosError: timeout of 10000ms exceeded (ECONNABORTED); network tab shows request pending then cancelled; backend responds in ~14s",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "b048b1fe-ab25-45b8-b104-66e472b8c661",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the backend completes the query (just slowly) via server logs",
+          "Raise the client timeout for the reports endpoint and show progress UI",
+          "Add server-side pagination for large date ranges",
+          "Verify large-range reports load without client abort"
+        ]
+      },
+      {
+        "id": "862bfd30-4069-4822-82b7-182f7d823050",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>frontend, timeout, econnaborted, axios, client-side</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Load balancer returning 503 for checkout service\n\nCustomers get an error page at checkout during peak traffic; the site works fine for browsing.\n\nThe checkout backend health check hit a /healthz endpoint that itself called a slow downstream; under load it exceeded the 2s check timeout, so HAProxy marked all backends down even though they could serve real traffic.\n\n1. Confirm backends are actually serving via direct curl to pod IPs\n2. Point the health check at a lightweight /livez endpoint that has no downstream calls\n3. Raise the health-check timeout and increase the rise/fall thresholds\n4. Reload HAProxy and watch the backend UP/DOWN transitions\n\nError Details\n```\nHTTP/1.1 503 Service Unavailable; HAProxy: backend checkout_be has no server available (all DOWN); health check L7STS/500 in 2001ms\n```\n\nTags: load-balancer, haproxy, 503, health-check, checkout",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012003",
+      "title": "Load balancer returning 503 for checkout service",
+      "caller": "System Generated",
+      "category": "networking",
+      "subcategory": "HAProxy (checkout tier)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "3ad5bedf-8117-42a7-adbd-26ab91f0f0d4",
+        "type": "heading",
+        "level": 1,
+        "content": "Load balancer returning 503 for checkout service",
+        "title": "Load balancer returning 503 for checkout service"
+      },
+      {
+        "id": "d4762d52-84be-4952-9d36-bf5256cb8e50",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Customers get an error page at checkout during peak traffic; the site works fine for browsing.</p>"
+      },
+      {
+        "id": "1f45a564-2f14-4a06-ac62-d0b2d6cd5664",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The checkout backend health check hit a /healthz endpoint that itself called a slow downstream; under load it exceeded the 2s check timeout, so HAProxy marked all backends down even though they could serve real traffic.</p>"
+      },
+      {
+        "id": "436173ff-daaf-4c9f-af97-55f0a67edd75",
+        "type": "code",
+        "items": [
+          {
+            "id": "2abf6f40-0f31-419d-b69b-a9b7a35d77ec",
+            "type": "code",
+            "title": "Error Details",
+            "header": "HAProxy (checkout tier) \u2014 error / log snippet",
+            "content": "HTTP/1.1 503 Service Unavailable; HAProxy: backend checkout_be has no server available (all DOWN); health check L7STS/500 in 2001ms",
+            "language": "http"
+          }
+        ]
+      },
+      {
+        "id": "2b101953-b237-412b-936c-c79a6129776a",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm backends are actually serving via direct curl to pod IPs",
+          "Point the health check at a lightweight /livez endpoint that has no downstream calls",
+          "Raise the health-check timeout and increase the rise/fall thresholds",
+          "Reload HAProxy and watch the backend UP/DOWN transitions"
+        ]
+      },
+      {
+        "id": "55851406-03b4-496e-bb07-d1c1dc2689cd",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>load-balancer, haproxy, 503, health-check, checkout</p>"
+      }
+    ]
+  }
+}

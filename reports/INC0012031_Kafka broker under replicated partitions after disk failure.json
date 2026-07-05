@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Kafka broker under-replicated partitions after disk failure\n\nProducers see errors and the cluster reports partitions without full replication.\n\nA disk failed on broker 3 taking its log directory offline; partitions led by that broker fell below min.insync.replicas so producers with acks=all were rejected.\n\n1. Confirm the offline log dir and under-replicated partitions\n2. Replace the failed disk / move the log dir to a healthy volume\n3. Reassign partitions and let replicas catch up to ISR\n4. Verify UnderReplicatedPartitions returns to zero\n\nError Details\n```\nUnderReplicatedPartitions = 27; NotEnoughReplicasException; producer error 'NOT_ENOUGH_REPLICAS' (code 19); broker 3 log dir offline\n```\n\nTags: messaging, kafka, under-replicated, not-enough-replicas, disk-failure",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012031",
+      "title": "Kafka broker under-replicated partitions after disk failure",
+      "caller": "System Generated",
+      "category": "messaging",
+      "subcategory": "Kafka Broker Cluster",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "c09d48ef-d759-4a0f-b176-d0723ebe8f08",
+        "type": "heading",
+        "level": 1,
+        "content": "Kafka broker under-replicated partitions after disk failure",
+        "title": "Kafka broker under-replicated partitions after disk failure"
+      },
+      {
+        "id": "7b322060-af7b-4f9c-8db7-7aed151764f2",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Producers see errors and the cluster reports partitions without full replication.</p>"
+      },
+      {
+        "id": "04556063-0b6d-41f2-a30a-8cbeb5e47808",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A disk failed on broker 3 taking its log directory offline; partitions led by that broker fell below min.insync.replicas so producers with acks=all were rejected.</p>"
+      },
+      {
+        "id": "142e18a9-0e5e-401e-a05c-8d9a68b00801",
+        "type": "code",
+        "items": [
+          {
+            "id": "1441ebed-1bba-41a5-b62a-e1b489788c68",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Kafka Broker Cluster \u2014 error / log snippet",
+            "content": "UnderReplicatedPartitions = 27; NotEnoughReplicasException; producer error 'NOT_ENOUGH_REPLICAS' (code 19); broker 3 log dir offline",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "0d0c3659-c8a9-4e2d-b5de-d45ba734997a",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the offline log dir and under-replicated partitions",
+          "Replace the failed disk / move the log dir to a healthy volume",
+          "Reassign partitions and let replicas catch up to ISR",
+          "Verify UnderReplicatedPartitions returns to zero"
+        ]
+      },
+      {
+        "id": "dbe91599-67c8-49cc-98b0-06f24a60f5ed",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>messaging, kafka, under-replicated, not-enough-replicas, disk-failure</p>"
+      }
+    ]
+  }
+}

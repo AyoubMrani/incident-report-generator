@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Recurring deadlocks on orders table during flash sale\n\nOrder submissions occasionally fail and must be retried by the client during high-traffic sales.\n\nTwo code paths updated orders and inventory rows in opposite order, so concurrent transactions acquired locks in a cycle under load.\n\n1. Capture the deadlock graph from PostgreSQL logs\n2. Standardize lock acquisition order (orders before inventory) across both paths\n3. Add a bounded retry with jitter for SQLSTATE 40P01\n4. Load-test the fix with concurrent order simulation\n\nError Details\n```\nERROR: deadlock detected; DETAIL: Process 2841 waits for ShareLock on transaction 99231; Process 2902 waits for ShareLock on transaction 99244; SQLSTATE 40P01\n```\n\nTags: database, deadlock, 40P01, lock-ordering, postgres",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012005",
+      "title": "Recurring deadlocks on orders table during flash sale",
+      "caller": "System Generated",
+      "category": "database",
+      "subcategory": "Orders Database (PostgreSQL)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "fd9b4202-c93b-4082-8b29-20b6d23494e1",
+        "type": "heading",
+        "level": 1,
+        "content": "Recurring deadlocks on orders table during flash sale",
+        "title": "Recurring deadlocks on orders table during flash sale"
+      },
+      {
+        "id": "21eaeaa9-d37c-4b23-b690-10074f1ccec0",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Order submissions occasionally fail and must be retried by the client during high-traffic sales.</p>"
+      },
+      {
+        "id": "58b12656-5823-4319-b2b6-783a75f66f67",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>Two code paths updated orders and inventory rows in opposite order, so concurrent transactions acquired locks in a cycle under load.</p>"
+      },
+      {
+        "id": "ff169ed6-da9d-40ad-9855-3ffaea3fbaf7",
+        "type": "code",
+        "items": [
+          {
+            "id": "1f8be1a6-c8ac-4d84-9f85-70c1255dadc9",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Orders Database (PostgreSQL) \u2014 error / log snippet",
+            "content": "ERROR: deadlock detected; DETAIL: Process 2841 waits for ShareLock on transaction 99231; Process 2902 waits for ShareLock on transaction 99244; SQLSTATE 40P01",
+            "language": "sql"
+          }
+        ]
+      },
+      {
+        "id": "9de52549-e7fa-4c22-bb05-98e46482b9f2",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Capture the deadlock graph from PostgreSQL logs",
+          "Standardize lock acquisition order (orders before inventory) across both paths",
+          "Add a bounded retry with jitter for SQLSTATE 40P01",
+          "Load-test the fix with concurrent order simulation"
+        ]
+      },
+      {
+        "id": "b0262582-f809-4de2-960f-b9ef3d3765f1",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>database, deadlock, 40P01, lock-ordering, postgres</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# SSO login loop after IdP metadata rotation\n\nAfter signing in, users are bounced back to the login page in an endless redirect loop across all internal apps.\n\nThe IdP rotated its signing certificate but the SP's SAML metadata still pinned the old certificate, so every signed assertion failed validation and the SP re-initiated login.\n\n1. Reproduce and capture the SAML response with a browser SAML tracer\n2. Fetch and import the IdP's current signing certificate into SP metadata\n3. Reload the SP metadata and clear cached assertions\n4. Verify a full login round-trip succeeds for a test user\n\nError Details\n```\nSAML response validation failed: signature does not match; opensaml: SecurityPolicyException 'Signature trust establishment failed'; HTTP 302 loop between SP and IdP\n```\n\nTags: auth, sso, saml, signature-validation, redirect-loop",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012007",
+      "title": "SSO login loop after IdP metadata rotation",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "SSO / SAML Service Provider",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "7ebd2e26-9643-4ab8-94da-0eaf21ca9f7f",
+        "type": "heading",
+        "level": 1,
+        "content": "SSO login loop after IdP metadata rotation",
+        "title": "SSO login loop after IdP metadata rotation"
+      },
+      {
+        "id": "c232d240-6def-47be-8ec4-230e8d57a803",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>After signing in, users are bounced back to the login page in an endless redirect loop across all internal apps.</p>"
+      },
+      {
+        "id": "5f1a6521-9a84-45d7-b2fe-3495a9c694ae",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The IdP rotated its signing certificate but the SP's SAML metadata still pinned the old certificate, so every signed assertion failed validation and the SP re-initiated login.</p>"
+      },
+      {
+        "id": "5bcb5e11-78f5-466a-810b-e53599d70022",
+        "type": "code",
+        "items": [
+          {
+            "id": "341d18a8-f737-43c4-8754-bbca0b4c4ef4",
+            "type": "code",
+            "title": "Error Details",
+            "header": "SSO / SAML Service Provider \u2014 error / log snippet",
+            "content": "SAML response validation failed: signature does not match; opensaml: SecurityPolicyException 'Signature trust establishment failed'; HTTP 302 loop between SP and IdP",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "7b78108e-5f04-4047-91d1-8e2f4bff98e4",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Reproduce and capture the SAML response with a browser SAML tracer",
+          "Fetch and import the IdP's current signing certificate into SP metadata",
+          "Reload the SP metadata and clear cached assertions",
+          "Verify a full login round-trip succeeds for a test user"
+        ]
+      },
+      {
+        "id": "dd1a149d-6214-49fe-937b-0e3f459981f2",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, sso, saml, signature-validation, redirect-loop</p>"
+      }
+    ]
+  }
+}

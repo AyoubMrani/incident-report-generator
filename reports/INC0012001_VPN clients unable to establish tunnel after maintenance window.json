@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# VPN clients unable to establish tunnel after maintenance window\n\nRemote employees report they cannot connect to the corporate VPN; the client hangs at 'Negotiating security policies' and eventually times out.\n\nA firmware update on the VPN concentrator reset the IKEv2 proposal list, dropping AES-256-GCM which the client profiles required, leaving no matching cipher proposal between peers.\n\n1. Compare the pre- and post-maintenance IKEv2 proposal configuration on the concentrator\n2. Re-add the AES-256-GCM / SHA-384 / DH group 20 proposal to the phase 2 policy\n3. Force a re-key and confirm one pilot client establishes a tunnel\n4. Roll out to all client profiles and monitor concentrator SA table\n\nError Details\n```\nIKE_SA phase 2 failed: NO_PROPOSAL_CHOSEN; strongSwan charon: received AUTHENTICATION_FAILED notify error; retransmit 5 of request message ID 0\n```\n\nTags: vpn, ikev2, no-proposal-chosen, cipher-mismatch, strongswan",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012001",
+      "title": "VPN clients unable to establish tunnel after maintenance window",
+      "caller": "System Generated",
+      "category": "networking",
+      "subcategory": "GlobalProtect VPN Concentrator",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "18d03442-2c23-400a-bf58-a4043d8d0296",
+        "type": "heading",
+        "level": 1,
+        "content": "VPN clients unable to establish tunnel after maintenance window",
+        "title": "VPN clients unable to establish tunnel after maintenance window"
+      },
+      {
+        "id": "74143881-8bbd-408f-93b9-3578479d6be1",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Remote employees report they cannot connect to the corporate VPN; the client hangs at 'Negotiating security policies' and eventually times out.</p>"
+      },
+      {
+        "id": "06d9d8a6-da3c-4258-8933-66a41755c848",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A firmware update on the VPN concentrator reset the IKEv2 proposal list, dropping AES-256-GCM which the client profiles required, leaving no matching cipher proposal between peers.</p>"
+      },
+      {
+        "id": "69c658b9-8d94-48e1-9cee-eeb378b9f2b6",
+        "type": "code",
+        "items": [
+          {
+            "id": "f3e02989-c2e9-4899-afcc-3f9453711700",
+            "type": "code",
+            "title": "Error Details",
+            "header": "GlobalProtect VPN Concentrator \u2014 error / log snippet",
+            "content": "IKE_SA phase 2 failed: NO_PROPOSAL_CHOSEN; strongSwan charon: received AUTHENTICATION_FAILED notify error; retransmit 5 of request message ID 0",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "cf874f85-e9be-4928-bd4e-5c88c537db85",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Compare the pre- and post-maintenance IKEv2 proposal configuration on the concentrator",
+          "Re-add the AES-256-GCM / SHA-384 / DH group 20 proposal to the phase 2 policy",
+          "Force a re-key and confirm one pilot client establishes a tunnel",
+          "Roll out to all client profiles and monitor concentrator SA table"
+        ]
+      },
+      {
+        "id": "007c5dcf-04a2-4ee5-b571-6f339a93620d",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>vpn, ikev2, no-proposal-chosen, cipher-mismatch, strongswan</p>"
+      }
+    ]
+  }
+}
