@@ -1,0 +1,1362 @@
+[
+  {
+    "query": "how do I handle vpn clients unable to establish tunnel after maintenance window?",
+    "gold": "INC0012001",
+    "style": "title"
+  },
+  {
+    "query": "A firmware update on the VPN concentrator reset the IKEv2 proposal list, dropping AES-256-GCM which the client profiles required, leaving no matching cipher proposal between peers.",
+    "gold": "INC0012001",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012001",
+    "gold": "INC0012001",
+    "style": "id"
+  },
+  {
+    "query": "NO_PROPOSAL_CHOSEN AUTHENTICATION_FAILED incident_id IKE_SA INC0012001",
+    "gold": "INC0012001",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle intermittent dns resolution failures for internal services?",
+    "gold": "INC0012002",
+    "style": "title"
+  },
+  {
+    "query": "One of three internal resolvers had a stale root hints file and was silently failing recursive queries; round-robin sent ~1/3 of queries to the bad resolver.",
+    "gold": "INC0012002",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012002",
+    "gold": "INC0012002",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012002 SERVFAIL NXDOMAIN metadata",
+    "gold": "INC0012002",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle load balancer returning 503 for checkout service?",
+    "gold": "INC0012003",
+    "style": "title"
+  },
+  {
+    "query": "The checkout backend health check hit a /healthz endpoint that itself called a slow downstream; under load it exceeded the 2s check timeout, so HAProxy marked all backends down even though they could serve real traffic.",
+    "gold": "INC0012003",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012003",
+    "gold": "INC0012003",
+    "style": "id"
+  },
+  {
+    "query": "incident_id checkout_be INC0012003 HAProxy metadata",
+    "gold": "INC0012003",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle payment api returning 503 due to upstream connection pool exhaustion?",
+    "gold": "INC0012004",
+    "style": "title"
+  },
+  {
+    "query": "A new reporting job opened long-lived connections without returning them to the pool, starving the payment service which shared the same 50-connection Hikari pool.",
+    "gold": "INC0012004",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012004",
+    "gold": "INC0012004",
+    "style": "id"
+  },
+  {
+    "query": "incident_id pg_stat_activity INC0012004 PostgreSQL HikariPool",
+    "gold": "INC0012004",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle recurring deadlocks on orders table during flash sale?",
+    "gold": "INC0012005",
+    "style": "title"
+  },
+  {
+    "query": "Two code paths updated orders and inventory rows in opposite order, so concurrent transactions acquired locks in a cycle under load.",
+    "gold": "INC0012005",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012005",
+    "gold": "INC0012005",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012005 PostgreSQL ShareLock SQLSTATE",
+    "gold": "INC0012005",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle read replica falling behind primary by several minutes?",
+    "gold": "INC0012006",
+    "style": "title"
+  },
+  {
+    "query": "A large bulk DELETE on the primary generated a burst of WAL that the single-threaded replay on the replica could not keep up with; disk I/O on the replica saturated.",
+    "gold": "INC0012006",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012006",
+    "gold": "INC0012006",
+    "style": "id"
+  },
+  {
+    "query": "incident_id pg_stat_replication replay_lag max_parallel_workers INC0012006",
+    "gold": "INC0012006",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle sso login loop after idp metadata rotation?",
+    "gold": "INC0012007",
+    "style": "title"
+  },
+  {
+    "query": "The IdP rotated its signing certificate but the SP's SAML metadata still pinned the old certificate, so every signed assertion failed validation and the SP re-initiated login.",
+    "gold": "INC0012007",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012007",
+    "gold": "INC0012007",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012007 SecurityPolicyException metadata rotation",
+    "gold": "INC0012007",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle api calls rejected with 401 after access token expiry not refreshed?",
+    "gold": "INC0012008",
+    "style": "title"
+  },
+  {
+    "query": "The integration cached the OAuth access token but never used the refresh token, so once the 3600s access token expired every request returned 401.",
+    "gold": "INC0012008",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012008",
+    "gold": "INC0012008",
+    "style": "id"
+  },
+  {
+    "query": "incident_id invalid_token error_description INC0012008 metadata",
+    "gold": "INC0012008",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle mfa push notifications not delivered to a subset of users?",
+    "gold": "INC0012009",
+    "style": "title"
+  },
+  {
+    "query": "After a mobile OS update, device push tokens were rotated but the MFA app failed to re-register the new token with the provider, so pushes went to dead tokens.",
+    "gold": "INC0012009",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012009",
+    "gold": "INC0012009",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012009 NotRegistered metadata notifications",
+    "gold": "INC0012009",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle log partition full causing application write failures?",
+    "gold": "INC0012010",
+    "style": "title"
+  },
+  {
+    "query": "Debug logging was accidentally left enabled in production, filling /var/log; logrotate's compression could not keep pace and the partition hit 100%, blocking all writes including the app's own state files.",
+    "gold": "INC0012010",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012010",
+    "gold": "INC0012010",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012010 OSError metadata partition",
+    "gold": "INC0012010",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle java service oom killed repeatedly under steady load?",
+    "gold": "INC0012011",
+    "style": "title"
+  },
+  {
+    "query": "An in-memory cache had no eviction policy, so it grew unbounded until the JVM heap was exhausted and the kernel OOM-killer terminated the process.",
+    "gold": "INC0012011",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012011",
+    "gold": "INC0012011",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012011 OutOfMemoryError HeapDumpOnOutOfMemoryError metadata",
+    "gold": "INC0012011",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle kubernetes pods stuck in crashloopbackoff after config change?",
+    "gold": "INC0012012",
+    "style": "title"
+  },
+  {
+    "query": "A typo in the ConfigMap key (redis_ur instead of redis_url) caused the app to fail config parsing on startup and exit(1), triggering the crash loop.",
+    "gold": "INC0012012",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012012",
+    "gold": "INC0012012",
+    "style": "id"
+  },
+  {
+    "query": "incident_id redis_ur redis_url INC0012012 CrashLoopBackOff",
+    "gold": "INC0012012",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle pods evicted due to node memory pressure?",
+    "gold": "INC0012013",
+    "style": "title"
+  },
+  {
+    "query": "Pods had no memory limits set, so a few noisy neighbors consumed node memory until kubelet triggered eviction of lower-priority pods (exit 137).",
+    "gold": "INC0012013",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012013",
+    "gold": "INC0012013",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012013 OOMKilled metadata evicted",
+    "gold": "INC0012013",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle container image pull failing on new nodes?",
+    "gold": "INC0012014",
+    "style": "title"
+  },
+  {
+    "query": "The image pull secret expired and was only refreshed on the original node pool; new nodes joined without the valid registry credentials.",
+    "gold": "INC0012014",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012014",
+    "gold": "INC0012014",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012014 ImagePullBackOff imagePullSecret metadata",
+    "gold": "INC0012014",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle dashboard renders blank on safari after frontend deploy?",
+    "gold": "INC0012015",
+    "style": "title"
+  },
+  {
+    "query": "A build config change set the Babel target too high, so optional-chaining syntax shipped untranspiled and crashed on older Safari engines.",
+    "gold": "INC0012015",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012015",
+    "gold": "INC0012015",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012015 SyntaxError metadata Dashboard",
+    "gold": "INC0012015",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle client-side api timeouts on reports page?",
+    "gold": "INC0012016",
+    "style": "title"
+  },
+  {
+    "query": "The client's 10s Axios timeout was shorter than the backend's response time for large report queries, so the client aborted a request the server would have completed.",
+    "gold": "INC0012016",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012016",
+    "gold": "INC0012016",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012016 AxiosError ECONNABORTED metadata",
+    "gold": "INC0012016",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle kafka consumer group lag growing without bound?",
+    "gold": "INC0012017",
+    "style": "title"
+  },
+  {
+    "query": "A slow message handler exceeded max.poll.interval.ms, causing the consumer to be kicked from the group; the resulting constant rebalancing meant almost no progress was made.",
+    "gold": "INC0012017",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012017",
+    "gold": "INC0012017",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012017 CommitFailedException metadata consumer",
+    "gold": "INC0012017",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle messages piling up in the dead letter queue?",
+    "gold": "INC0012018",
+    "style": "title"
+  },
+  {
+    "query": "A producer was upgraded to a new Avro schema without registering it, so consumers using the old schema hit an unknown magic byte and routed every message to the DLQ.",
+    "gold": "INC0012018",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012018",
+    "gold": "INC0012018",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012018 SerializationException metadata Messages",
+    "gold": "INC0012018",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle production deployment failed midway leaving mixed versions?",
+    "gold": "INC0012019",
+    "style": "title"
+  },
+  {
+    "query": "The new release required a DB migration that had not run, so new pods failed their readiness probe and the rollout stalled, leaving old and new pods both serving.",
+    "gold": "INC0012019",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012019",
+    "gold": "INC0012019",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012019 metadata Production deployment",
+    "gold": "INC0012019",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle rollback failed because previous image was garbage collected?",
+    "gold": "INC0012020",
+    "style": "title"
+  },
+  {
+    "query": "A registry retention policy garbage-collected the prior image, so the rollback had no image to pull; the deploy pipeline relied on 'latest'-style tags that were overwritten.",
+    "gold": "INC0012020",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012020",
+    "gold": "INC0012020",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012020 ErrImagePull metadata Rollback",
+    "gold": "INC0012020",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle ci pipeline failing intermittently on flaky integration tests?",
+    "gold": "INC0012021",
+    "style": "title"
+  },
+  {
+    "query": "The integration test harness leaked HTTP connections across tests, eventually exhausting file descriptors and causing sporadic timeouts depending on test order.",
+    "gold": "INC0012021",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012021",
+    "gold": "INC0012021",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012021 metadata pipeline failing",
+    "gold": "INC0012021",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle alert storm from a single failing node flooding on-call?",
+    "gold": "INC0012022",
+    "style": "title"
+  },
+  {
+    "query": "A single node going down triggered every dependent service's individual alert with no inhibition/grouping rules, burying the real signal in noise.",
+    "gold": "INC0012022",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012022",
+    "gold": "INC0012022",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012022 PagerDuty HostDown TargetDown",
+    "gold": "INC0012022",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle false-positive disk alerts from a bind-mounted filesystem?",
+    "gold": "INC0012023",
+    "style": "title"
+  },
+  {
+    "query": "The disk alert did not exclude pseudo/bind-mounted filesystems, so node_exporter reported 100% on read-only pseudo mounts that are always 'full', creating nightly false positives.",
+    "gold": "INC0012023",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012023",
+    "gold": "INC0012023",
+    "style": "id"
+  },
+  {
+    "query": "incident_id node_exporter INC0012023 DiskSpaceLow metadata",
+    "gold": "INC0012023",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle unusual login pattern flagged for a service account?",
+    "gold": "INC0012024",
+    "style": "title"
+  },
+  {
+    "query": "A service account's static password was leaked in a committed config file and was being used from external hosts; the account predated the MFA mandate.",
+    "gold": "INC0012024",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012024",
+    "gold": "INC0012024",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012024 ImpossibleTravel metadata Unusual",
+    "gold": "INC0012024",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle public api certificate expired causing tls failures?",
+    "gold": "INC0012025",
+    "style": "title"
+  },
+  {
+    "query": "The API's TLS certificate auto-renewal (cert-manager) had been silently failing for weeks due to a broken ACME HTTP-01 challenge, and no one noticed until the cert expired.",
+    "gold": "INC0012025",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012025",
+    "gold": "INC0012025",
+    "style": "id"
+  },
+  {
+    "query": "incident_id certificate_expired INC0012025 notAfter metadata",
+    "gold": "INC0012025",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle tls handshake failures between two internal services?",
+    "gold": "INC0012026",
+    "style": "title"
+  },
+  {
+    "query": "A hardening change disabled TLS 1.2 on Service B, but Service A's client library was pinned to TLS 1.2, so the two could not negotiate a common protocol.",
+    "gold": "INC0012026",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012026",
+    "gold": "INC0012026",
+    "style": "id"
+  },
+  {
+    "query": "incident_id handshake_failure INC0012026 metadata handshake",
+    "gold": "INC0012026",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle dns misconfiguration routing internal traffic to the internet?",
+    "gold": "INC0012027",
+    "style": "title"
+  },
+  {
+    "query": "A wildcard CNAME in the public zone shadowed the internal record after a split-horizon DNS view was accidentally removed, so internal names resolved to public addresses.",
+    "gold": "INC0012027",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012027",
+    "gold": "INC0012027",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012027 NXDOMAIN metadata misconfiguration",
+    "gold": "INC0012027",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle database primary failover did not promote a replica?",
+    "gold": "INC0012028",
+    "style": "title"
+  },
+  {
+    "query": "The only healthy replica exceeded maximum_lag_on_failover at the moment of failure, so Patroni refused to promote it to avoid data loss, leaving the cluster leaderless.",
+    "gold": "INC0012028",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012028",
+    "gold": "INC0012028",
+    "style": "id"
+  },
+  {
+    "query": "incident_id maximum_lag_on_failover INC0012028 PostgreSQL metadata",
+    "gold": "INC0012028",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle token expiry causing 401 storms after clock skew?",
+    "gold": "INC0012029",
+    "style": "title"
+  },
+  {
+    "query": "NTP sync failed on the auth server, causing its clock to drift ahead; freshly issued tokens appeared to be 'from the future' to validators and were rejected until clocks realigned.",
+    "gold": "INC0012029",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012029",
+    "gold": "INC0012029",
+    "style": "id"
+  },
+  {
+    "query": "incident_id invalid_token INC0012029 metadata causing",
+    "gold": "INC0012029",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle memory leak in node.js api growing across days?",
+    "gold": "INC0012030",
+    "style": "title"
+  },
+  {
+    "query": "An event-emitter listener was added per request but never removed, so listeners and their closures accumulated, leaking memory that GC could not reclaim.",
+    "gold": "INC0012030",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012030",
+    "gold": "INC0012030",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012030 JavaScript metadata growing",
+    "gold": "INC0012030",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle kafka broker under-replicated partitions after disk failure?",
+    "gold": "INC0012031",
+    "style": "title"
+  },
+  {
+    "query": "A disk failed on broker 3 taking its log directory offline; partitions led by that broker fell below min.insync.replicas so producers with acks=all were rejected.",
+    "gold": "INC0012031",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012031",
+    "gold": "INC0012031",
+    "style": "id"
+  },
+  {
+    "query": "NOT_ENOUGH_REPLICAS incident_id INC0012031 UnderReplicatedPartitions NotEnoughReplicasException",
+    "gold": "INC0012031",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle canary deployment not shifting traffic?",
+    "gold": "INC0012032",
+    "style": "title"
+  },
+  {
+    "query": "The Istio control plane failed to push the updated route config to the sidecars, so the canary weight was recorded but never enforced at the data plane.",
+    "gold": "INC0012032",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012032",
+    "gold": "INC0012032",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012032 VirtualService metadata deployment",
+    "gold": "INC0012032",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle frontend infinite re-render freezing the browser tab?",
+    "gold": "INC0012033",
+    "style": "title"
+  },
+  {
+    "query": "A useEffect updated state on every render without a proper dependency array, creating an infinite render loop that pegged the CPU.",
+    "gold": "INC0012033",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012033",
+    "gold": "INC0012033",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012033 useEffect metadata Frontend",
+    "gold": "INC0012033",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle connection pool exhaustion on the auth service, not the database?",
+    "gold": "INC0012034",
+    "style": "title"
+  },
+  {
+    "query": "Unlike the payment-service incident, here the pool max (20) was simply undersized for peak login concurrency; the database had plenty of headroom, so the fix was pool sizing, not a leak.",
+    "gold": "INC0012034",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012034",
+    "gold": "INC0012034",
+    "style": "id"
+  },
+  {
+    "query": "incident_id pg_stat_activity INC0012034 PostgreSQL HikariPool",
+    "gold": "INC0012034",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle prometheus scrape failures causing gaps in dashboards?",
+    "gold": "INC0012035",
+    "style": "title"
+  },
+  {
+    "query": "A service started exposing a high-cardinality metric (per-request label), so scrapes exceeded the timeout and sample limit and were dropped, creating gaps.",
+    "gold": "INC0012035",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012035",
+    "gold": "INC0012035",
+    "style": "id"
+  },
+  {
+    "query": "incident_id scrape_duration scrape_timeout metric_relabel_configs INC0012035",
+    "gold": "INC0012035",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle certificate expiry on internal service breaks a scheduled job?",
+    "gold": "INC0012036",
+    "style": "title"
+  },
+  {
+    "query": "Unlike the public-API cert incident, here the job had pinned a specific internal CA certificate that was rotated on schedule; the job's truststore was never updated, so only that client broke.",
+    "gold": "INC0012036",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012036",
+    "gold": "INC0012036",
+    "style": "id"
+  },
+  {
+    "query": "incident_id certificate_expired INC0012036 metadata Certificate",
+    "gold": "INC0012036",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle load balancer 502 from idle-timeout mismatch with backend?",
+    "gold": "INC0012037",
+    "style": "title"
+  },
+  {
+    "query": "The backend's keep-alive timeout (60s) was shorter than the load balancer's idle timeout (75s), so the backend closed connections the LB still considered open, producing 502s on reused connections.",
+    "gold": "INC0012037",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012037",
+    "gold": "INC0012037",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012037 metadata balancer timeout",
+    "gold": "INC0012037",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle kubernetes job pods oomkilled with exit 137 during batch run?",
+    "gold": "INC0012038",
+    "style": "title"
+  },
+  {
+    "query": "The batch loaded the entire input file into memory instead of streaming it; larger nightly inputs exceeded the 512Mi container limit and were OOMKilled (exit 137) \u2014 same exit code as the eviction incident but a different cause.",
+    "gold": "INC0012038",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012038",
+    "gold": "INC0012038",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012038 OOMKilled metadata Kubernetes",
+    "gold": "INC0012038",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle consumer lag alert was a false positive after topic re-partition?",
+    "gold": "INC0012039",
+    "style": "title"
+  },
+  {
+    "query": "The topic was expanded from 6 to 12 partitions; the lag exporter treated the new partitions' missing committed offsets as huge lag, a false positive while consumers were fine.",
+    "gold": "INC0012039",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012039",
+    "gold": "INC0012039",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC0012039 ConsumerLagHigh metadata Consumer",
+    "gold": "INC0012039",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle sso outage from expired saml signing certificate?",
+    "gold": "INC0012040",
+    "style": "title"
+  },
+  {
+    "query": "Unlike the earlier SSO loop (wrong pinned cert after rotation), here the IdP's signing certificate simply expired with no rotation performed, so every assertion it signed was invalid.",
+    "gold": "INC0012040",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0012040",
+    "gold": "INC0012040",
+    "style": "id"
+  },
+  {
+    "query": "incident_id certificate_expired INC0012040 notAfter metadata",
+    "gold": "INC0012040",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle network inventory flag removal?",
+    "gold": "INC1048201",
+    "style": "title"
+  },
+  {
+    "query": "flagged records remained in netops.inventory_device after the circuit repair was confirmed.",
+    "gold": "INC1048201",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048201",
+    "gold": "INC1048201",
+    "style": "id"
+  },
+  {
+    "query": "incident_id inventory_device status_flag updated_at device_id",
+    "gold": "INC1048201",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle yellow duplicate cleanup?",
+    "gold": "INC1048202",
+    "style": "title"
+  },
+  {
+    "query": "duplicate customer rows were inserted by an upstream import job that retried after a timeout.",
+    "gold": "INC1048202",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048202",
+    "gold": "INC1048202",
+    "style": "id"
+  },
+  {
+    "query": "incident_id external_reference dedupe_cleanup remove_duplicate_customers cust_import_2024_03_07",
+    "gold": "INC1048202",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle planning state transition?",
+    "gold": "INC1048203",
+    "style": "title"
+  },
+  {
+    "query": "the property remained in the old planning state because the downstream sync never picked up the approved transition from construction to available.",
+    "gold": "INC1048203",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048203",
+    "gold": "INC1048203",
+    "style": "id"
+  },
+  {
+    "query": "incident_id planning_state status_updated_at current_timestamp home_reference",
+    "gold": "INC1048203",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle access revocation?",
+    "gold": "INC1048204",
+    "style": "title"
+  },
+  {
+    "query": "the user account stayed active in the directory after offboarding because the disable workflow failed before revoking group memberships.",
+    "gold": "INC1048204",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048204",
+    "gold": "INC1048204",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048204 ADAccount ADPrincipalGroupMembership ADGroupMember",
+    "gold": "INC1048204",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle tls renewal on prod web?",
+    "gold": "INC1048205",
+    "style": "title"
+  },
+  {
+    "query": "the production certificate was nearing expiration and the deploy script kept referencing the old PEM bundle.",
+    "gold": "INC1048205",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048205",
+    "gold": "INC1048205",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048205 metadata Renewal category",
+    "gold": "INC1048205",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle java heap growth investigation?",
+    "gold": "INC1048206",
+    "style": "title"
+  },
+  {
+    "query": "the Java service kept expanding heap usage because a cache entry was never evicted after each request batch.",
+    "gold": "INC1048206",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048206",
+    "gold": "INC1048206",
+    "style": "id"
+  },
+  {
+    "query": "incident_id class_histogram data_url INC1048206 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk",
+    "gold": "INC1048206",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle linux disk recovery?",
+    "gold": "INC1048207",
+    "style": "title"
+  },
+  {
+    "query": "the server filled its root filesystem because archived logs and a leftover core dump were never rotated out.",
+    "gold": "INC1048207",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048207",
+    "gold": "INC1048207",
+    "style": "id"
+  },
+  {
+    "query": "incident_id data_url INC1048207 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk M9QDwADhgGAWjR9awAAAABJRU5ErkJggg",
+    "gold": "INC1048207",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle scheduled backup job repair?",
+    "gold": "INC1048208",
+    "style": "title"
+  },
+  {
+    "query": "the backup job stopped because the scheduler entry pointed to an expired credentials file.",
+    "gold": "INC1048208",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048208",
+    "gold": "INC1048208",
+    "style": "id"
+  },
+  {
+    "query": "incident_id pg_dump incident_example appdb_ INC1048208",
+    "gold": "INC1048208",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle api rate limit stabilization?",
+    "gold": "INC1048209",
+    "style": "title"
+  },
+  {
+    "query": "the partner integration was exceeding the provider quota because retry logic ignored 429 responses and reissued the same payload too aggressively.",
+    "gold": "INC1048209",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048209",
+    "gold": "INC1048209",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048209 metadata Stabilization category",
+    "gold": "INC1048209",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle dns record correction?",
+    "gold": "INC1048210",
+    "style": "title"
+  },
+  {
+    "query": "the subdomain routed to the wrong origin because the CNAME still pointed at an old load balancer after the migration.",
+    "gold": "INC1048210",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048210",
+    "gold": "INC1048210",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048210 metadata Correction category",
+    "gold": "INC1048210",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle firewall rule reconciliation?",
+    "gold": "INC1048211",
+    "style": "title"
+  },
+  {
+    "query": "two overlapping firewall rules collided after a policy review, and the deny rule matched traffic that was meant to reach the app tier.",
+    "gold": "INC1048211",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048211",
+    "gold": "INC1048211",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048211 metadata Firewall Reconciliation",
+    "gold": "INC1048211",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle crash loop env fix?",
+    "gold": "INC1048212",
+    "style": "title"
+  },
+  {
+    "query": "the pod kept restarting because an environment variable was renamed in the chart but the container still required the old value.",
+    "gold": "INC1048212",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048212",
+    "gold": "INC1048212",
+    "style": "id"
+  },
+  {
+    "query": "SERVICE_MODE incident_id data_url INC1048212 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk",
+    "gold": "INC1048212",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle etl transformation repair?",
+    "gold": "INC1048213",
+    "style": "title"
+  },
+  {
+    "query": "the transformation step failed because a schema change introduced a null field where the job expected an integer.",
+    "gold": "INC1048213",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048213",
+    "gold": "INC1048213",
+    "style": "id"
+  },
+  {
+    "query": "incident_id transform_orders new_amount INC1048213 metadata",
+    "gold": "INC1048213",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle ldap outage recovery?",
+    "gold": "INC1048214",
+    "style": "title"
+  },
+  {
+    "query": "users could not log in because the LDAP endpoint was unreachable after a network change isolated the directory cluster.",
+    "gold": "INC1048214",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048214",
+    "gold": "INC1048214",
+    "style": "id"
+  },
+  {
+    "query": "incident_id incident_example INC1048214 INC1048314 metadata",
+    "gold": "INC1048214",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle s3 access policy fix?",
+    "gold": "INC1048215",
+    "style": "title"
+  },
+  {
+    "query": "the application lost object storage access after a policy change removed the required bucket read action.",
+    "gold": "INC1048215",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048215",
+    "gold": "INC1048215",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048215 metadata Thompson category",
+    "gold": "INC1048215",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle pipeline dependency bump fix?",
+    "gold": "INC1048216",
+    "style": "title"
+  },
+  {
+    "query": "the deployment pipeline failed after a dependency version bump broke an older test helper.",
+    "gold": "INC1048216",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048216",
+    "gold": "INC1048216",
+    "style": "id"
+  },
+  {
+    "query": "incident_id INC1048216 metadata Pipeline Dependency",
+    "gold": "INC1048216",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle outbound mail relay fix?",
+    "gold": "INC1048217",
+    "style": "title"
+  },
+  {
+    "query": "outbound messages were rejected because the relay host name no longer matched the receiving mail server policy.",
+    "gold": "INC1048217",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048217",
+    "gold": "INC1048217",
+    "style": "id"
+  },
+  {
+    "query": "incident_id data_url INC1048217 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk M9QDwADhgGAWjR9awAAAABJRU5ErkJggg",
+    "gold": "INC1048217",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle vpn tunnel stabilization?",
+    "gold": "INC1048218",
+    "style": "title"
+  },
+  {
+    "query": "the site-to-site tunnel disconnected whenever the peer renegotiated phase 2 with an aggressive idle timer.",
+    "gold": "INC1048218",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048218",
+    "gold": "INC1048218",
+    "style": "id"
+  },
+  {
+    "query": "incident_id data_url INC1048218 iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk M9QDwADhgGAWjR9awAAAABJRU5ErkJggg",
+    "gold": "INC1048218",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle alert threshold correction?",
+    "gold": "INC1048219",
+    "style": "title"
+  },
+  {
+    "query": "the alert storm came from a threshold that was set far too low after a metric label change.",
+    "gold": "INC1048219",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048219",
+    "gold": "INC1048219",
+    "style": "id"
+  },
+  {
+    "query": "incident_id api_latency histogram_quantile http_request_duration_seconds_bucket INC1048219",
+    "gold": "INC1048219",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle logrotate repair?",
+    "gold": "INC1048220",
+    "style": "title"
+  },
+  {
+    "query": "logs were filling the disk because logrotate stopped running after a malformed include file was introduced.",
+    "gold": "INC1048220",
+    "style": "symptom"
+  },
+  {
+    "query": "INC1048220",
+    "gold": "INC1048220",
+    "style": "id"
+  },
+  {
+    "query": "incident_id incident_example INC1048220 INC1048320 metadata",
+    "gold": "INC1048220",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle remove provision status from duplicate opv entries?",
+    "gold": "INC0383917",
+    "style": "title"
+  },
+  {
+    "query": "The incident requests deletion of P status values for a small set of OPV rows in fm_opv after validation against the attachment.",
+    "gold": "INC0383917",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383917",
+    "gold": "INC0383917",
+    "style": "id"
+  },
+  {
+    "query": "incident_id support_tasks_log description_box incident_example fm_opv",
+    "gold": "INC0383917",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle remove defective port status after field correction?",
+    "gold": "INC0383918",
+    "style": "title"
+  },
+  {
+    "query": "This request targets defective port records that must lose the D value in fm_opv after the port issue has been corrected in the source network record.",
+    "gold": "INC0383918",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383918",
+    "gold": "INC0383918",
+    "style": "id"
+  },
+  {
+    "query": "incident_id description_box incident_example fm_opv INC0383918",
+    "gold": "INC0383918",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle delete duplicate opv records flagged in yellow?",
+    "gold": "INC0383919",
+    "style": "title"
+  },
+  {
+    "query": "The attachment contains yellow-highlighted duplicate rows that should be removed using the duplicate cleanup function or a manual fallback if the function fails.",
+    "gold": "INC0383919",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383919",
+    "gold": "INC0383919",
+    "style": "id"
+  },
+  {
+    "query": "incident_id support_remove_opv_duplicate description_box support_tasks_log incident_example",
+    "gold": "INC0383919",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle change home status to homeunplanned?",
+    "gold": "INC0383920",
+    "style": "title"
+  },
+  {
+    "query": "This ticket requests a home status transition to HomeUnplanned.",
+    "gold": "INC0383920",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383920",
+    "gold": "INC0383920",
+    "style": "id"
+  },
+  {
+    "query": "support_changeHomeStatus of_networkCreation incident_id status_id description_box",
+    "gold": "INC0383920",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle investigate missing home status sync in coma?",
+    "gold": "INC0383921",
+    "style": "title"
+  },
+  {
+    "query": "The user reported that the home status change is visible in the source system but not yet reflected in COMA.",
+    "gold": "INC0383921",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383921",
+    "gold": "INC0383921",
+    "style": "id"
+  },
+  {
+    "query": "of_networkCreation incident_id tmf_resources coma_status updated_at",
+    "gold": "INC0383921",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle correct access number mismatch in opv export?",
+    "gold": "INC0383922",
+    "style": "title"
+  },
+  {
+    "query": "The export shows a mismatch between the home ID and access number for one of the entries.",
+    "gold": "INC0383922",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383922",
+    "gold": "INC0383922",
+    "style": "id"
+  },
+  {
+    "query": "incident_id description_box incident_example fm_opv INC0383922",
+    "gold": "INC0383922",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle network category changed after site survey?",
+    "gold": "INC0383925",
+    "style": "title"
+  },
+  {
+    "query": "The field survey confirmed the home should no longer remain in the pending state.",
+    "gold": "INC0383925",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383925",
+    "gold": "INC0383925",
+    "style": "id"
+  },
+  {
+    "query": "of_networkCreation incident_id status_id description_box incident_example",
+    "gold": "INC0383925",
+    "style": "keyword"
+  },
+  {
+    "query": "how do I handle check failed export after partial cleanup?",
+    "gold": "INC0383926",
+    "style": "title"
+  },
+  {
+    "query": "The team reported that one export still contains a stale record after a cleanup run.",
+    "gold": "INC0383926",
+    "style": "symptom"
+  },
+  {
+    "query": "INC0383926",
+    "gold": "INC0383926",
+    "style": "id"
+  },
+  {
+    "query": "incident_id description_box incident_example fm_opv INC0383926",
+    "gold": "INC0383926",
+    "style": "keyword"
+  }
+]
