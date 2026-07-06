@@ -44,13 +44,20 @@ export interface SourceLink {
   score: number | null;
 }
 
+export interface Artifact {
+  language: string;   // sql, bash, python, java, yaml, ... drives syntax highlighting
+  title: string;
+  content: string;
+}
+
 export interface ChatAnswer {
   answer: string;
   incident_type: string;
   confidence: number;
   low_confidence: boolean;
   steps: ResolutionStep[];
-  supporting_sql: string[];
+  artifacts: Artifact[];          // typed supporting artifacts (not SQL-only)
+  supporting_sql: string[];       // legacy, kept for backward compatibility
   matched_report_ids: string[];
   retrieval: SourceLink[];
   raw: string;
@@ -191,6 +198,13 @@ export async function deleteConversation(id: string): Promise<void> {
 export async function sendFeedback(messageId: string, value: 1 | -1 | null): Promise<void> {
   await json(await fetch(`/api/messages/${messageId}/feedback`, {
     method: 'POST', headers: headers(), body: JSON.stringify({ value }),
+  }));
+}
+
+// Submit a human correction so future similar questions use it.
+export async function sendCorrection(question: string, correction: string): Promise<void> {
+  await json(await fetch('/api/corrections', {
+    method: 'POST', headers: headers(), body: JSON.stringify({ question, correction }),
   }));
 }
 

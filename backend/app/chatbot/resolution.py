@@ -25,6 +25,7 @@ def _empty_result(raw: str) -> dict:
         "similar_incidents": [],
         "matched_reports": [],
         "recommended_resolution": [],
+        "artifacts": [],
         "supporting_sql": [],
         "possible_sql": [],
         "possible_tables": [],
@@ -186,10 +187,29 @@ def _normalize_from_json(data: dict, raw: str) -> dict:
         if step:
             result["recommended_resolution"].append(step)
 
+    # Typed artifacts (new): each {language, title, content}. The model now
+    # picks the right language (bash, python, java, yaml, sql, ...) per incident.
+    for item in data.get("artifacts") or []:
+        if isinstance(item, dict):
+            content = str(item.get("content") or "").strip()
+            if content:
+                result["artifacts"].append({
+                    "language": str(item.get("language") or "text").strip().lower(),
+                    "title": str(item.get("title") or "").strip(),
+                    "content": content,
+                })
+        elif isinstance(item, str) and item.strip():
+            result["artifacts"].append(
+                {"language": "text", "title": "", "content": item.strip()}
+            )
+
+    # Backward compat: older responses / reports used supporting_sql. Treat those
+    # as SQL-typed artifacts so nothing is lost.
     for item in data.get("supporting_sql") or data.get("possible_sql") or []:
         sql = _sql_text(item)
         if sql:
             result["supporting_sql"].append(sql)
+            result["artifacts"].append({"language": "sql", "title": "", "content": sql})
     result["possible_sql"] = list(result["supporting_sql"])
 
     for item in data.get("possible_tables") or []:

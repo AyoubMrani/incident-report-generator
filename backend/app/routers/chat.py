@@ -52,13 +52,20 @@ class SourceLink(BaseModel):
     score: float | None = None
 
 
+class Artifact(BaseModel):
+    language: str          # sql, bash, python, java, yaml, json, ... (drives highlighting)
+    title: str = ""
+    content: str
+
+
 class ChatAnswer(BaseModel):
     answer: str
     incident_type: str
     confidence: int
     low_confidence: bool
     steps: list[dict]
-    supporting_sql: list[str]
+    artifacts: list[Artifact]           # typed supporting artifacts (not SQL-only)
+    supporting_sql: list[str]           # kept for backward compatibility
     matched_report_ids: list[str]
     retrieval: list[SourceLink]
     raw: str
@@ -74,6 +81,7 @@ def _to_answer(parsed: dict) -> ChatAnswer:
         confidence=parsed.get("confidence", 0),
         low_confidence=parsed.get("low_confidence", True),
         steps=parsed.get("recommended_resolution", []),
+        artifacts=parsed.get("artifacts", []),
         supporting_sql=parsed.get("supporting_sql", []),
         matched_report_ids=parsed.get("matched_report_ids", []),
         retrieval=parsed.get("retrieval", []),
@@ -183,12 +191,14 @@ def chat(
     service = _validate_and_service(body, request)
 
     conversation_id, history = _open_turn(body, client_id, store)
+    corrections = store.relevant_corrections(body.query)
 
     # Run the pipeline (text-only, image+text, image-only) with prior context.
     # If the model backend is unreachable, surface a clear 503 instead of a
     # fabricated low-confidence answer (the "fast but wrong" failure mode).
     try:
-        parsed = service.answer(body.query, body.image_b64, history=history)
+        parsed = service.answer(body.query, body.image_b64, history=history,
+                                corrections=corrections)
     except LLMUnavailable as exc:
         raise HTTPException(
             status_code=503,
@@ -224,13 +234,15 @@ def chat_stream(
     service = _validate_and_service(body, request)
 
     conversation_id, history = _open_turn(body, client_id, store)
+    corrections = store.relevant_corrections(body.query)
 
     def event_stream():
         # Tell the client its conversation id up front (needed for a new chat).
         yield _sse({"type": "meta", "conversation_id": conversation_id})
 
         try:
-            for ev in service.answer_stream(body.query, body.image_b64, history=history):
+            for ev in service.answer_stream(body.query, body.image_b64, history=history,
+                                            corrections=corrections):
                 if ev["type"] == "done":
                     answer = _to_answer(ev["answer"])
                     # Persist the completed assistant turn, then emit it.
@@ -282,6 +294,30 @@ def set_feedback(
     if not ok:
         raise HTTPException(status_code=404, detail="Message not found")
     return {"success": True}
+
+
+class CorrectionRequest(BaseModel):
+    question: str      # the incident question that got a wrong answer
+    correction: str    # the correct guidance the human provides
+
+
+@router.post("/api/corrections")
+def add_correction(
+    body: CorrectionRequest,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    """Record a human correction so future similar questions use it.
+
+    This is the loop that makes thumbs-down actionable: the correction is stored
+    and injected into the prompt for later matching incidents (see
+    store.relevant_corrections + service corrections handling)."""
+    if not body.question.strip() or not body.correction.strip():
+        raise HTTPException(status_code=400, detail="question and correction are required")
+    saved = _store(request).add_correction(
+        _client_id(x_client_id), body.question, body.correction
+    )
+    return {"success": True, "id": saved["id"]}
 
 
 @router.get("/api/feedback/summary")

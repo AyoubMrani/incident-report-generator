@@ -80,6 +80,27 @@ def _history_block(history: list[dict] | None) -> str:
     return "Earlier in this conversation:\n" + "\n".join(lines) + "\n\n"
 
 
+def _corrections_block(corrections: list[dict] | None) -> str:
+    """Render learned human corrections so past feedback steers the answer.
+
+    Each correction is {question, correction}. These carry high authority: a
+    human said "the right answer to this kind of question is X", so the prompt
+    tells the model to prefer them when the current incident matches.
+    """
+    if not corrections:
+        return ""
+    lines = [
+        "LEARNED CORRECTIONS from past human feedback — if the current incident "
+        "matches one of these, follow the corrected guidance:",
+    ]
+    for c in corrections:
+        q = (c.get("question") or "").strip()
+        fix = (c.get("correction") or "").strip()
+        if fix:
+            lines.append(f"- For a question like \"{q[:120]}\": {fix}")
+    return "\n".join(lines) + "\n\n"
+
+
 class ChatbotService:
     """Holds the KB + provider; answers incident questions."""
 
@@ -100,11 +121,16 @@ class ChatbotService:
         query: str,
         image_b64: str | None,
         history: list[dict] | None,
+        corrections: list[dict] | None = None,
     ) -> dict:
         """Route intent, apply security, understand + retrieve, build the prompt.
 
         Returns either a short-circuit chat reply (intent != incident) or the
         pieces the LLM step needs: prompt, retrieval results, injection note.
+
+        `corrections` are learned human corrections (from thumbs-down feedback)
+        relevant to this query; they are injected into the prompt so past fixes
+        influence future answers.
         """
         intent = classify(query, has_image=bool(image_b64))
         if intent is not Intent.INCIDENT:
@@ -143,12 +169,15 @@ class ChatbotService:
         problem = _history_block(history) + wrap_untrusted(problem)
         image_analysis = image_query or NO_IMAGE_ANALYSIS
 
+        corrections_block = _corrections_block(corrections)
+
         if results:
             prompt = format_prompt(
                 RESOLUTION_PROMPT,
                 RESOLUTION_PROMPT_REQUIRED,
                 problem=problem,
                 image_analysis=image_analysis,
+                corrections=corrections_block,
                 # Feed only the top few chunks into the prompt (latency); all
                 # retrieved hits still surface as sources in _shape().
                 knowledge=format_retrieval_context(results, limit=RESOLUTION_CONTEXT_K),
@@ -159,6 +188,7 @@ class ChatbotService:
                 FALLBACK_PROMPT_REQUIRED,
                 problem=problem,
                 image_analysis=image_analysis,
+                corrections=corrections_block,
             )
 
         return {"prompt": prompt, "results": results, "injection": scan}
@@ -192,9 +222,10 @@ class ChatbotService:
         query: str,
         image_b64: str | None = None,
         history: list[dict] | None = None,
+        corrections: list[dict] | None = None,
     ) -> dict:
         """Run the full pipeline and return a structured resolution dict."""
-        prep = self._prepare(query, image_b64, history)
+        prep = self._prepare(query, image_b64, history, corrections)
         if "short_circuit" in prep:
             return prep["short_circuit"]
         raw = self.provider.chat(prep["prompt"])
@@ -207,6 +238,7 @@ class ChatbotService:
         query: str,
         image_b64: str | None = None,
         history: list[dict] | None = None,
+        corrections: list[dict] | None = None,
     ) -> Iterator[dict]:
         """Yield streaming events for SSE.
 
@@ -215,7 +247,7 @@ class ChatbotService:
           {"type": "token", "text": ...}                 (incremental LLM output)
           {"type": "done",  "answer": <structured dict>} (final parsed result)
         """
-        prep = self._prepare(query, image_b64, history)
+        prep = self._prepare(query, image_b64, history, corrections)
         if "short_circuit" in prep:
             reply = prep["short_circuit"]
             yield {"type": "chat", "text": reply["raw"]}

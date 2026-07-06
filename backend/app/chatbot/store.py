@@ -42,7 +42,26 @@ CREATE TABLE IF NOT EXISTS messages (
     created_at       REAL NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_msg_conv ON messages(conversation_id, created_at);
+
+CREATE TABLE IF NOT EXISTS corrections (
+    id          TEXT PRIMARY KEY,
+    client_id   TEXT NOT NULL,
+    question    TEXT NOT NULL,          -- the incident question that got a bad answer
+    correction  TEXT NOT NULL,          -- the human-provided correct guidance
+    created_at  REAL NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_corr_created ON corrections(created_at DESC);
 """
+
+
+_STOP = {"the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is",
+         "are", "how", "do", "i", "my", "it", "with", "why", "what", "this"}
+
+
+def _tokens(text: str) -> set[str]:
+    import re
+    return {t for t in re.findall(r"[a-z0-9_]+", (text or "").lower())
+            if t not in _STOP and len(t) > 2}
 
 
 def _now() -> float:
@@ -168,7 +187,43 @@ class ChatStore:
         with self._conn() as c:
             up = c.execute("SELECT COUNT(*) FROM messages WHERE feedback=1").fetchone()[0]
             down = c.execute("SELECT COUNT(*) FROM messages WHERE feedback=-1").fetchone()[0]
-        return {"up": up, "down": down, "total_rated": up + down}
+            corr = c.execute("SELECT COUNT(*) FROM corrections").fetchone()[0]
+        return {"up": up, "down": down, "total_rated": up + down, "corrections": corr}
+
+    # ── learned corrections (feedback that improves future answers) ────────────
+
+    def add_correction(self, client_id: str, question: str, correction: str) -> dict:
+        cid = _uid()
+        now = _now()
+        with self._conn() as c:
+            c.execute(
+                "INSERT INTO corrections(id, client_id, question, correction, created_at) "
+                "VALUES(?,?,?,?,?)",
+                (cid, client_id, question.strip(), correction.strip(), now),
+            )
+        return {"id": cid, "question": question, "correction": correction, "created_at": now}
+
+    def relevant_corrections(self, query: str, limit: int = 3) -> list[dict]:
+        """Return past corrections whose question overlaps this query's terms.
+
+        A lightweight token-overlap match (no embedding needed): a correction is
+        relevant if its stored question shares meaningful words with the current
+        query. Cheap, local, and good enough to surface the right past fix.
+        """
+        q_tokens = _tokens(query)
+        if not q_tokens:
+            return []
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT question, correction FROM corrections ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+        scored = []
+        for r in rows:
+            overlap = len(q_tokens & _tokens(r["question"]))
+            if overlap:
+                scored.append((overlap, {"question": r["question"], "correction": r["correction"]}))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        return [c for _, c in scored[:limit]]
 
     def add_message(
         self,

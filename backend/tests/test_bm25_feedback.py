@@ -108,3 +108,69 @@ def test_feedback_other_client_cannot_rate(client):
     mid, _ = _assistant_msg_id(client)
     r = client.post(f"/api/messages/{mid}/feedback", headers={"X-Client-Id": "intruder"}, json={"value": 1})
     assert r.status_code == 404
+
+
+# ── typed artifacts (not SQL-only) ────────────────────────────────────────────
+
+
+def test_parser_reads_typed_artifacts():
+    import json
+    from app.chatbot.resolution import parse_resolution
+    raw = json.dumps({
+        "incident_type": "Missing file",
+        "confidence": 70,
+        "recommended_resolution": [{"step": 1, "title": "t", "action": "a", "evidence": []}],
+        "artifacts": [
+            {"language": "bash", "title": "Locate file", "content": "find . -name docker-compose.yml"},
+            {"language": "yaml", "title": "Fix", "content": "services:\n  app: {}"},
+        ],
+    })
+    p = parse_resolution(raw)
+    assert len(p["artifacts"]) == 2
+    assert p["artifacts"][0]["language"] == "bash"
+    assert "docker-compose.yml" in p["artifacts"][0]["content"]
+    assert p["artifacts"][1]["language"] == "yaml"  # not SQL
+
+
+def test_parser_backward_compat_supporting_sql_becomes_artifact():
+    import json
+    from app.chatbot.resolution import parse_resolution
+    raw = json.dumps({
+        "incident_type": "DB", "confidence": 60,
+        "recommended_resolution": [{"step": 1, "title": "t", "action": "a"}],
+        "supporting_sql": ["DELETE FROM x WHERE id=1"],
+    })
+    p = parse_resolution(raw)
+    assert p["artifacts"] == [{"language": "sql", "title": "", "content": "DELETE FROM x WHERE id=1"}]
+    assert p["supporting_sql"] == ["DELETE FROM x WHERE id=1"]  # legacy field preserved
+
+
+# ── learned corrections influence the prompt ──────────────────────────────────
+
+
+def test_corrections_injected_into_prompt():
+    from app.chatbot.service import ChatbotService
+    svc = ChatbotService(_fake_kb(), FakeProvider())
+    prep = svc._prepare(
+        "duplicate port cleanup", None, None,
+        corrections=[{"question": "duplicate port cleanup",
+                      "correction": "use support_remove_opv_duplicate, never a raw DELETE"}],
+    )
+    assert "LEARNED CORRECTIONS" in prep["prompt"]
+    assert "support_remove_opv_duplicate" in prep["prompt"]
+
+
+def test_correction_endpoint_and_relevance(client):
+    r = client.post("/api/corrections", headers=HDR, json={
+        "question": "docker-compose.yml not found error",
+        "correction": "the file is missing; run 'find . -name docker-compose.yml' or create it",
+    })
+    assert r.status_code == 200
+    store = client.app.state.chat_store
+    rel = store.relevant_corrections("why do I get docker-compose.yml no such file")
+    assert rel and "docker-compose" in rel[0]["question"]
+
+
+def test_correction_requires_both_fields(client):
+    assert client.post("/api/corrections", headers=HDR,
+                       json={"question": "x", "correction": ""}).status_code == 400

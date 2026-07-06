@@ -5,7 +5,7 @@ import {
   ThumbsUp, ThumbsDown,
 } from 'lucide-react';
 import {
-  streamChat, listConversations, listMessages, deleteConversation, sendFeedback,
+  streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
   getActiveConversationId, setActiveConversationId,
   ChatAnswer, SourceLink, Conversation, StoredMessage,
 } from '../../api/chat';
@@ -134,31 +134,79 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
   );
 }
 
-function FeedbackButtons({ value, onRate }: { value?: number | null; onRate: (v: 1 | -1) => void }) {
+function FeedbackButtons({ value, onRate, onCorrect }: {
+  value?: number | null;
+  onRate: (v: 1 | -1) => void;
+  onCorrect: (correction: string) => Promise<void>;
+}) {
+  // On thumbs-down, offer a correction box so the fix becomes learned knowledge.
+  const [showCorrect, setShowCorrect] = useState(value === -1);
+  const [text, setText] = useState('');
+  const [saved, setSaved] = useState(false);
+
+  const submit = async () => {
+    const c = text.trim();
+    if (!c) return;
+    await onCorrect(c);
+    setSaved(true);
+    setText('');
+    setTimeout(() => setShowCorrect(false), 1200);
+  };
+
   return (
-    <div className="flex items-center gap-1 pt-1">
-      <span className="text-[11px] text-gray-400 mr-1">Was this helpful?</span>
-      <button
-        onClick={() => onRate(1)}
-        title="Helpful"
-        className={`p-1 rounded hover:bg-gray-100 ${value === 1 ? 'text-green-600' : 'text-gray-400'}`}
-      >
-        <ThumbsUp className="w-3.5 h-3.5" />
-      </button>
-      <button
-        onClick={() => onRate(-1)}
-        title="Not helpful"
-        className={`p-1 rounded hover:bg-gray-100 ${value === -1 ? 'text-red-600' : 'text-gray-400'}`}
-      >
-        <ThumbsDown className="w-3.5 h-3.5" />
-      </button>
+    <div className="pt-1">
+      <div className="flex items-center gap-1">
+        <span className="text-[11px] text-gray-400 mr-1">Was this helpful?</span>
+        <button
+          onClick={() => onRate(1)}
+          title="Helpful"
+          className={`p-1 rounded hover:bg-gray-100 ${value === 1 ? 'text-green-600' : 'text-gray-400'}`}
+        >
+          <ThumbsUp className="w-3.5 h-3.5" />
+        </button>
+        <button
+          onClick={() => { onRate(-1); setShowCorrect(true); setSaved(false); }}
+          title="Not helpful"
+          className={`p-1 rounded hover:bg-gray-100 ${value === -1 ? 'text-red-600' : 'text-gray-400'}`}
+        >
+          <ThumbsDown className="w-3.5 h-3.5" />
+        </button>
+      </div>
+
+      {showCorrect && (
+        <div className="mt-1.5">
+          {saved ? (
+            <div className="text-[11px] text-green-600">
+              ✓ Thanks — I'll use this correction for similar questions.
+            </div>
+          ) : (
+            <div className="flex items-start gap-1.5">
+              <textarea
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                rows={2}
+                placeholder="What's the correct answer? (this is saved and used for similar future questions)"
+                className="flex-1 resize-none rounded-md border border-gray-300 px-2 py-1 text-xs outline-none focus:border-blue-500"
+              />
+              <button
+                onClick={submit}
+                disabled={!text.trim()}
+                className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-40"
+              >
+                Save
+              </button>
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
 
-function AssistantCard({ answer, onOpen, feedback, onRate }: {
+function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
   answer: ChatAnswer; onOpen: (filename: string) => void;
   feedback?: number | null; onRate?: (v: 1 | -1) => void;
+  onCorrect?: (correction: string) => Promise<void>;
 }) {
   const badge = confidenceBadge(answer.confidence);
   const linksInReasoning = extractLinks(answer.raw || '');
@@ -182,7 +230,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate }: {
 
       {answer.answer && <RichText text={answer.answer} />}
 
-      {answer.supporting_sql.some(isDestructiveSql) && (
+      {answer.artifacts.some((a) => a.language === 'sql' && isDestructiveSql(a.content)) && (
         <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Some suggested SQL is destructive (DROP/DELETE/TRUNCATE/UPDATE). Review carefully and back up before running.
@@ -205,11 +253,16 @@ function AssistantCard({ answer, onOpen, feedback, onRate }: {
         </ol>
       )}
 
-      {answer.supporting_sql.length > 0 && (
+      {answer.artifacts.length > 0 && (
         <div>
-          <div className="text-xs font-semibold text-gray-600 mb-1">Supporting SQL</div>
-          {answer.supporting_sql.map((sql, i) => (
-            <CodeBlock key={i} code={sql} language="sql" />
+          <div className="text-xs font-semibold text-gray-600 mb-1">
+            Supporting {answer.artifacts.length > 1 ? 'artifacts' : 'artifact'}
+          </div>
+          {answer.artifacts.map((a, i) => (
+            <div key={i}>
+              {a.title && <div className="text-xs text-gray-500 mb-0.5">{a.title}</div>}
+              <CodeBlock code={a.content} language={a.language} />
+            </div>
           ))}
         </div>
       )}
@@ -227,7 +280,9 @@ function AssistantCard({ answer, onOpen, feedback, onRate }: {
         </div>
       )}
 
-      {onRate && <FeedbackButtons value={feedback} onRate={onRate} />}
+      {onRate && onCorrect && (
+        <FeedbackButtons value={feedback} onRate={onRate} onCorrect={onCorrect} />
+      )}
     </div>
   );
 }
@@ -455,6 +510,10 @@ export default function ChatbotModule() {
                 </div>
               );
             }
+            // The question this answer responded to = nearest preceding user msg.
+            const prevUser = [...messages.slice(0, i)].reverse().find((m) => m.role === 'user') as
+              | UserMessage | undefined;
+            const question = prevUser?.text || msg.answer.answer || '';
             return (
               <div key={i} className="flex items-start gap-2">
                 <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
@@ -464,6 +523,7 @@ export default function ChatbotModule() {
                     onOpen={setOpenReport}
                     feedback={msg.feedback}
                     onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
+                    onCorrect={msg.messageId ? (c) => sendCorrection(question, c) : undefined}
                   />
                 </div>
               </div>

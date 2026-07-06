@@ -67,7 +67,10 @@ class FakeProvider(LLMProvider):
                     "evidence": ["INC1048202"],
                 }
             ],
-            "supporting_sql": ["SELECT * FROM fm_opv WHERE dup = 1"],
+            "artifacts": [
+                {"language": "sql", "title": "Cleanup query",
+                 "content": "SELECT * FROM fm_opv WHERE dup = 1"}
+            ],
             "reasoning": "matched a duplicate-cleanup report",
             "alternative_resolution": [],
         }
