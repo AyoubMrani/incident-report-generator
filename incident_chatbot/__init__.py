@@ -1,2 +1,0 @@
-"""incident_chatbot package."""
-
