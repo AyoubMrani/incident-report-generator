@@ -70,6 +70,7 @@ class ChatAnswer(BaseModel):
     retrieval: list[SourceLink]
     raw: str
     is_chat: bool = False               # True for greeting/smalltalk (no incident)
+    needs_clarification: bool = False   # too vague / insufficient evidence to diagnose
     security_note: str | None = None    # set when prompt-injection was detected
 
 
@@ -87,6 +88,7 @@ def _to_answer(parsed: dict) -> ChatAnswer:
         retrieval=parsed.get("retrieval", []),
         raw=parsed.get("raw", ""),
         is_chat=parsed.get("is_chat", False),
+        needs_clarification=parsed.get("needs_clarification", False),
         security_note=parsed.get("security_note"),
     )
 

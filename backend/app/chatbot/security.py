@@ -65,9 +65,18 @@ _INJECTION_PATTERNS: tuple[re.Pattern[str], ...] = (
     re.compile(r"(?i)what\s+(are\s+)?your\s+(system\s+)?(prompt|instructions?)"),
     re.compile(r"(?i)you\s+are\s+now\s+(a|an|no longer)"),
     re.compile(r"(?i)\bnew\s+(instructions?|rules?|persona|role)\s*:"),
-    re.compile(r"(?i)\b(developer|system)\s+mode\b"),
-    re.compile(r"(?i)pretend\s+(to\s+be|you\s+are)\b"),
-    re.compile(r"(?i)override\s+(your|the)\s+(instructions?|rules?|safety)"),
+    re.compile(r"(?i)\b(developer|system|admin(istrator)?|god|debug|jailbreak|dan)\s+mode\b"),
+    re.compile(r"(?i)\b(admin|administrator|root|sudo)\s+mode\s+(enabled|on|activate)"),
+    re.compile(r"(?i)pretend\s+(to\s+be|you\s+are|that)\b"),
+    re.compile(r"(?i)\bact\s+as\s+(a|an|the|if|admin|root|dan|jailbroken)\b"),
+    re.compile(r"(?i)override\s+(your|the)\s+(instructions?|rules?|safety|guard)"),
+    re.compile(r"(?i)bypass\s+(all\s+|your\s+|the\s+)*(rules?|restrictions?|filters?|safety|guard)"),
+    re.compile(r"(?i)\byou\s+must\s+(comply|obey|do\s+as|not\s+refuse)"),
+    re.compile(r"(?i)from\s+now\s+on\s+you\s+(will|must|are|should)\b"),
+    re.compile(r"(?i)forget\s+(everything|all|your|the)\s+(you|previous|above|instructions?|rules?)"),
+    re.compile(r"(?i)(do\s+not|don'?t)\s+(follow|obey|apply)\s+(your|the|any)\s+(rules?|instructions?)"),
+    re.compile(r"(?i)(output|print|show|dump)\s+(your\s+)?(the\s+)?(entire\s+)?(system\s+)?(prompt|config|configuration)"),
+    re.compile(r"(?i)what('?s| is)\s+(above|before)\s+this\s+(message|prompt|line)"),
 )
 
 

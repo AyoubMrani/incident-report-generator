@@ -29,7 +29,7 @@ function RichText({ text }: { text: string }) {
 // ── local view model ──────────────────────────────────────────────────────────
 interface UserMessage { role: 'user'; text: string; hasImage?: boolean; links?: string[] }
 interface AssistantMessage { role: 'assistant'; answer: ChatAnswer; messageId?: string; feedback?: number | null }
-interface ChatMessage { role: 'chat'; text: string }              // greeting/smalltalk reply
+interface ChatMessage { role: 'chat'; text: string; clarify?: boolean }  // greeting/smalltalk, or a clarification request
 interface StreamingMessage { role: 'streaming'; text: string }    // tokens as they arrive
 interface ErrorMessage { role: 'error'; text: string }
 type Message = UserMessage | AssistantMessage | ChatMessage | StreamingMessage | ErrorMessage;
@@ -44,8 +44,10 @@ function confidenceBadge(confidence: number) {
 function fromStored(m: StoredMessage): Message | null {
   if (m.role === 'assistant' && m.payload && 'incident_type' in m.payload) {
     const answer = m.payload as ChatAnswer;
-    // A stored greeting/smalltalk reply replays as a plain chat bubble.
-    if (answer.is_chat) return { role: 'chat', text: answer.answer || m.text };
+    // A stored greeting/smalltalk/clarification reply replays as a chat bubble.
+    if (answer.is_chat) {
+      return { role: 'chat', text: answer.answer || m.text, clarify: answer.needs_clarification };
+    }
     return { role: 'assistant', answer, messageId: m.id, feedback: m.feedback };
   }
   if (m.role === 'user') {
@@ -389,7 +391,7 @@ export default function ChatbotModule() {
         },
         onDone: (answer, assistantMessageId) => {
           const finalMsg: Message = answer.is_chat
-            ? { role: 'chat', text: answer.answer }
+            ? { role: 'chat', text: answer.answer, clarify: answer.needs_clarification }
             : { role: 'assistant', answer, messageId: assistantMessageId, feedback: null };
           setMessages((m) => (streamIndex === -1 ? [...m, finalMsg] : replaceAt(m, streamIndex, finalMsg)));
           refreshConversations();
@@ -489,11 +491,18 @@ export default function ChatbotModule() {
               );
             }
             if (msg.role === 'chat') {
-              // Greeting / smalltalk / meta — a plain assistant bubble, no card.
+              // Greeting/smalltalk = plain bubble. Clarification request = amber
+              // "needs more info" bubble so it reads as a deliberate ask, not a
+              // failed answer (the model chose NOT to guess).
+              const clarify = msg.clarify;
               return (
                 <div key={i} className="flex items-start gap-2">
-                  <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
-                  <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-2.5 text-sm text-gray-700 shadow-sm max-w-[85%]">
+                  <div className={`p-1.5 rounded-full mt-0.5 text-white ${clarify ? 'bg-amber-500' : 'bg-gray-800'}`}>
+                    {clarify ? <AlertTriangle className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
+                  </div>
+                  <div className={`rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm shadow-sm max-w-[85%] whitespace-pre-wrap ${
+                    clarify ? 'bg-amber-50 border border-amber-200 text-amber-900' : 'bg-white border border-gray-200 text-gray-700'
+                  }`}>
                     {msg.text}
                   </div>
                 </div>

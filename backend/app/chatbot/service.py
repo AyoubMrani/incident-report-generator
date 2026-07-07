@@ -42,23 +42,27 @@ from .security import injection_scan, wrap_untrusted
 MEMORY_TURNS = 4
 
 
-def _chat_reply(text: str) -> dict:
+def _chat_reply(text: str, *, needs_clarification: bool = False) -> dict:
     """A non-incident, conversational reply shaped like the pipeline's dict.
 
     Same keys the API/streaming layer reads, but with is_chat=True and no
     retrieval, so greetings/smalltalk render as a plain chat bubble.
+    `needs_clarification` marks the "too vague to diagnose" abstention so the UI
+    can style it as a prompt for more info rather than a normal chat reply.
     """
     return {
         "is_chat": True,
+        "needs_clarification": needs_clarification,
         "incident_summary": text,
-        "incident_type": "Assistant",
-        "confidence": 100,
+        "incident_type": "Needs more info" if needs_clarification else "Assistant",
+        "confidence": 0 if needs_clarification else 100,
         "recommended_resolution": [],
+        "artifacts": [],
         "supporting_sql": [],
         "matched_reports": [],
         "matched_report_ids": [],
         "retrieval": [],
-        "low_confidence": False,
+        "low_confidence": needs_clarification,
         "raw": text,
     }
 
@@ -132,7 +136,11 @@ class ChatbotService:
         relevant to this query; they are injected into the prompt so past fixes
         influence future answers.
         """
-        intent = classify(query, has_image=bool(image_b64))
+        intent = classify(query, has_image=bool(image_b64), has_history=bool(history))
+        if intent is Intent.CLARIFY:
+            # Incident-flavored but too vague: ask for specifics, do NOT guess.
+            return {"short_circuit": _chat_reply(canned_reply(intent),
+                                                 needs_clarification=True)}
         if intent is not Intent.INCIDENT:
             # Greeting / smalltalk / meta: reply as a chatbot, no LLM, no search.
             return {"short_circuit": _chat_reply(canned_reply(intent))}
@@ -211,6 +219,7 @@ class ChatbotService:
             parsed.get("confidence", 0) / 100.0 < CONFIDENCE_THRESHOLD
         )
         parsed["is_chat"] = False
+        parsed["needs_clarification"] = bool(parsed.get("insufficient"))
         if injection is not None and injection.detected:
             parsed["security_note"] = injection.note
         return parsed

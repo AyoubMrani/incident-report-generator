@@ -62,6 +62,7 @@ export interface ChatAnswer {
   retrieval: SourceLink[];
   raw: string;
   is_chat: boolean;               // greeting/smalltalk reply, not an incident
+  needs_clarification?: boolean;  // too vague / insufficient evidence to diagnose
   security_note?: string | null;  // set when prompt-injection was detected
 }
 

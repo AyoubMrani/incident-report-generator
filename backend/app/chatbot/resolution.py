@@ -256,7 +256,9 @@ def _normalize_from_json(data: dict, raw: str) -> dict:
         for s in result["recommended_resolution"]
     ]
 
-    if not result["recommended_resolution"]:
+    # Honor an explicit insufficient flag from the model (it decided it cannot
+    # safely diagnose), OR infer it when no concrete steps were produced.
+    if data.get("insufficient") is True or not result["recommended_resolution"]:
         result["insufficient"] = True
 
     return result

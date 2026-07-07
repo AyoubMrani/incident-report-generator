@@ -102,7 +102,9 @@ Cite supporting incident IDs in each step's evidence array and in similar_incide
 - Anchor to the ACTUAL error. If the error is "file not found: docker-compose.yml", the fix is about locating/creating that file — NOT flaky tests, ulimit, or SQL.
 - Choose the artifact language that fits the incident. `artifacts` may be empty if no code/config is needed.
 - If retrieved reports are irrelevant to the real error, set a lower confidence and say the KB had no strong match, rather than forcing an unrelated solution.
-- confidence: 0-100 integer reflecting how well the evidence actually matches the error.
+- DO NOT hallucinate a root cause. If the input is vague, contradictory, or the "logs" look random/unrelated with no coherent error, set "insufficient": true, keep confidence low (<40), put clarifying questions in recommended_resolution, and do NOT fabricate steps or evidence. It is correct to say you cannot diagnose this yet.
+- Never invent a matching incident ID that is not in the retrieved reports.
+- confidence: 0-100 integer reflecting how well the evidence actually matches the error. Be conservative.
 - Return JSON only — no markdown fences, no prose before or after.
 
 ## Output JSON schema
@@ -127,6 +129,7 @@ Cite supporting incident IDs in each step's evidence array and in similar_incide
   "artifacts": [
     {{"language": "bash", "title": "Locate the compose file", "content": "find . -name docker-compose.yml"}}
   ],
+  "insufficient": false,
   "reasoning": "Brief synthesis of why this path was chosen",
   "alternative_resolution": ["If X fails, try Y"]
 }}
