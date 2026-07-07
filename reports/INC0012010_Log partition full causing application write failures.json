@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Log partition full causing application write failures\n\nApplication suddenly stops accepting requests and the process appears alive but unresponsive.\n\nDebug logging was accidentally left enabled in production, filling /var/log; logrotate's compression could not keep pace and the partition hit 100%, blocking all writes including the app's own state files.\n\n1. Identify the largest log files with du and confirm partition at 100%\n2. Truncate/compress the runaway debug logs to free space immediately\n3. Revert the log level to WARN in production config\n4. Add a disk-usage alert at 80% and a separate volume for logs\n\nError Details\n```\nOSError: [Errno 28] No space left on device; /var/log at 100% (df -h); logrotate: error creating output file: Disk quota exceeded\n```\n\nTags: infra, disk-full, errno-28, logrotate, no-space",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012010",
+      "title": "Log partition full causing application write failures",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Order Processing Host",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "6a19ea5e-921e-4b02-8a9a-f938efaa73d9",
+        "type": "heading",
+        "level": 1,
+        "content": "Log partition full causing application write failures",
+        "title": "Log partition full causing application write failures"
+      },
+      {
+        "id": "ed818fd8-5e5b-4671-b143-bc22ac8eca76",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Application suddenly stops accepting requests and the process appears alive but unresponsive.</p>"
+      },
+      {
+        "id": "a8fd024c-a033-444c-8d60-b71e681b6ac9",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>Debug logging was accidentally left enabled in production, filling /var/log; logrotate's compression could not keep pace and the partition hit 100%, blocking all writes including the app's own state files.</p>"
+      },
+      {
+        "id": "bcbfba1f-25f3-4bcb-909c-2238f3974372",
+        "type": "code",
+        "items": [
+          {
+            "id": "1a1e6dd0-846f-4fef-a072-0edeff59876c",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Order Processing Host \u2014 error / log snippet",
+            "content": "OSError: [Errno 28] No space left on device; /var/log at 100% (df -h); logrotate: error creating output file: Disk quota exceeded",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "1d3aa977-f549-493d-8fb8-6b0e5e056879",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify the largest log files with du and confirm partition at 100%",
+          "Truncate/compress the runaway debug logs to free space immediately",
+          "Revert the log level to WARN in production config",
+          "Add a disk-usage alert at 80% and a separate volume for logs"
+        ]
+      },
+      {
+        "id": "a58db2e3-4ab5-4044-84d9-437630dc44e4",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, disk-full, errno-28, logrotate, no-space</p>"
+      }
+    ]
+  }
+}

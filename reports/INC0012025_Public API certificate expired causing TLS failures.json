@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Public API certificate expired causing TLS failures\n\nAll external clients suddenly fail to call the public API; browsers show a security warning.\n\nThe API's TLS certificate auto-renewal (cert-manager) had been silently failing for weeks due to a broken ACME HTTP-01 challenge, and no one noticed until the cert expired.\n\n1. Confirm the expired certificate via openssl and the handshake alert\n2. Issue a new certificate manually to restore service immediately\n3. Fix the ACME HTTP-01 challenge routing so auto-renewal works\n4. Add a certificate-expiry alert at 21 days remaining\n\nError Details\n```\nSSL certificate problem: certificate has expired; TLS handshake failed: alert certificate_expired (45); openssl: notAfter=Jul 4 2026 GMT\n```\n\nTags: security, certificate-expiry, tls-handshake, cert-manager, acme",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012025",
+      "title": "Public API certificate expired causing TLS failures",
+      "caller": "System Generated",
+      "category": "security",
+      "subcategory": "Public API Gateway (TLS)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "b7557cde-5a53-4e46-8427-eb5153876fff",
+        "type": "heading",
+        "level": 1,
+        "content": "Public API certificate expired causing TLS failures",
+        "title": "Public API certificate expired causing TLS failures"
+      },
+      {
+        "id": "5833cd03-0bcd-4b70-b9bd-30a812e793ae",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>All external clients suddenly fail to call the public API; browsers show a security warning.</p>"
+      },
+      {
+        "id": "c262b831-d0ed-4d18-a350-6e6e989fd6ee",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The API's TLS certificate auto-renewal (cert-manager) had been silently failing for weeks due to a broken ACME HTTP-01 challenge, and no one noticed until the cert expired.</p>"
+      },
+      {
+        "id": "498452bb-0615-49a0-98f4-5db6743e16bb",
+        "type": "code",
+        "items": [
+          {
+            "id": "22fad229-6f52-422e-ac21-89b0b6abb9a3",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Public API Gateway (TLS) \u2014 error / log snippet",
+            "content": "SSL certificate problem: certificate has expired; TLS handshake failed: alert certificate_expired (45); openssl: notAfter=Jul 4 2026 GMT",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "aee44020-c74c-4ccc-8bb6-7e7442f4d190",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the expired certificate via openssl and the handshake alert",
+          "Issue a new certificate manually to restore service immediately",
+          "Fix the ACME HTTP-01 challenge routing so auto-renewal works",
+          "Add a certificate-expiry alert at 21 days remaining"
+        ]
+      },
+      {
+        "id": "0de4c1ba-6e4a-493b-a92d-f9f9071e0919",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>security, certificate-expiry, tls-handshake, cert-manager, acme</p>"
+      }
+    ]
+  }
+}

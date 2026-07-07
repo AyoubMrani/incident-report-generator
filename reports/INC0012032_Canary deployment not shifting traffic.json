@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Canary deployment not shifting traffic\n\nA canary release was started but 100% of traffic still hits the stable version.\n\nThe Istio control plane failed to push the updated route config to the sidecars, so the canary weight was recorded but never enforced at the data plane.\n\n1. Confirm the rollout set the weight but the mesh did not apply it\n2. Restart the istiod control-plane pod to force a config push\n3. Verify the VirtualService weights propagate to sidecars\n4. Resume the canary and watch real traffic split\n\nError Details\n```\nArgo Rollouts: 'canary weight 20% set but 0% observed'; VirtualService weight not applied; istio-proxy config not synced (CDS push failed)\n```\n\nTags: cicd, canary, istio, traffic-shift, argo-rollouts",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012032",
+      "title": "Canary deployment not shifting traffic",
+      "caller": "System Generated",
+      "category": "cicd",
+      "subcategory": "Argo Rollouts / Istio",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "d46204c6-d451-4423-810b-71de27a74c45",
+        "type": "heading",
+        "level": 1,
+        "content": "Canary deployment not shifting traffic",
+        "title": "Canary deployment not shifting traffic"
+      },
+      {
+        "id": "bbf64089-3b35-4b6b-8e32-305f8061a218",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A canary release was started but 100% of traffic still hits the stable version.</p>"
+      },
+      {
+        "id": "0e8178cd-90f2-4c44-a973-3f79c1c25bb1",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The Istio control plane failed to push the updated route config to the sidecars, so the canary weight was recorded but never enforced at the data plane.</p>"
+      },
+      {
+        "id": "ca67f869-350f-4f62-b8b0-93c51bef964f",
+        "type": "code",
+        "items": [
+          {
+            "id": "91eda474-f22d-4ecc-ab0a-a790b489a6b2",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Argo Rollouts / Istio \u2014 error / log snippet",
+            "content": "Argo Rollouts: 'canary weight 20% set but 0% observed'; VirtualService weight not applied; istio-proxy config not synced (CDS push failed)",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "bca8ed5a-d2fc-426b-b7af-0cf8d37af5b8",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the rollout set the weight but the mesh did not apply it",
+          "Restart the istiod control-plane pod to force a config push",
+          "Verify the VirtualService weights propagate to sidecars",
+          "Resume the canary and watch real traffic split"
+        ]
+      },
+      {
+        "id": "4e83385a-f6db-42e1-a694-f168462c153e",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>cicd, canary, istio, traffic-shift, argo-rollouts</p>"
+      }
+    ]
+  }
+}

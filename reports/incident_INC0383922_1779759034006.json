@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "incident_id": "INC0383922",
+    "title": "Correct Access Number Mismatch in OPV Export",
+    "caller": "Martin Rego Gerpe",
+    "category": "NRI Operations",
+    "subcategory": "Data Validation",
+    "date": "2026-05-26"
+  },
+  "blocks": [
+    {"id":"b1","type":"heading","level":1,"content":"Incident Summary"},
+    {"id":"b2","type":"paragraph","content":"The export shows a mismatch between the home ID and access number for one of the entries. The operator should validate the source sheet before modifying anything in the database."},
+    {"id":"b3","type":"heading","level":2,"content":"Mismatch Details"},
+    {"id":"b4","type":"table","headers":["Home ID","Expected Access Number","Observed Access Number"],"rows":[["JKL003330009991","450700111","450700119"],["JKL003330009992","450700112","450700112"]]},
+    {"id":"b5","type":"heading","level":2,"content":"Recommended Handling"},
+    {"id":"b6","type":"list","ordered":true,"items":["Check whether the spreadsheet contains a typo or stale value.","Compare the rows with the database export.","Correct only the incorrect access number entries.","Log the correction with the incident ID."]},
+    {"id":"b7","type":"code","language":"sql","content":"SELECT \"homeId\", \"accessNumber\" FROM fm_opv WHERE \"homeId\" IN ('JKL003330009991', 'JKL003330009992');"},
+    {"id":"b8","type":"description_box","label":"Validation Checklist","items":["Source sheet confirmed","Correct access number identified","Database row matches attachment","No unrelated rows modified"]},
+    {"id":"b9","type":"incident_example","incident_id":"INC0383922"}
+  ]
+}

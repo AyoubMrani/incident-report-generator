@@ -1,0 +1,79 @@
+{
+  "editingFilename": null,
+  "markdown": "# Network Inventory Flag Removal\n\nflagged records remained in netops.inventory_device after the circuit repair was confirmed. The root cause was stale status values left behind by a partial workflow rollback, so the cleanup had to remove only the obsolete flagged rows and preserve the active inventory history.\n\n1. Verify the affected device list against the change record\n\n2. Run a targeted UPDATE against only stale flagged rows\n\n3. Confirm no active inventory entries were modified\n\n4. Reconcile the audit trail with the network operations log\n\nTargeted cleanup query\n```sql\nupdate netops.inventory_device\nset status_flag = null, updated_at = now()\nwhere device_id in ('SW-ALB-44', 'RTR-NYC-19')\n  and status_flag = 'flagged';\n```\n\n| device_id | site | status_before |\n| --- | --- | --- |\n| SW-ALB-44 | albany-core | flagged |\n| RTR-NYC-19 | nyc-edge | flagged |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048201",
+      "title": "Network Inventory Flag Removal",
+      "caller": "Maya Chen",
+      "category": "Network Operations",
+      "subcategory": "Database Cleanup",
+      "date": "2024-02-14",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "5efbddcb-2c39-4222-9fe3-a4d3f6eb8ca1",
+        "type": "heading",
+        "level": 1,
+        "content": "Network Inventory Flag Removal",
+        "title": "Network Inventory Flag Removal"
+      },
+      {
+        "id": "c2c00d9a-6dca-4b4d-bb25-96f297691f4f",
+        "type": "paragraph",
+        "content": "<p>flagged records remained in netops.inventory_device after the circuit repair was confirmed. The root cause was stale status values left behind by a partial workflow rollback, so the cleanup had to remove only the obsolete flagged rows and preserve the active inventory history.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "9dc515b3-95db-4fd5-9b47-ed763df5da3b",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Verify the affected device list against the change record",
+          "Run a targeted UPDATE against only stale flagged rows",
+          "Confirm no active inventory entries were modified",
+          "Reconcile the audit trail with the network operations log"
+        ]
+      },
+      {
+        "id": "aeab264b-6d18-4508-98b5-5b33d5493be6",
+        "type": "code",
+        "items": [
+          {
+            "id": "ca92898c-ffbb-4c7d-9e62-c0462702f960",
+            "type": "code",
+            "title": "Primary SQL",
+            "header": "Targeted cleanup query",
+            "content": "update netops.inventory_device\nset status_flag = null, updated_at = now()\nwhere device_id in ('SW-ALB-44', 'RTR-NYC-19')\n  and status_flag = 'flagged';",
+            "language": "sql"
+          }
+        ]
+      },
+      {
+        "id": "6b46754e-764c-4346-aa9a-c72d73e63579",
+        "type": "table",
+        "title": "inventory cleanup preview",
+        "headers": [
+          "device_id",
+          "site",
+          "status_before"
+        ],
+        "rows": [
+          [
+            "SW-ALB-44",
+            "albany-core",
+            "flagged"
+          ],
+          [
+            "RTR-NYC-19",
+            "nyc-edge",
+            "flagged"
+          ]
+        ]
+      }
+    ]
+  }
+}

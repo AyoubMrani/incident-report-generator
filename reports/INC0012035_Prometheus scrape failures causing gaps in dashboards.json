@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Prometheus scrape failures causing gaps in dashboards\n\nGrafana panels show gaps; some targets appear to have no data for stretches of time.\n\nA service started exposing a high-cardinality metric (per-request label), so scrapes exceeded the timeout and sample limit and were dropped, creating gaps.\n\n1. Identify the target failing scrapes and the high-cardinality metric\n2. Drop or aggregate the offending label via metric_relabel_configs\n3. Raise scrape_timeout modestly if still needed\n4. Confirm the target scrapes reliably and gaps disappear\n\nError Details\n```\nPrometheus target DOWN: 'context deadline exceeded'; scrape_duration > scrape_timeout; too many series causing 'sample limit exceeded'\n```\n\nTags: monitoring, prometheus, scrape-timeout, high-cardinality, sample-limit",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012035",
+      "title": "Prometheus scrape failures causing gaps in dashboards",
+      "caller": "System Generated",
+      "category": "monitoring",
+      "subcategory": "Prometheus",
+      "date": "2026-07-05",
+      "priority": "P3"
+    },
+    "blocks": [
+      {
+        "id": "c6e216bd-8859-451b-99e7-e16768a1fc88",
+        "type": "heading",
+        "level": 1,
+        "content": "Prometheus scrape failures causing gaps in dashboards",
+        "title": "Prometheus scrape failures causing gaps in dashboards"
+      },
+      {
+        "id": "57ec13d3-1516-4f1d-ba35-d69ca6f49626",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Grafana panels show gaps; some targets appear to have no data for stretches of time.</p>"
+      },
+      {
+        "id": "b12ce04a-9c6f-4ee3-9345-701086f8f5cd",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A service started exposing a high-cardinality metric (per-request label), so scrapes exceeded the timeout and sample limit and were dropped, creating gaps.</p>"
+      },
+      {
+        "id": "cdac1b4e-743a-4527-aac3-04b23ffd6268",
+        "type": "code",
+        "items": [
+          {
+            "id": "a4e223eb-2bbe-4811-979b-a596d263ad2a",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Prometheus \u2014 error / log snippet",
+            "content": "Prometheus target DOWN: 'context deadline exceeded'; scrape_duration > scrape_timeout; too many series causing 'sample limit exceeded'",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "d49e912b-4e4e-4c52-b098-6d6e7cf70203",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify the target failing scrapes and the high-cardinality metric",
+          "Drop or aggregate the offending label via metric_relabel_configs",
+          "Raise scrape_timeout modestly if still needed",
+          "Confirm the target scrapes reliably and gaps disappear"
+        ]
+      },
+      {
+        "id": "7c4f6767-3c25-48c9-847e-23683bb61015",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>monitoring, prometheus, scrape-timeout, high-cardinality, sample-limit</p>"
+      }
+    ]
+  }
+}

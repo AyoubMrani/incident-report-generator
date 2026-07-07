@@ -1,0 +1,82 @@
+{
+  "editingFilename": null,
+  "markdown": "# VPN Tunnel Stabilization\n\nthe site-to-site tunnel disconnected whenever the peer renegotiated phase 2 with an aggressive idle timer. Adjusting the lifetime settings on both ends removed the intermittent drops.\n\n1. Check the tunnel status and renegotiation logs\n\n2. Align IKE and ESP lifetimes on both peers\n\n3. Persist the new settings and restart the tunnel\n\n4. Monitor for stable up-time after the change\n\nInspect and adjust the IPsec tunnel\n```bash\nshow vpn ipsec sa\nset vpn ipsec site-to-site peer 203.0.113.8 ike-group IKEv2\nset vpn ipsec site-to-site peer 203.0.113.8 lifetime 28800\n```\n\n| check | value |\n| --- | --- |\n| status | up |\n| rekeys | stable |\n\n![Evidence Capture](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nVisual evidence from the incident timeline.",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048218",
+      "title": "VPN Tunnel Stabilization",
+      "caller": "Lucas Green",
+      "category": "WAN Operations",
+      "subcategory": "VPN Tunnel Drop",
+      "date": "2025-09-30"
+    },
+    "blocks": [
+      {
+        "id": "8c259bc0-ffc3-476b-b6c1-27eae1036c85",
+        "type": "heading",
+        "level": 1,
+        "content": "VPN Tunnel Stabilization",
+        "title": "VPN Tunnel Stabilization"
+      },
+      {
+        "id": "60be86d3-3b4a-4103-b8ce-0721172ffcac",
+        "type": "paragraph",
+        "content": "<p>the site-to-site tunnel disconnected whenever the peer renegotiated phase 2 with an aggressive idle timer. Adjusting the lifetime settings on both ends removed the intermittent drops.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "5744d9a9-f256-451c-8754-b174df573d30",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Check the tunnel status and renegotiation logs",
+          "Align IKE and ESP lifetimes on both peers",
+          "Persist the new settings and restart the tunnel",
+          "Monitor for stable up-time after the change"
+        ]
+      },
+      {
+        "id": "5ee18e7a-57f3-438a-a386-806848ff4bbd",
+        "type": "code",
+        "items": [
+          {
+            "id": "a3891ef6-00f1-462e-a365-d8b5bba50c08",
+            "type": "code",
+            "title": "VPN Parameters",
+            "header": "Inspect and adjust the IPsec tunnel",
+            "content": "show vpn ipsec sa\nset vpn ipsec site-to-site peer 203.0.113.8 ike-group IKEv2\nset vpn ipsec site-to-site peer 203.0.113.8 lifetime 28800",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "ea8fa206-a472-4a87-aedb-202cc9cfed40",
+        "type": "table",
+        "title": "tunnel health check",
+        "headers": [
+          "check",
+          "value"
+        ],
+        "rows": [
+          [
+            "status",
+            "up"
+          ],
+          [
+            "rekeys",
+            "stable"
+          ]
+        ]
+      },
+      {
+        "id": "4ada8037-e370-403d-9539-d296e0c5c2ea",
+        "type": "image",
+        "title": "Evidence Capture",
+        "caption": "Visual evidence from the incident timeline.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    ]
+  }
+}

@@ -1,0 +1,70 @@
+{
+  "editingFilename": null,
+  "markdown": "# Outbound Mail Relay Fix\n\noutbound messages were rejected because the relay host name no longer matched the receiving mail server policy. The SMTP configuration was aligned with the approved sender domain and the queue drained normally.\n\n### Remediation\n\n1. Update the relay host and authenticated sender details\n\n2. Reload the mail service to apply the change\n\n3. Flush the outbound queue\n\n4. Verify the receiving server accepts new mail\n\nAdjust Postfix relay settings\n```bash\npostconf -e \"relayhost = [smtp-relay.example.net]:587\"\npostfix reload\nmailq\n```\n\n![Mail queue snapshot](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nScreenshot of the outbound queue before the fix.",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048217",
+      "title": "Outbound Mail Relay Fix",
+      "caller": "Mia Johnson",
+      "category": "Messaging Services",
+      "subcategory": "Email Relay Misconfiguration",
+      "date": "2025-08-15"
+    },
+    "blocks": [
+      {
+        "id": "9af52b54-9086-44f9-bfb8-9c6071a55962",
+        "type": "heading",
+        "level": 1,
+        "content": "Outbound Mail Relay Fix",
+        "title": "Outbound Mail Relay Fix"
+      },
+      {
+        "id": "c8b69a37-29b9-4b4a-9262-8c6507b7f86f",
+        "type": "paragraph",
+        "content": "<p>outbound messages were rejected because the relay host name no longer matched the receiving mail server policy. The SMTP configuration was aligned with the approved sender domain and the queue drained normally.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "454c27f9-6642-4738-bca6-d8947b0c2763",
+        "type": "heading",
+        "level": 3,
+        "content": "Remediation",
+        "title": "Remediation"
+      },
+      {
+        "id": "3f35cf01-3385-437f-986b-268a3add8262",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Update the relay host and authenticated sender details",
+          "Reload the mail service to apply the change",
+          "Flush the outbound queue",
+          "Verify the receiving server accepts new mail"
+        ]
+      },
+      {
+        "id": "f1114dcb-2861-4fd8-affc-9a913f3fbe70",
+        "type": "code",
+        "items": [
+          {
+            "id": "ae878498-8f07-4518-8586-ed5c7f7e2db1",
+            "type": "code",
+            "title": "Mail Relay Update",
+            "header": "Adjust Postfix relay settings",
+            "content": "postconf -e \"relayhost = [smtp-relay.example.net]:587\"\npostfix reload\nmailq",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "04278170-6688-4166-84c1-40caa4c6a46b",
+        "type": "image",
+        "title": "Mail queue snapshot",
+        "caption": "Screenshot of the outbound queue before the fix.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    ]
+  }
+}

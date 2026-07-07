@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# TLS handshake failures between two internal services\n\nService A cannot call Service B after a security hardening change; external traffic is unaffected.\n\nA hardening change disabled TLS 1.2 on Service B, but Service A's client library was pinned to TLS 1.2, so the two could not negotiate a common protocol.\n\n1. Capture the handshake_failure and confirm the protocol mismatch\n2. Enable TLS 1.3 in Service A's client (or temporarily re-allow 1.2 on B)\n3. Roll out and confirm mTLS handshakes succeed\n4. Coordinate protocol-deprecation changes across dependent services\n\nError Details\n```\nTLS handshake failed: alert handshake_failure (40); 'no cipher suites in common'; Service B now requires TLS 1.3 only, Service A pinned to TLS 1.2\n```\n\nTags: security, tls-handshake, handshake-failure-40, tls-version, mtls",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012026",
+      "title": "TLS handshake failures between two internal services",
+      "caller": "System Generated",
+      "category": "security",
+      "subcategory": "Internal Service Mesh (mTLS)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "b50dae6e-8ecb-4371-b55a-8df4f0cb12dd",
+        "type": "heading",
+        "level": 1,
+        "content": "TLS handshake failures between two internal services",
+        "title": "TLS handshake failures between two internal services"
+      },
+      {
+        "id": "3f6b5230-6dd8-46dc-a977-734101b311de",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Service A cannot call Service B after a security hardening change; external traffic is unaffected.</p>"
+      },
+      {
+        "id": "558833db-07e8-498c-b667-8f74559ad62c",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A hardening change disabled TLS 1.2 on Service B, but Service A's client library was pinned to TLS 1.2, so the two could not negotiate a common protocol.</p>"
+      },
+      {
+        "id": "c77dd014-e6eb-420e-a833-aa1a56c89dbf",
+        "type": "code",
+        "items": [
+          {
+            "id": "fd56f186-6cb9-45e5-84da-0f5574d725ce",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Internal Service Mesh (mTLS) \u2014 error / log snippet",
+            "content": "TLS handshake failed: alert handshake_failure (40); 'no cipher suites in common'; Service B now requires TLS 1.3 only, Service A pinned to TLS 1.2",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "2bdb51fe-c44a-49fe-b5a9-7ff86a71b6e1",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Capture the handshake_failure and confirm the protocol mismatch",
+          "Enable TLS 1.3 in Service A's client (or temporarily re-allow 1.2 on B)",
+          "Roll out and confirm mTLS handshakes succeed",
+          "Coordinate protocol-deprecation changes across dependent services"
+        ]
+      },
+      {
+        "id": "90d1b62e-9043-4afe-b5bd-399cdb51a63f",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>security, tls-handshake, handshake-failure-40, tls-version, mtls</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# False-positive disk alerts from a bind-mounted filesystem\n\nA disk-usage alert fires nightly but the disk is not actually full when checked.\n\nThe disk alert did not exclude pseudo/bind-mounted filesystems, so node_exporter reported 100% on read-only pseudo mounts that are always 'full', creating nightly false positives.\n\n1. Identify which filesystem the alert matches (a pseudo/bind mount)\n2. Add fstype and mountpoint exclusions to the node_exporter collector\n3. Update the alert query to filter real filesystems only\n4. Confirm the alert no longer fires overnight\n\nError Details\n```\nAlert 'DiskSpaceLow' filesystem=/proc/... usage=100%; node_exporter reporting pseudo-filesystems; label mountpoint duplicated via bind mount\n```\n\nTags: monitoring, false-positive, node-exporter, disk, bind-mount",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012023",
+      "title": "False-positive disk alerts from a bind-mounted filesystem",
+      "caller": "System Generated",
+      "category": "monitoring",
+      "subcategory": "Prometheus / node_exporter",
+      "date": "2026-07-05",
+      "priority": "P3"
+    },
+    "blocks": [
+      {
+        "id": "4db822c6-88ea-4cc4-b16e-c5ef0f561cab",
+        "type": "heading",
+        "level": 1,
+        "content": "False-positive disk alerts from a bind-mounted filesystem",
+        "title": "False-positive disk alerts from a bind-mounted filesystem"
+      },
+      {
+        "id": "11309f59-1984-480d-a958-3d204d518839",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A disk-usage alert fires nightly but the disk is not actually full when checked.</p>"
+      },
+      {
+        "id": "cb1957a2-6c0d-448a-a529-141e538a342d",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The disk alert did not exclude pseudo/bind-mounted filesystems, so node_exporter reported 100% on read-only pseudo mounts that are always 'full', creating nightly false positives.</p>"
+      },
+      {
+        "id": "c2b24496-c786-47c0-9991-34470bd9a830",
+        "type": "code",
+        "items": [
+          {
+            "id": "c9b7962b-e89c-4af9-ad13-cc5de8f85906",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Prometheus / node_exporter \u2014 error / log snippet",
+            "content": "Alert 'DiskSpaceLow' filesystem=/proc/... usage=100%; node_exporter reporting pseudo-filesystems; label mountpoint duplicated via bind mount",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "a9619311-ec11-4ad5-b0b9-4905df9e967e",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Identify which filesystem the alert matches (a pseudo/bind mount)",
+          "Add fstype and mountpoint exclusions to the node_exporter collector",
+          "Update the alert query to filter real filesystems only",
+          "Confirm the alert no longer fires overnight"
+        ]
+      },
+      {
+        "id": "4943f560-e139-4459-8c33-460fad702c09",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>monitoring, false-positive, node-exporter, disk, bind-mount</p>"
+      }
+    ]
+  }
+}

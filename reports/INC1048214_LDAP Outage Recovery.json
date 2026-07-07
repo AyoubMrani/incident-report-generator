@@ -1,0 +1,64 @@
+{
+  "editingFilename": null,
+  "markdown": "# LDAP Outage Recovery\n\nusers could not log in because the LDAP endpoint was unreachable after a network change isolated the directory cluster. The service was restored by correcting the route and restarting the auth proxy once connectivity returned.\n\n1. Confirm LDAP reachability from the application subnet\n\n2. Restore network path to the directory service\n\n3. Restart the auth proxy after connectivity is back\n\n4. Verify a sample login succeeds\n\nReachability test and route restore\n```bash\nldapsearch -H ldap://ldap01.example.net -x -b dc=example,dc=net\nroute add -net 10.40.0.0/24 gw 10.10.1.1\n```\n\nRelated incident: INC1048314",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048214",
+      "title": "LDAP Outage Recovery",
+      "caller": "Benjamin Hall",
+      "category": "Authentication Services",
+      "subcategory": "LDAP Authentication Outage",
+      "date": "2025-05-22",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "b3ca4107-50e4-455e-adad-ac3b5566553a",
+        "type": "heading",
+        "level": 1,
+        "content": "LDAP Outage Recovery",
+        "title": "LDAP Outage Recovery"
+      },
+      {
+        "id": "f26f90b4-ffce-4e51-9285-7176c263dcc4",
+        "type": "paragraph",
+        "content": "<p>users could not log in because the LDAP endpoint was unreachable after a network change isolated the directory cluster. The service was restored by correcting the route and restarting the auth proxy once connectivity returned.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "93defb1e-20e8-4659-ad42-68899e5368fc",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm LDAP reachability from the application subnet",
+          "Restore network path to the directory service",
+          "Restart the auth proxy after connectivity is back",
+          "Verify a sample login succeeds"
+        ]
+      },
+      {
+        "id": "e013601a-389b-4257-9bf7-4311ffb39bfa",
+        "type": "code",
+        "items": [
+          {
+            "id": "28ac9e4f-423a-4680-a8c5-1c0db43b1acd",
+            "type": "code",
+            "title": "LDAP Check",
+            "header": "Reachability test and route restore",
+            "content": "ldapsearch -H ldap://ldap01.example.net -x -b dc=example,dc=net\nroute add -net 10.40.0.0/24 gw 10.10.1.1",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "358e0968-8933-462e-beff-b38f26b8abf9",
+        "type": "incident_example",
+        "title": "Auth outage reference",
+        "incident_id": "INC1048314",
+        "link": ""
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Frontend infinite re-render freezing the browser tab\n\nOpening a specific page makes the browser tab freeze and eventually crash.\n\nA useEffect updated state on every render without a proper dependency array, creating an infinite render loop that pegged the CPU.\n\n1. Reproduce and confirm the maximum-update-depth error\n2. Add the correct dependency array / guard to the offending effect\n3. Verify renders settle and CPU returns to idle\n4. Add a lint rule for exhaustive-deps to catch it in future\n\nError Details\n```\nWarning: Maximum update depth exceeded; React error: 'Too many re-renders'; CPU pegged at 100% in the render loop\n```\n\nTags: frontend, react, infinite-render, max-update-depth, useeffect",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012033",
+      "title": "Frontend infinite re-render freezing the browser tab",
+      "caller": "System Generated",
+      "category": "frontend",
+      "subcategory": "Analytics Dashboard (React)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "f705b815-53e1-4a0e-a375-930c3e7b3edc",
+        "type": "heading",
+        "level": 1,
+        "content": "Frontend infinite re-render freezing the browser tab",
+        "title": "Frontend infinite re-render freezing the browser tab"
+      },
+      {
+        "id": "abc5a8bb-1748-48a9-8068-bce4aa891e55",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Opening a specific page makes the browser tab freeze and eventually crash.</p>"
+      },
+      {
+        "id": "2e70365c-b6dc-4cbc-a0b0-c010de122bc7",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A useEffect updated state on every render without a proper dependency array, creating an infinite render loop that pegged the CPU.</p>"
+      },
+      {
+        "id": "c75da445-85f7-40a5-bcce-cd901f3105d3",
+        "type": "code",
+        "items": [
+          {
+            "id": "cb90d91b-981b-45f8-9146-14fd6caea1e4",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Analytics Dashboard (React) \u2014 error / log snippet",
+            "content": "Warning: Maximum update depth exceeded; React error: 'Too many re-renders'; CPU pegged at 100% in the render loop",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "74968ce0-e9f0-4bcd-b499-f55d61f427f9",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Reproduce and confirm the maximum-update-depth error",
+          "Add the correct dependency array / guard to the offending effect",
+          "Verify renders settle and CPU returns to idle",
+          "Add a lint rule for exhaustive-deps to catch it in future"
+        ]
+      },
+      {
+        "id": "bca0d836-b0c4-44b8-9ceb-b18738787724",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>frontend, react, infinite-render, max-update-depth, useeffect</p>"
+      }
+    ]
+  }
+}

@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# API calls rejected with 401 after access token expiry not refreshed\n\nA batch integration starts failing every hour after running fine for the first hour.\n\nThe integration cached the OAuth access token but never used the refresh token, so once the 3600s access token expired every request returned 401.\n\n1. Decode the failing JWT and confirm the exp claim is in the past\n2. Implement refresh-token exchange before token expiry\n3. Add a 60s early-refresh buffer and retry-on-401 with one re-auth\n4. Verify the integration runs past the token lifetime\n\nError Details\n```\nHTTP/1.1 401 Unauthorized; WWW-Authenticate: Bearer error=\"invalid_token\", error_description=\"The access token expired\"; JWT exp claim in the past\n```\n\nTags: auth, oauth2, 401, token-expiry, jwt",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012008",
+      "title": "API calls rejected with 401 after access token expiry not refreshed",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "OAuth2 Authorization Server",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "c0a7bf9b-af04-4eb8-9762-2dfb7e91d2b3",
+        "type": "heading",
+        "level": 1,
+        "content": "API calls rejected with 401 after access token expiry not refreshed",
+        "title": "API calls rejected with 401 after access token expiry not refreshed"
+      },
+      {
+        "id": "eb2486b5-9d22-4bcd-9def-520a899d7eb2",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A batch integration starts failing every hour after running fine for the first hour.</p>"
+      },
+      {
+        "id": "f33380ad-569f-4d0a-b144-c01cbb4ade71",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The integration cached the OAuth access token but never used the refresh token, so once the 3600s access token expired every request returned 401.</p>"
+      },
+      {
+        "id": "81ec7ad0-bf45-4935-b829-0f822c5d7040",
+        "type": "code",
+        "items": [
+          {
+            "id": "7b92838e-393d-428a-8fda-4b9ac01344fa",
+            "type": "code",
+            "title": "Error Details",
+            "header": "OAuth2 Authorization Server \u2014 error / log snippet",
+            "content": "HTTP/1.1 401 Unauthorized; WWW-Authenticate: Bearer error=\"invalid_token\", error_description=\"The access token expired\"; JWT exp claim in the past",
+            "language": "http"
+          }
+        ]
+      },
+      {
+        "id": "31b054a5-416e-455d-b4c2-d3da7ce43a9d",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Decode the failing JWT and confirm the exp claim is in the past",
+          "Implement refresh-token exchange before token expiry",
+          "Add a 60s early-refresh buffer and retry-on-401 with one re-auth",
+          "Verify the integration runs past the token lifetime"
+        ]
+      },
+      {
+        "id": "2c20034f-e157-4fc2-a5fa-dc4e2e67d4f1",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, oauth2, 401, token-expiry, jwt</p>"
+      }
+    ]
+  }
+}

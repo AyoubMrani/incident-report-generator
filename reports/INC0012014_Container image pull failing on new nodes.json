@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Container image pull failing on new nodes\n\nNewly scaled nodes cannot start pods; existing pods are fine.\n\nThe image pull secret expired and was only refreshed on the original node pool; new nodes joined without the valid registry credentials.\n\n1. Confirm ImagePullBackOff and the 401 from the registry in pod events\n2. Rotate and re-create the imagePullSecret in the namespace\n3. Patch the service account to reference the new secret\n4. Trigger a new node and confirm images pull successfully\n\nError Details\n```\nFailed to pull image: rpc error: code = Unknown desc = failed to pull and unpack image: 401 Unauthorized from registry; ImagePullBackOff\n```\n\nTags: infra, kubernetes, imagepullbackoff, 401, registry-auth",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012014",
+      "title": "Container image pull failing on new nodes",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Container Registry / Kubernetes",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "1c119026-846d-464d-8056-cfa146258271",
+        "type": "heading",
+        "level": 1,
+        "content": "Container image pull failing on new nodes",
+        "title": "Container image pull failing on new nodes"
+      },
+      {
+        "id": "8bab5549-37ba-48ad-8d3f-c163de321908",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Newly scaled nodes cannot start pods; existing pods are fine.</p>"
+      },
+      {
+        "id": "ac2c191f-2b4a-4b56-91f0-5b78b02e6dc6",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The image pull secret expired and was only refreshed on the original node pool; new nodes joined without the valid registry credentials.</p>"
+      },
+      {
+        "id": "3337d3c5-c7b6-48bd-8897-3b2d3dd7a4cb",
+        "type": "code",
+        "items": [
+          {
+            "id": "4a8a9bac-c4f6-4925-ab23-ddeb3ddb7f8d",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Container Registry / Kubernetes \u2014 error / log snippet",
+            "content": "Failed to pull image: rpc error: code = Unknown desc = failed to pull and unpack image: 401 Unauthorized from registry; ImagePullBackOff",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "4b43d78a-d2e1-4e2f-81c9-26c2a537ee88",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm ImagePullBackOff and the 401 from the registry in pod events",
+          "Rotate and re-create the imagePullSecret in the namespace",
+          "Patch the service account to reference the new secret",
+          "Trigger a new node and confirm images pull successfully"
+        ]
+      },
+      {
+        "id": "ecd62617-a84c-42ba-952f-5b5d51960a28",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, kubernetes, imagepullbackoff, 401, registry-auth</p>"
+      }
+    ]
+  }
+}

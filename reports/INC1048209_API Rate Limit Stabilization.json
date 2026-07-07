@@ -1,0 +1,79 @@
+{
+  "editingFilename": null,
+  "markdown": "## API Rate Limit Stabilization\n\nthe partner integration was exceeding the provider quota because retry logic ignored 429 responses and reissued the same payload too aggressively. The mitigation lowered concurrency and added exponential backoff with jitter.\n\n1. Throttle concurrency at the client boundary\n\n2. Honor Retry-After headers on 429 responses\n\n3. Add backoff and jitter to retry handling\n\n4. Watch downstream queues for recovery\n\nExample API call with rate limit handling note\n```bash\ncurl -H \"Authorization: Bearer $TOKEN\" https://api.partner.example/v1/orders\n# respect Retry-After and back off on 429\n```\n\n| window | requests | limit |\n| --- | --- | --- |\n| 5 min | 980 | 1000 |\n| 1 min | 240 | 250 |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048209",
+      "title": "API Rate Limit Stabilization",
+      "caller": "Chloe Martin",
+      "category": "Integration Services",
+      "subcategory": "API Rate Limit Breach",
+      "date": "2024-11-19",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "1d1c5563-0401-4337-ac39-fbc967a32150",
+        "type": "heading",
+        "level": 2,
+        "content": "API Rate Limit Stabilization",
+        "title": "API Rate Limit Stabilization"
+      },
+      {
+        "id": "fefa8e52-572c-44f9-8e34-29c5694909cc",
+        "type": "paragraph",
+        "content": "<p>the partner integration was exceeding the provider quota because retry logic ignored 429 responses and reissued the same payload too aggressively. The mitigation lowered concurrency and added exponential backoff with jitter.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "64a4ebde-c124-4b5a-b57f-07970c5d47a3",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Throttle concurrency at the client boundary",
+          "Honor Retry-After headers on 429 responses",
+          "Add backoff and jitter to retry handling",
+          "Watch downstream queues for recovery"
+        ]
+      },
+      {
+        "id": "9cf5703f-f6ba-48a5-8e1a-1a99481b8b75",
+        "type": "code",
+        "items": [
+          {
+            "id": "726db117-26c0-46ad-bf8f-ce1414b7460f",
+            "type": "code",
+            "title": "Request Sample",
+            "header": "Example API call with rate limit handling note",
+            "content": "curl -H \"Authorization: Bearer $TOKEN\" https://api.partner.example/v1/orders\n# respect Retry-After and back off on 429",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "2c4d4741-1cf6-4427-8b52-14e1a4b33a08",
+        "type": "table",
+        "title": "rate limit snapshot",
+        "headers": [
+          "window",
+          "requests",
+          "limit"
+        ],
+        "rows": [
+          [
+            "5 min",
+            "980",
+            "1000"
+          ],
+          [
+            "1 min",
+            "240",
+            "250"
+          ]
+        ]
+      }
+    ]
+  }
+}

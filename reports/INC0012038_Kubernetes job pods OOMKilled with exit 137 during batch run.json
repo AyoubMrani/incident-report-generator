@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Kubernetes job pods OOMKilled with exit 137 during batch run\n\nA nightly batch Job fails partway; the pod restarts and fails again.\n\nThe batch loaded the entire input file into memory instead of streaming it; larger nightly inputs exceeded the 512Mi container limit and were OOMKilled (exit 137) \u2014 same exit code as the eviction incident but a different cause.\n\n1. Confirm OOMKilled exit 137 and correlate with input size\n2. Refactor the batch to stream/process the input in chunks\n3. Right-size the container memory limit for the workload\n4. Re-run the nightly Job and confirm it completes\n\nError Details\n```\nState: Terminated Reason: OOMKilled exit code 137; container memory limit 512Mi exceeded; last log line mid-batch before kill\n```\n\nTags: infra, kubernetes, oomkilled, exit-137, batch",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012038",
+      "title": "Kubernetes job pods OOMKilled with exit 137 during batch run",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Nightly ETL Job (Kubernetes)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "677dcfad-727c-4378-b338-19213dea6a4c",
+        "type": "heading",
+        "level": 1,
+        "content": "Kubernetes job pods OOMKilled with exit 137 during batch run",
+        "title": "Kubernetes job pods OOMKilled with exit 137 during batch run"
+      },
+      {
+        "id": "55ce5cc5-b68a-4839-acb5-9b1e1f56ccf9",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A nightly batch Job fails partway; the pod restarts and fails again.</p>"
+      },
+      {
+        "id": "153db811-f5a9-4362-a7f8-81a700be79bf",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The batch loaded the entire input file into memory instead of streaming it; larger nightly inputs exceeded the 512Mi container limit and were OOMKilled (exit 137) \u2014 same exit code as the eviction incident but a different cause.</p>"
+      },
+      {
+        "id": "f4a901ea-9f6d-42c3-a88e-6d9474ab0d77",
+        "type": "code",
+        "items": [
+          {
+            "id": "dc105a8e-f87c-4ff5-8883-f6921037f4f2",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Nightly ETL Job (Kubernetes) \u2014 error / log snippet",
+            "content": "State: Terminated Reason: OOMKilled exit code 137; container memory limit 512Mi exceeded; last log line mid-batch before kill",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "e87cea2f-3ea4-43ff-b26e-bd3f8a99bbe1",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm OOMKilled exit 137 and correlate with input size",
+          "Refactor the batch to stream/process the input in chunks",
+          "Right-size the container memory limit for the workload",
+          "Re-run the nightly Job and confirm it completes"
+        ]
+      },
+      {
+        "id": "2203915b-9a97-4060-b532-0b0b3972b333",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, kubernetes, oomkilled, exit-137, batch</p>"
+      }
+    ]
+  }
+}

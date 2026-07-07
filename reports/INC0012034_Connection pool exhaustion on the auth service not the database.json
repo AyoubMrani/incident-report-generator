@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Connection pool exhaustion on the auth service, not the database\n\nLogin requests hang and time out during peak; the database itself looks healthy.\n\nUnlike the payment-service incident, here the pool max (20) was simply undersized for peak login concurrency; the database had plenty of headroom, so the fix was pool sizing, not a leak.\n\n1. Confirm the DB is healthy and the bottleneck is the app-side pool\n2. Increase the Hikari maximumPoolSize within the DB's connection budget\n3. Add a queue timeout and backpressure on login\n4. Load-test peak login concurrency to validate the new size\n\nError Details\n```\nHTTP 503; 'Timeout acquiring connection from pool'; HikariPool waiting=61 active=20 max=20; but pg_stat_activity shows only 20 sessions\n```\n\nTags: auth, connection-pool, hikaricp, 503, pool-sizing",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012034",
+      "title": "Connection pool exhaustion on the auth service, not the database",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "Auth Service / PostgreSQL",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "b60b5040-9885-4930-81e2-3578c6c182b4",
+        "type": "heading",
+        "level": 1,
+        "content": "Connection pool exhaustion on the auth service, not the database",
+        "title": "Connection pool exhaustion on the auth service, not the database"
+      },
+      {
+        "id": "7bbbb2c9-c4ed-44e8-9edb-b0b0d659bde1",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Login requests hang and time out during peak; the database itself looks healthy.</p>"
+      },
+      {
+        "id": "c87e0828-f463-4852-9147-a078c164d38a",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>Unlike the payment-service incident, here the pool max (20) was simply undersized for peak login concurrency; the database had plenty of headroom, so the fix was pool sizing, not a leak.</p>"
+      },
+      {
+        "id": "d3e713c3-e4ed-4036-b9a8-9399c62b5c9e",
+        "type": "code",
+        "items": [
+          {
+            "id": "ed702265-27ca-47ee-a127-6c749e0ba2f0",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Auth Service / PostgreSQL \u2014 error / log snippet",
+            "content": "HTTP 503; 'Timeout acquiring connection from pool'; HikariPool waiting=61 active=20 max=20; but pg_stat_activity shows only 20 sessions",
+            "language": "sql"
+          }
+        ]
+      },
+      {
+        "id": "4be95d7d-902c-4537-8319-b513b9fd2426",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the DB is healthy and the bottleneck is the app-side pool",
+          "Increase the Hikari maximumPoolSize within the DB's connection budget",
+          "Add a queue timeout and backpressure on login",
+          "Load-test peak login concurrency to validate the new size"
+        ]
+      },
+      {
+        "id": "571415b9-8393-4db8-bf5e-006d495ad4b3",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, connection-pool, hikaricp, 503, pool-sizing</p>"
+      }
+    ]
+  }
+}

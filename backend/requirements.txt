@@ -1,0 +1,19 @@
+# ── Web framework (replaces Express server.ts) ────────────────────────────────
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.9        # form/file handling if needed by routes
+pydantic>=2.7.0
+
+# ── Chatbot module (ported into app/chatbot, Streamlit removed) ───────────────
+sentence-transformers>=3.0.0   # embedding model for retrieval
+numpy>=1.26.0
+ollama>=0.2.0                  # default LLM provider (self-hosted)
+python-docx>=1.0.0             # optional: only needed to index .docx reports
+Pillow>=10.0.0                 # optional: image handling for the vision path
+
+# Optional: Gemini provider (swappable alternative to Ollama). Uncomment to use.
+# google-genai>=0.3.0
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+pytest>=8.0.0
+httpx>=0.27.0                  # FastAPI TestClient dependency

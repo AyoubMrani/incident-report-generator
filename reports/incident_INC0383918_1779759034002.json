@@ -1,0 +1,21 @@
+{
+  "metadata": {
+    "incident_id": "INC0383918",
+    "title": "Remove Defective Port Status After Field Correction",
+    "caller": "Martin Rego Gerpe",
+    "category": "NRI Operations",
+    "subcategory": "Defective Port Cleanup",
+    "date": "2026-05-26"
+  },
+  "blocks": [
+    {"id":"b1","type":"heading","level":1,"content":"Incident Summary"},
+    {"id":"b2","type":"paragraph","content":"This request targets defective port records that must lose the D value in fm_opv after the port issue has been corrected in the source network record."},
+    {"id":"b3","type":"heading","level":2,"content":"Affected Records"},
+    {"id":"b4","type":"table","headers":["Home ID","Access Number","Current Status"],"rows":[["BCK007221188004","450912300","D"],["BCK007221188005","450912301","D"]]},
+    {"id":"b5","type":"heading","level":2,"content":"Action Plan"},
+    {"id":"b6","type":"list","ordered":true,"items":["Confirm the defect was already corrected in the field.","Verify the rows in fm_opv using homeId and accessNumber.","Set status to blank for the D entries only.","Add support task logs with the incident number."]},
+    {"id":"b7","type":"code","language":"sql","content":"SELECT \"homeId\", \"accessNumber\", \"status\" FROM fm_opv WHERE \"homeId\" IN ('BCK007221188004', 'BCK007221188005') AND \"accessNumber\" IN (450912300, 450912301);"},
+    {"id":"b8","type":"description_box","label":"Validation Checklist","items":["Caller is authorized","Correct D rows identified","Update completed successfully","Log created for audit"]},
+    {"id":"b9","type":"incident_example","incident_id":"INC0383918"}
+  ]
+}

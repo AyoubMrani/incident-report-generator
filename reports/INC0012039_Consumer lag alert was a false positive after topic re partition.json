@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Consumer lag alert was a false positive after topic re-partition\n\nA Kafka lag alert fired but consumers are actually healthy and processing in real time.\n\nThe topic was expanded from 6 to 12 partitions; the lag exporter treated the new partitions' missing committed offsets as huge lag, a false positive while consumers were fine.\n\n1. Confirm real end-to-end latency is normal despite the reported lag\n2. Let consumers commit offsets on the new partitions (or seed them)\n3. Fix the exporter to ignore partitions without committed offsets\n4. Confirm the alert clears and add a guard for future re-partitions\n\nError Details\n```\nAlert 'ConsumerLagHigh' lag=500k on partitions 6-11; but end-to-end latency normal; lag exporter reading offsets for newly added partitions with no committed offset\n```\n\nTags: monitoring, kafka, false-positive, consumer-lag, repartition",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012039",
+      "title": "Consumer lag alert was a false positive after topic re-partition",
+      "caller": "System Generated",
+      "category": "monitoring",
+      "subcategory": "Kafka Lag Exporter / Alerting",
+      "date": "2026-07-05",
+      "priority": "P3"
+    },
+    "blocks": [
+      {
+        "id": "569f4dd4-6a74-45d1-9ee6-9c024f4cd547",
+        "type": "heading",
+        "level": 1,
+        "content": "Consumer lag alert was a false positive after topic re-partition",
+        "title": "Consumer lag alert was a false positive after topic re-partition"
+      },
+      {
+        "id": "38f447f4-e886-487c-93b5-d074a2dd394f",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A Kafka lag alert fired but consumers are actually healthy and processing in real time.</p>"
+      },
+      {
+        "id": "963c9e19-60c4-4b16-ba11-638e1160836c",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The topic was expanded from 6 to 12 partitions; the lag exporter treated the new partitions' missing committed offsets as huge lag, a false positive while consumers were fine.</p>"
+      },
+      {
+        "id": "e69dcfd8-b923-4fd1-be18-4e65043d0978",
+        "type": "code",
+        "items": [
+          {
+            "id": "4d9644f1-66ed-4f6f-b591-351b10e73efb",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Kafka Lag Exporter / Alerting \u2014 error / log snippet",
+            "content": "Alert 'ConsumerLagHigh' lag=500k on partitions 6-11; but end-to-end latency normal; lag exporter reading offsets for newly added partitions with no committed offset",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "4f3ad006-803d-4e87-8e72-8eb213517c4d",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm real end-to-end latency is normal despite the reported lag",
+          "Let consumers commit offsets on the new partitions (or seed them)",
+          "Fix the exporter to ignore partitions without committed offsets",
+          "Confirm the alert clears and add a guard for future re-partitions"
+        ]
+      },
+      {
+        "id": "075a8ef0-c874-483a-bc8a-77b629fe4a9e",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>monitoring, kafka, false-positive, consumer-lag, repartition</p>"
+      }
+    ]
+  }
+}

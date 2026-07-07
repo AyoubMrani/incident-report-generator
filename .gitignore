@@ -1,11 +1,21 @@
-node_modules/
-build/
-dist/
-coverage/
-.DS_Store
-*.log
-.env*
-!.env.example
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
 
-# Local Netlify folder
-.netlify
+# Node / frontend
+node_modules/
+frontend/dist/
+
+# Env
+.env
+.env.local
+
+# OS / editor
+.DS_Store
+
+# Local data (reports are shared sample data; keep them tracked for now, but
+# ignore anything the running app writes at these ad-hoc paths)
+/data/

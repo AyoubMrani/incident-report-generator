@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Java service OOM killed repeatedly under steady load\n\nA service restarts every few hours on its own; users see brief error spikes at restart.\n\nAn in-memory cache had no eviction policy, so it grew unbounded until the JVM heap was exhausted and the kernel OOM-killer terminated the process.\n\n1. Capture a heap dump and confirm the cache dominates retained heap\n2. Add a size/TTL-bounded eviction policy to the cache\n3. Set -Xmx explicitly and enable HeapDumpOnOutOfMemoryError\n4. Monitor heap usage across a full traffic cycle\n\nError Details\n```\njava.lang.OutOfMemoryError: Java heap space; GC overhead limit exceeded; dmesg: Out of memory: Killed process 1892 (java) total-vm:6120484kB\n```\n\nTags: infra, oom, heap, memory-leak, jvm",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012011",
+      "title": "Java service OOM killed repeatedly under steady load",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Catalog Service (JVM)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "1907d683-478d-406f-9efd-66db5da8219c",
+        "type": "heading",
+        "level": 1,
+        "content": "Java service OOM killed repeatedly under steady load",
+        "title": "Java service OOM killed repeatedly under steady load"
+      },
+      {
+        "id": "627c2ebc-07d1-4418-92f8-a10b976a2e23",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A service restarts every few hours on its own; users see brief error spikes at restart.</p>"
+      },
+      {
+        "id": "79ee1b42-1e27-4522-b904-e0cabc2a858a",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>An in-memory cache had no eviction policy, so it grew unbounded until the JVM heap was exhausted and the kernel OOM-killer terminated the process.</p>"
+      },
+      {
+        "id": "ced5b5cd-73e8-4446-bf2f-8df812ddfbdd",
+        "type": "code",
+        "items": [
+          {
+            "id": "ded26a4f-2210-4cfd-ab76-762f92c47e30",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Catalog Service (JVM) \u2014 error / log snippet",
+            "content": "java.lang.OutOfMemoryError: Java heap space; GC overhead limit exceeded; dmesg: Out of memory: Killed process 1892 (java) total-vm:6120484kB",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "f3c5b230-5b34-4fd6-91d3-1e4dc04d1dd5",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Capture a heap dump and confirm the cache dominates retained heap",
+          "Add a size/TTL-bounded eviction policy to the cache",
+          "Set -Xmx explicitly and enable HeapDumpOnOutOfMemoryError",
+          "Monitor heap usage across a full traffic cycle"
+        ]
+      },
+      {
+        "id": "7aefe0ce-9117-4c6a-8cde-8c04e925abd5",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, oom, heap, memory-leak, jvm</p>"
+      }
+    ]
+  }
+}

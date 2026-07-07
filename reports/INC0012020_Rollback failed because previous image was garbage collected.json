@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Rollback failed because previous image was garbage collected\n\nA bad release went out and the on-call attempt to roll back failed, extending the outage.\n\nA registry retention policy garbage-collected the prior image, so the rollback had no image to pull; the deploy pipeline relied on 'latest'-style tags that were overwritten.\n\n1. Confirm the rollback fails on manifest unknown for the old tag\n2. Rebuild the previous version from the tagged commit and push it\n3. Deploy the rebuilt image to restore service\n4. Switch to immutable image tags and exclude release images from GC\n\nError Details\n```\nkubectl rollout undo: 'Failed to pull image tag v2.3.1: manifest unknown'; registry GC removed untagged manifests; ErrImagePull on rollback\n```\n\nTags: cicd, rollback, manifest-unknown, registry-gc, immutable-tags",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012020",
+      "title": "Rollback failed because previous image was garbage collected",
+      "caller": "System Generated",
+      "category": "cicd",
+      "subcategory": "CI/CD Pipeline / Container Registry",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "8d8c5050-70e5-44ee-b51f-5491799f3193",
+        "type": "heading",
+        "level": 1,
+        "content": "Rollback failed because previous image was garbage collected",
+        "title": "Rollback failed because previous image was garbage collected"
+      },
+      {
+        "id": "8e82667c-af2a-40a2-84f1-df0cee49f2b4",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A bad release went out and the on-call attempt to roll back failed, extending the outage.</p>"
+      },
+      {
+        "id": "ffc1661b-162f-4771-9193-24e8e7cc6e5c",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A registry retention policy garbage-collected the prior image, so the rollback had no image to pull; the deploy pipeline relied on 'latest'-style tags that were overwritten.</p>"
+      },
+      {
+        "id": "1b96b9be-3f87-4c38-950d-12ceecf0adac",
+        "type": "code",
+        "items": [
+          {
+            "id": "ba70e9c9-7ed1-40b3-b2a3-d48f683a1969",
+            "type": "code",
+            "title": "Error Details",
+            "header": "CI/CD Pipeline / Container Registry \u2014 error / log snippet",
+            "content": "kubectl rollout undo: 'Failed to pull image tag v2.3.1: manifest unknown'; registry GC removed untagged manifests; ErrImagePull on rollback",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "03688017-1f35-4c37-b25f-e8da8b022b9d",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the rollback fails on manifest unknown for the old tag",
+          "Rebuild the previous version from the tagged commit and push it",
+          "Deploy the rebuilt image to restore service",
+          "Switch to immutable image tags and exclude release images from GC"
+        ]
+      },
+      {
+        "id": "b53272cc-efd5-4665-a6b2-aa456d0ac23b",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>cicd, rollback, manifest-unknown, registry-gc, immutable-tags</p>"
+      }
+    ]
+  }
+}

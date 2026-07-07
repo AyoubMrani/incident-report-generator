@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Production deployment failed midway leaving mixed versions\n\nUsers report inconsistent behavior; some requests hit the new version and some the old.\n\nThe new release required a DB migration that had not run, so new pods failed their readiness probe and the rollout stalled, leaving old and new pods both serving.\n\n1. Confirm the stalled rollout and failing readiness on new pods\n2. Run the pending DB migration as a pre-deploy job\n3. Resume the rollout and confirm all replicas become ready\n4. Add a migration gate to the deploy pipeline\n\nError Details\n```\nhelm upgrade failed: 'context deadline exceeded'; rollout status: 3 of 8 replicas updated then stalled; readiness probe failing HTTP 500 on new pods\n```\n\nTags: cicd, deployment, helm, rollout-stalled, migration",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012019",
+      "title": "Production deployment failed midway leaving mixed versions",
+      "caller": "System Generated",
+      "category": "cicd",
+      "subcategory": "Checkout Service (Helm/K8s)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "aee619c4-e0af-4f61-8e44-897223250293",
+        "type": "heading",
+        "level": 1,
+        "content": "Production deployment failed midway leaving mixed versions",
+        "title": "Production deployment failed midway leaving mixed versions"
+      },
+      {
+        "id": "8822b4f4-1bed-4728-b8e2-6cf27fbe08b8",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Users report inconsistent behavior; some requests hit the new version and some the old.</p>"
+      },
+      {
+        "id": "6dbc353f-c1d4-4bf7-aa55-17b08865fc46",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The new release required a DB migration that had not run, so new pods failed their readiness probe and the rollout stalled, leaving old and new pods both serving.</p>"
+      },
+      {
+        "id": "e2394778-f0c5-435b-996c-c80db6022fa1",
+        "type": "code",
+        "items": [
+          {
+            "id": "44e570bc-3409-4763-bdf8-72fccced3821",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Checkout Service (Helm/K8s) \u2014 error / log snippet",
+            "content": "helm upgrade failed: 'context deadline exceeded'; rollout status: 3 of 8 replicas updated then stalled; readiness probe failing HTTP 500 on new pods",
+            "language": "http"
+          }
+        ]
+      },
+      {
+        "id": "89f99f00-5d7f-4491-9f3d-07d18b1732a3",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the stalled rollout and failing readiness on new pods",
+          "Run the pending DB migration as a pre-deploy job",
+          "Resume the rollout and confirm all replicas become ready",
+          "Add a migration gate to the deploy pipeline"
+        ]
+      },
+      {
+        "id": "be3b6d48-749d-400a-ab4f-3281e462c8ba",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>cicd, deployment, helm, rollout-stalled, migration</p>"
+      }
+    ]
+  }
+}

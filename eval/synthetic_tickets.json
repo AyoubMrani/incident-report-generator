@@ -1,0 +1,722 @@
+[
+  {
+    "ticket_id": "INC0012001",
+    "title": "VPN clients unable to establish tunnel after maintenance window",
+    "domain": "networking",
+    "severity": "P1",
+    "reported_symptom": "Remote employees report they cannot connect to the corporate VPN; the client hangs at 'Negotiating security policies' and eventually times out.",
+    "error_details": "IKE_SA phase 2 failed: NO_PROPOSAL_CHOSEN; strongSwan charon: received AUTHENTICATION_FAILED notify error; retransmit 5 of request message ID 0",
+    "root_cause": "A firmware update on the VPN concentrator reset the IKEv2 proposal list, dropping AES-256-GCM which the client profiles required, leaving no matching cipher proposal between peers.",
+    "resolution_steps": [
+      "Compare the pre- and post-maintenance IKEv2 proposal configuration on the concentrator",
+      "Re-add the AES-256-GCM / SHA-384 / DH group 20 proposal to the phase 2 policy",
+      "Force a re-key and confirm one pilot client establishes a tunnel",
+      "Roll out to all client profiles and monitor concentrator SA table"
+    ],
+    "affected_service": "GlobalProtect VPN Concentrator",
+    "resolution_time_minutes": 95,
+    "tags": ["vpn", "ikev2", "no-proposal-chosen", "cipher-mismatch", "strongswan"]
+  },
+  {
+    "ticket_id": "INC0012002",
+    "title": "Intermittent DNS resolution failures for internal services",
+    "domain": "networking",
+    "severity": "P2",
+    "reported_symptom": "Applications intermittently fail to reach internal hostnames; retries usually succeed a few seconds later.",
+    "error_details": "dig: ;; connection timed out; no servers could be reached; SERVFAIL for api.internal.corp; resolver returned NXDOMAIN intermittently",
+    "root_cause": "One of three internal resolvers had a stale root hints file and was silently failing recursive queries; round-robin sent ~1/3 of queries to the bad resolver.",
+    "resolution_steps": [
+      "Query each resolver directly to isolate which returns SERVFAIL",
+      "Refresh root hints and flush the cache on the failing resolver",
+      "Restart the named service and re-run validation queries",
+      "Add a health check to the resolver load-balancer pool"
+    ],
+    "affected_service": "Internal DNS (BIND9)",
+    "resolution_time_minutes": 60,
+    "tags": ["dns", "servfail", "resolver", "bind9", "intermittent"]
+  },
+  {
+    "ticket_id": "INC0012003",
+    "title": "Load balancer returning 503 for checkout service",
+    "domain": "networking",
+    "severity": "P1",
+    "reported_symptom": "Customers get an error page at checkout during peak traffic; the site works fine for browsing.",
+    "error_details": "HTTP/1.1 503 Service Unavailable; HAProxy: backend checkout_be has no server available (all DOWN); health check L7STS/500 in 2001ms",
+    "root_cause": "The checkout backend health check hit a /healthz endpoint that itself called a slow downstream; under load it exceeded the 2s check timeout, so HAProxy marked all backends down even though they could serve real traffic.",
+    "resolution_steps": [
+      "Confirm backends are actually serving via direct curl to pod IPs",
+      "Point the health check at a lightweight /livez endpoint that has no downstream calls",
+      "Raise the health-check timeout and increase the rise/fall thresholds",
+      "Reload HAProxy and watch the backend UP/DOWN transitions"
+    ],
+    "affected_service": "HAProxy (checkout tier)",
+    "resolution_time_minutes": 45,
+    "tags": ["load-balancer", "haproxy", "503", "health-check", "checkout"]
+  },
+  {
+    "ticket_id": "INC0012004",
+    "title": "Payment API returning 503 due to upstream connection pool exhaustion",
+    "domain": "database",
+    "severity": "P1",
+    "reported_symptom": "Payment API sporadically returns errors; error rate climbs with traffic and recovers when traffic drops.",
+    "error_details": "HTTP/1.1 503; HikariPool-1 - Connection is not available, request timed out after 30000ms; active=50 idle=0 waiting=37",
+    "root_cause": "A new reporting job opened long-lived connections without returning them to the pool, starving the payment service which shared the same 50-connection Hikari pool.",
+    "resolution_steps": [
+      "Inspect HikariCP metrics to confirm active connections pinned at max",
+      "Identify the reporting job holding connections via pg_stat_activity",
+      "Move the reporting workload to a separate pool / read replica",
+      "Add a leak-detection threshold and connection max-lifetime"
+    ],
+    "affected_service": "Payment API / PostgreSQL",
+    "resolution_time_minutes": 110,
+    "tags": ["database", "connection-pool", "hikaricp", "503", "exhaustion"]
+  },
+  {
+    "ticket_id": "INC0012005",
+    "title": "Recurring deadlocks on orders table during flash sale",
+    "domain": "database",
+    "severity": "P2",
+    "reported_symptom": "Order submissions occasionally fail and must be retried by the client during high-traffic sales.",
+    "error_details": "ERROR: deadlock detected; DETAIL: Process 2841 waits for ShareLock on transaction 99231; Process 2902 waits for ShareLock on transaction 99244; SQLSTATE 40P01",
+    "root_cause": "Two code paths updated orders and inventory rows in opposite order, so concurrent transactions acquired locks in a cycle under load.",
+    "resolution_steps": [
+      "Capture the deadlock graph from PostgreSQL logs",
+      "Standardize lock acquisition order (orders before inventory) across both paths",
+      "Add a bounded retry with jitter for SQLSTATE 40P01",
+      "Load-test the fix with concurrent order simulation"
+    ],
+    "affected_service": "Orders Database (PostgreSQL)",
+    "resolution_time_minutes": 130,
+    "tags": ["database", "deadlock", "40P01", "lock-ordering", "postgres"]
+  },
+  {
+    "ticket_id": "INC0012006",
+    "title": "Read replica falling behind primary by several minutes",
+    "domain": "database",
+    "severity": "P2",
+    "reported_symptom": "Users report seeing stale data on dashboards that read from the replica; writes appear correct on the primary.",
+    "error_details": "pg_stat_replication: replay_lag = 00:04:37; wal sender state 'catchup'; replica log: recovery still in progress, LSN 3F/A8000000 behind primary",
+    "root_cause": "A large bulk DELETE on the primary generated a burst of WAL that the single-threaded replay on the replica could not keep up with; disk I/O on the replica saturated.",
+    "resolution_steps": [
+      "Confirm replay_lag trend and check replica disk I/O saturation",
+      "Throttle or batch the bulk DELETE on the primary",
+      "Increase max_parallel_workers and consider faster storage for the replica",
+      "Monitor replay_lag returns to under 5 seconds"
+    ],
+    "affected_service": "Analytics Read Replica (PostgreSQL)",
+    "resolution_time_minutes": 75,
+    "tags": ["database", "replication-lag", "wal", "replica", "postgres"]
+  },
+  {
+    "ticket_id": "INC0012007",
+    "title": "SSO login loop after IdP metadata rotation",
+    "domain": "auth",
+    "severity": "P1",
+    "reported_symptom": "After signing in, users are bounced back to the login page in an endless redirect loop across all internal apps.",
+    "error_details": "SAML response validation failed: signature does not match; opensaml: SecurityPolicyException 'Signature trust establishment failed'; HTTP 302 loop between SP and IdP",
+    "root_cause": "The IdP rotated its signing certificate but the SP's SAML metadata still pinned the old certificate, so every signed assertion failed validation and the SP re-initiated login.",
+    "resolution_steps": [
+      "Reproduce and capture the SAML response with a browser SAML tracer",
+      "Fetch and import the IdP's current signing certificate into SP metadata",
+      "Reload the SP metadata and clear cached assertions",
+      "Verify a full login round-trip succeeds for a test user"
+    ],
+    "affected_service": "SSO / SAML Service Provider",
+    "resolution_time_minutes": 70,
+    "tags": ["auth", "sso", "saml", "signature-validation", "redirect-loop"]
+  },
+  {
+    "ticket_id": "INC0012008",
+    "title": "API calls rejected with 401 after access token expiry not refreshed",
+    "domain": "auth",
+    "severity": "P2",
+    "reported_symptom": "A batch integration starts failing every hour after running fine for the first hour.",
+    "error_details": "HTTP/1.1 401 Unauthorized; WWW-Authenticate: Bearer error=\"invalid_token\", error_description=\"The access token expired\"; JWT exp claim in the past",
+    "root_cause": "The integration cached the OAuth access token but never used the refresh token, so once the 3600s access token expired every request returned 401.",
+    "resolution_steps": [
+      "Decode the failing JWT and confirm the exp claim is in the past",
+      "Implement refresh-token exchange before token expiry",
+      "Add a 60s early-refresh buffer and retry-on-401 with one re-auth",
+      "Verify the integration runs past the token lifetime"
+    ],
+    "affected_service": "OAuth2 Authorization Server",
+    "resolution_time_minutes": 55,
+    "tags": ["auth", "oauth2", "401", "token-expiry", "jwt"]
+  },
+  {
+    "ticket_id": "INC0012009",
+    "title": "MFA push notifications not delivered to a subset of users",
+    "domain": "auth",
+    "severity": "P2",
+    "reported_symptom": "Some users never receive the MFA push prompt and are locked out after the timeout; SMS fallback works.",
+    "error_details": "MFA provider log: APNs response 410 'Unregistered'; FCM error 'NotRegistered'; push token invalidated after device OS upgrade",
+    "root_cause": "After a mobile OS update, device push tokens were rotated but the MFA app failed to re-register the new token with the provider, so pushes went to dead tokens.",
+    "resolution_steps": [
+      "Correlate affected users to a recent device OS upgrade",
+      "Force the MFA app to re-register push tokens on next launch",
+      "Purge invalidated tokens (APNs 410 / FCM NotRegistered) from the provider",
+      "Confirm push delivery for a re-registered test device"
+    ],
+    "affected_service": "MFA Push Service",
+    "resolution_time_minutes": 85,
+    "tags": ["auth", "mfa", "push", "apns-410", "token-registration"]
+  },
+  {
+    "ticket_id": "INC0012010",
+    "title": "Log partition full causing application write failures",
+    "domain": "infra",
+    "severity": "P1",
+    "reported_symptom": "Application suddenly stops accepting requests and the process appears alive but unresponsive.",
+    "error_details": "OSError: [Errno 28] No space left on device; /var/log at 100% (df -h); logrotate: error creating output file: Disk quota exceeded",
+    "root_cause": "Debug logging was accidentally left enabled in production, filling /var/log; logrotate's compression could not keep pace and the partition hit 100%, blocking all writes including the app's own state files.",
+    "resolution_steps": [
+      "Identify the largest log files with du and confirm partition at 100%",
+      "Truncate/compress the runaway debug logs to free space immediately",
+      "Revert the log level to WARN in production config",
+      "Add a disk-usage alert at 80% and a separate volume for logs"
+    ],
+    "affected_service": "Order Processing Host",
+    "resolution_time_minutes": 40,
+    "tags": ["infra", "disk-full", "errno-28", "logrotate", "no-space"]
+  },
+  {
+    "ticket_id": "INC0012011",
+    "title": "Java service OOM killed repeatedly under steady load",
+    "domain": "infra",
+    "severity": "P2",
+    "reported_symptom": "A service restarts every few hours on its own; users see brief error spikes at restart.",
+    "error_details": "java.lang.OutOfMemoryError: Java heap space; GC overhead limit exceeded; dmesg: Out of memory: Killed process 1892 (java) total-vm:6120484kB",
+    "root_cause": "An in-memory cache had no eviction policy, so it grew unbounded until the JVM heap was exhausted and the kernel OOM-killer terminated the process.",
+    "resolution_steps": [
+      "Capture a heap dump and confirm the cache dominates retained heap",
+      "Add a size/TTL-bounded eviction policy to the cache",
+      "Set -Xmx explicitly and enable HeapDumpOnOutOfMemoryError",
+      "Monitor heap usage across a full traffic cycle"
+    ],
+    "affected_service": "Catalog Service (JVM)",
+    "resolution_time_minutes": 120,
+    "tags": ["infra", "oom", "heap", "memory-leak", "jvm"]
+  },
+  {
+    "ticket_id": "INC0012012",
+    "title": "Kubernetes pods stuck in CrashLoopBackOff after config change",
+    "domain": "infra",
+    "severity": "P1",
+    "reported_symptom": "A deployment rolled out and the new pods never become ready; the service is down.",
+    "error_details": "CrashLoopBackOff; container exited with code 1; kubectl logs: 'FATAL: could not parse config: unexpected key redis_ur'; Back-off restarting failed container",
+    "root_cause": "A typo in the ConfigMap key (redis_ur instead of redis_url) caused the app to fail config parsing on startup and exit(1), triggering the crash loop.",
+    "resolution_steps": [
+      "Read the crashing container's logs to find the parse error",
+      "Fix the ConfigMap key typo (redis_ur -> redis_url)",
+      "Roll the deployment to pick up the corrected ConfigMap",
+      "Confirm pods reach Ready and add config schema validation to CI"
+    ],
+    "affected_service": "Session Service (Kubernetes)",
+    "resolution_time_minutes": 35,
+    "tags": ["infra", "kubernetes", "crashloopbackoff", "exit-1", "configmap"]
+  },
+  {
+    "ticket_id": "INC0012013",
+    "title": "Pods evicted due to node memory pressure",
+    "domain": "infra",
+    "severity": "P2",
+    "reported_symptom": "Random pods disappear and reschedule during busy periods; some requests fail during the shuffle.",
+    "error_details": "Pod evicted: reason 'Evicted' message 'The node was low on resource: memory'; kubelet: attempting to reclaim memory; OOMKilled containers exit code 137",
+    "root_cause": "Pods had no memory limits set, so a few noisy neighbors consumed node memory until kubelet triggered eviction of lower-priority pods (exit 137).",
+    "resolution_steps": [
+      "Identify the node under memory pressure and the top-consuming pods",
+      "Set requests and limits on the offending workloads",
+      "Add pod priority classes so critical pods survive eviction",
+      "Verify no further evictions during peak load"
+    ],
+    "affected_service": "Worker Node Pool (Kubernetes)",
+    "resolution_time_minutes": 90,
+    "tags": ["infra", "kubernetes", "eviction", "exit-137", "memory-pressure"]
+  },
+  {
+    "ticket_id": "INC0012014",
+    "title": "Container image pull failing on new nodes",
+    "domain": "infra",
+    "severity": "P2",
+    "reported_symptom": "Newly scaled nodes cannot start pods; existing pods are fine.",
+    "error_details": "Failed to pull image: rpc error: code = Unknown desc = failed to pull and unpack image: 401 Unauthorized from registry; ImagePullBackOff",
+    "root_cause": "The image pull secret expired and was only refreshed on the original node pool; new nodes joined without the valid registry credentials.",
+    "resolution_steps": [
+      "Confirm ImagePullBackOff and the 401 from the registry in pod events",
+      "Rotate and re-create the imagePullSecret in the namespace",
+      "Patch the service account to reference the new secret",
+      "Trigger a new node and confirm images pull successfully"
+    ],
+    "affected_service": "Container Registry / Kubernetes",
+    "resolution_time_minutes": 50,
+    "tags": ["infra", "kubernetes", "imagepullbackoff", "401", "registry-auth"]
+  },
+  {
+    "ticket_id": "INC0012015",
+    "title": "Dashboard renders blank on Safari after frontend deploy",
+    "domain": "frontend",
+    "severity": "P2",
+    "reported_symptom": "Safari users see a blank white page on the dashboard; Chrome and Firefox work fine.",
+    "error_details": "Uncaught SyntaxError: Unexpected token '?'; console: optional chaining not supported; bundle used ?. without transpilation target for older Safari",
+    "root_cause": "A build config change set the Babel target too high, so optional-chaining syntax shipped untranspiled and crashed on older Safari engines.",
+    "resolution_steps": [
+      "Reproduce on the affected Safari version and capture the SyntaxError",
+      "Restore the browserslist target to include the supported Safari range",
+      "Rebuild and verify the bundle transpiles optional chaining",
+      "Add a cross-browser smoke test to the pipeline"
+    ],
+    "affected_service": "Web Dashboard (SPA)",
+    "resolution_time_minutes": 65,
+    "tags": ["frontend", "safari", "syntaxerror", "transpilation", "optional-chaining"]
+  },
+  {
+    "ticket_id": "INC0012016",
+    "title": "Client-side API timeouts on reports page",
+    "domain": "frontend",
+    "severity": "P3",
+    "reported_symptom": "The reports page spinner runs forever for large date ranges; small ranges load fine.",
+    "error_details": "AxiosError: timeout of 10000ms exceeded (ECONNABORTED); network tab shows request pending then cancelled; backend responds in ~14s",
+    "root_cause": "The client's 10s Axios timeout was shorter than the backend's response time for large report queries, so the client aborted a request the server would have completed.",
+    "resolution_steps": [
+      "Confirm the backend completes the query (just slowly) via server logs",
+      "Raise the client timeout for the reports endpoint and show progress UI",
+      "Add server-side pagination for large date ranges",
+      "Verify large-range reports load without client abort"
+    ],
+    "affected_service": "Reports UI",
+    "resolution_time_minutes": 45,
+    "tags": ["frontend", "timeout", "econnaborted", "axios", "client-side"]
+  },
+  {
+    "ticket_id": "INC0012017",
+    "title": "Kafka consumer group lag growing without bound",
+    "domain": "messaging",
+    "severity": "P1",
+    "reported_symptom": "Downstream data is increasingly stale; events are being produced faster than they are processed.",
+    "error_details": "consumer lag = 1.2M messages; group coordinator: 'Member rebalance timed out'; error CommitFailedException: 'cannot complete commit since group already rebalanced'",
+    "root_cause": "A slow message handler exceeded max.poll.interval.ms, causing the consumer to be kicked from the group; the resulting constant rebalancing meant almost no progress was made.",
+    "resolution_steps": [
+      "Confirm growing lag and repeated rebalances in the consumer group",
+      "Reduce max.poll.records and move slow work off the poll thread",
+      "Increase max.poll.interval.ms to a safe bound",
+      "Redeploy and watch lag drain to zero"
+    ],
+    "affected_service": "Kafka Consumer (events pipeline)",
+    "resolution_time_minutes": 105,
+    "tags": ["messaging", "kafka", "consumer-lag", "rebalance", "max-poll"]
+  },
+  {
+    "ticket_id": "INC0012018",
+    "title": "Messages piling up in the dead letter queue",
+    "domain": "messaging",
+    "severity": "P2",
+    "reported_symptom": "A monitoring alert fires that the DLQ depth is rising; some customer notifications are not being sent.",
+    "error_details": "DLQ depth 8,432 and rising; consumer error: 'Deserialization error for partition notifications-3'; SerializationException: unknown magic byte!",
+    "root_cause": "A producer was upgraded to a new Avro schema without registering it, so consumers using the old schema hit an unknown magic byte and routed every message to the DLQ.",
+    "resolution_steps": [
+      "Sample a DLQ message and confirm the deserialization/magic-byte error",
+      "Register the new schema version in the schema registry",
+      "Deploy consumers compatible with the new schema",
+      "Replay the DLQ back into the main topic and confirm it drains"
+    ],
+    "affected_service": "Notifications Queue (Kafka + Schema Registry)",
+    "resolution_time_minutes": 95,
+    "tags": ["messaging", "kafka", "dlq", "avro", "magic-byte"]
+  },
+  {
+    "ticket_id": "INC0012019",
+    "title": "Production deployment failed midway leaving mixed versions",
+    "domain": "cicd",
+    "severity": "P1",
+    "reported_symptom": "Users report inconsistent behavior; some requests hit the new version and some the old.",
+    "error_details": "helm upgrade failed: 'context deadline exceeded'; rollout status: 3 of 8 replicas updated then stalled; readiness probe failing HTTP 500 on new pods",
+    "root_cause": "The new release required a DB migration that had not run, so new pods failed their readiness probe and the rollout stalled, leaving old and new pods both serving.",
+    "resolution_steps": [
+      "Confirm the stalled rollout and failing readiness on new pods",
+      "Run the pending DB migration as a pre-deploy job",
+      "Resume the rollout and confirm all replicas become ready",
+      "Add a migration gate to the deploy pipeline"
+    ],
+    "affected_service": "Checkout Service (Helm/K8s)",
+    "resolution_time_minutes": 80,
+    "tags": ["cicd", "deployment", "helm", "rollout-stalled", "migration"]
+  },
+  {
+    "ticket_id": "INC0012020",
+    "title": "Rollback failed because previous image was garbage collected",
+    "domain": "cicd",
+    "severity": "P1",
+    "reported_symptom": "A bad release went out and the on-call attempt to roll back failed, extending the outage.",
+    "error_details": "kubectl rollout undo: 'Failed to pull image tag v2.3.1: manifest unknown'; registry GC removed untagged manifests; ErrImagePull on rollback",
+    "root_cause": "A registry retention policy garbage-collected the prior image, so the rollback had no image to pull; the deploy pipeline relied on 'latest'-style tags that were overwritten.",
+    "resolution_steps": [
+      "Confirm the rollback fails on manifest unknown for the old tag",
+      "Rebuild the previous version from the tagged commit and push it",
+      "Deploy the rebuilt image to restore service",
+      "Switch to immutable image tags and exclude release images from GC"
+    ],
+    "affected_service": "CI/CD Pipeline / Container Registry",
+    "resolution_time_minutes": 100,
+    "tags": ["cicd", "rollback", "manifest-unknown", "registry-gc", "immutable-tags"]
+  },
+  {
+    "ticket_id": "INC0012021",
+    "title": "CI pipeline failing intermittently on flaky integration tests",
+    "domain": "cicd",
+    "severity": "P3",
+    "reported_symptom": "Developers report the pipeline randomly goes red and passes on re-run, slowing merges.",
+    "error_details": "Test failed: 'Timed out waiting for element'; exit code 1; container ran out of file descriptors: 'too many open files' (EMFILE)",
+    "root_cause": "The integration test harness leaked HTTP connections across tests, eventually exhausting file descriptors and causing sporadic timeouts depending on test order.",
+    "resolution_steps": [
+      "Reproduce by running the full suite and watching FD count climb",
+      "Close/reuse HTTP clients between tests and raise the ulimit in CI",
+      "Add test isolation so ordering does not affect resources",
+      "Confirm ten consecutive green pipeline runs"
+    ],
+    "affected_service": "CI Pipeline (integration stage)",
+    "resolution_time_minutes": 70,
+    "tags": ["cicd", "flaky-tests", "emfile", "file-descriptors", "intermittent"]
+  },
+  {
+    "ticket_id": "INC0012022",
+    "title": "Alert storm from a single failing node flooding on-call",
+    "domain": "monitoring",
+    "severity": "P2",
+    "reported_symptom": "On-call is paged dozens of times in minutes for what appears to be one underlying problem.",
+    "error_details": "PagerDuty: 143 alerts in 4 minutes; Alertmanager: no inhibition rule matched; 'HostDown' fired alongside 40 dependent 'TargetDown' alerts",
+    "root_cause": "A single node going down triggered every dependent service's individual alert with no inhibition/grouping rules, burying the real signal in noise.",
+    "resolution_steps": [
+      "Confirm all alerts trace back to one node-down event",
+      "Add an Alertmanager inhibition rule so HostDown suppresses dependent TargetDown alerts",
+      "Group alerts by node and add a repeat-interval",
+      "Test by simulating a node failure in staging"
+    ],
+    "affected_service": "Alertmanager / PagerDuty",
+    "resolution_time_minutes": 60,
+    "tags": ["monitoring", "alert-storm", "inhibition", "alert-fatigue", "alertmanager"]
+  },
+  {
+    "ticket_id": "INC0012023",
+    "title": "False-positive disk alerts from a bind-mounted filesystem",
+    "domain": "monitoring",
+    "severity": "P3",
+    "reported_symptom": "A disk-usage alert fires nightly but the disk is not actually full when checked.",
+    "error_details": "Alert 'DiskSpaceLow' filesystem=/proc/... usage=100%; node_exporter reporting pseudo-filesystems; label mountpoint duplicated via bind mount",
+    "root_cause": "The disk alert did not exclude pseudo/bind-mounted filesystems, so node_exporter reported 100% on read-only pseudo mounts that are always 'full', creating nightly false positives.",
+    "resolution_steps": [
+      "Identify which filesystem the alert matches (a pseudo/bind mount)",
+      "Add fstype and mountpoint exclusions to the node_exporter collector",
+      "Update the alert query to filter real filesystems only",
+      "Confirm the alert no longer fires overnight"
+    ],
+    "affected_service": "Prometheus / node_exporter",
+    "resolution_time_minutes": 40,
+    "tags": ["monitoring", "false-positive", "node-exporter", "disk", "bind-mount"]
+  },
+  {
+    "ticket_id": "INC0012024",
+    "title": "Unusual login pattern flagged for a service account",
+    "domain": "security",
+    "severity": "P1",
+    "reported_symptom": "The security team is alerted that a service account is authenticating from unexpected geographies.",
+    "error_details": "SIEM rule 'ImpossibleTravel': logins from 2 countries within 8 minutes; auth log: successful password auth from 185.220.x.x (Tor exit node); no MFA on account",
+    "root_cause": "A service account's static password was leaked in a committed config file and was being used from external hosts; the account predated the MFA mandate.",
+    "resolution_steps": [
+      "Confirm the impossible-travel logins and identify the source IPs",
+      "Immediately rotate the service-account credential and revoke sessions",
+      "Remove the secret from the repo history and move it to the vault",
+      "Enforce MFA / mTLS and scope the account's permissions down"
+    ],
+    "affected_service": "Identity Provider / SIEM",
+    "resolution_time_minutes": 90,
+    "tags": ["security", "impossible-travel", "credential-leak", "service-account", "siem"]
+  },
+  {
+    "ticket_id": "INC0012025",
+    "title": "Public API certificate expired causing TLS failures",
+    "domain": "security",
+    "severity": "P1",
+    "reported_symptom": "All external clients suddenly fail to call the public API; browsers show a security warning.",
+    "error_details": "SSL certificate problem: certificate has expired; TLS handshake failed: alert certificate_expired (45); openssl: notAfter=Jul 4 2026 GMT",
+    "root_cause": "The API's TLS certificate auto-renewal (cert-manager) had been silently failing for weeks due to a broken ACME HTTP-01 challenge, and no one noticed until the cert expired.",
+    "resolution_steps": [
+      "Confirm the expired certificate via openssl and the handshake alert",
+      "Issue a new certificate manually to restore service immediately",
+      "Fix the ACME HTTP-01 challenge routing so auto-renewal works",
+      "Add a certificate-expiry alert at 21 days remaining"
+    ],
+    "affected_service": "Public API Gateway (TLS)",
+    "resolution_time_minutes": 55,
+    "tags": ["security", "certificate-expiry", "tls-handshake", "cert-manager", "acme"]
+  },
+  {
+    "ticket_id": "INC0012026",
+    "title": "TLS handshake failures between two internal services",
+    "domain": "security",
+    "severity": "P2",
+    "reported_symptom": "Service A cannot call Service B after a security hardening change; external traffic is unaffected.",
+    "error_details": "TLS handshake failed: alert handshake_failure (40); 'no cipher suites in common'; Service B now requires TLS 1.3 only, Service A pinned to TLS 1.2",
+    "root_cause": "A hardening change disabled TLS 1.2 on Service B, but Service A's client library was pinned to TLS 1.2, so the two could not negotiate a common protocol.",
+    "resolution_steps": [
+      "Capture the handshake_failure and confirm the protocol mismatch",
+      "Enable TLS 1.3 in Service A's client (or temporarily re-allow 1.2 on B)",
+      "Roll out and confirm mTLS handshakes succeed",
+      "Coordinate protocol-deprecation changes across dependent services"
+    ],
+    "affected_service": "Internal Service Mesh (mTLS)",
+    "resolution_time_minutes": 65,
+    "tags": ["security", "tls-handshake", "handshake-failure-40", "tls-version", "mtls"]
+  },
+  {
+    "ticket_id": "INC0012027",
+    "title": "DNS misconfiguration routing internal traffic to the internet",
+    "domain": "networking",
+    "severity": "P2",
+    "reported_symptom": "Requests to an internal service are unexpectedly slow and occasionally hit a public error page.",
+    "error_details": "dig internal-api.corp -> returns a public IP (CNAME to a parked domain); resolution path leaked to public resolver 8.8.8.8; no NXDOMAIN as expected",
+    "root_cause": "A wildcard CNAME in the public zone shadowed the internal record after a split-horizon DNS view was accidentally removed, so internal names resolved to public addresses.",
+    "resolution_steps": [
+      "Trace the resolution path and confirm the public CNAME is returned",
+      "Restore the split-horizon internal view for the affected zone",
+      "Remove or scope the offending wildcard record",
+      "Validate internal names resolve to internal IPs from client subnets"
+    ],
+    "affected_service": "Corporate DNS (split-horizon)",
+    "resolution_time_minutes": 85,
+    "tags": ["networking", "dns", "split-horizon", "cname", "misroute"]
+  },
+  {
+    "ticket_id": "INC0012028",
+    "title": "Database primary failover did not promote a replica",
+    "domain": "database",
+    "severity": "P1",
+    "reported_symptom": "The primary database went down and the application stayed down instead of failing over.",
+    "error_details": "Patroni: 'no promotable member found'; replica in state 'streaming' but lag > maximum_lag_on_failover; leader lock not acquired",
+    "root_cause": "The only healthy replica exceeded maximum_lag_on_failover at the moment of failure, so Patroni refused to promote it to avoid data loss, leaving the cluster leaderless.",
+    "resolution_steps": [
+      "Confirm the failover was blocked by replica lag exceeding the threshold",
+      "Manually promote the least-lagged replica after assessing data loss risk",
+      "Repoint the application to the new primary",
+      "Tune maximum_lag_on_failover and add a second synchronous replica"
+    ],
+    "affected_service": "PostgreSQL HA Cluster (Patroni)",
+    "resolution_time_minutes": 115,
+    "tags": ["database", "failover", "patroni", "replica-lag", "ha"]
+  },
+  {
+    "ticket_id": "INC0012029",
+    "title": "Token expiry causing 401 storms after clock skew",
+    "domain": "auth",
+    "severity": "P2",
+    "reported_symptom": "A whole fleet of services starts rejecting valid tokens at the same time, then recovers.",
+    "error_details": "HTTP 401 invalid_token 'token used before issued (iat)'; nbf check failed; server clock drifted +90s from NTP; JWT validation window violated",
+    "root_cause": "NTP sync failed on the auth server, causing its clock to drift ahead; freshly issued tokens appeared to be 'from the future' to validators and were rejected until clocks realigned.",
+    "resolution_steps": [
+      "Correlate the 401 spike with clock drift on the issuing host",
+      "Restart/repair NTP and force a time sync on the auth server",
+      "Add a small allowed clock-skew (leeway) to token validation",
+      "Monitor NTP offset and alert on drift beyond 1s"
+    ],
+    "affected_service": "OAuth2 / JWT Validation",
+    "resolution_time_minutes": 60,
+    "tags": ["auth", "401", "clock-skew", "ntp", "jwt-nbf"]
+  },
+  {
+    "ticket_id": "INC0012030",
+    "title": "Memory leak in Node.js API growing across days",
+    "domain": "infra",
+    "severity": "P2",
+    "reported_symptom": "A Node service slows down and must be restarted every few days to stay responsive.",
+    "error_details": "FATAL ERROR: Reached heap limit Allocation failed - JavaScript heap out of memory; process RSS climbing linearly; --max-old-space-size hit",
+    "root_cause": "An event-emitter listener was added per request but never removed, so listeners and their closures accumulated, leaking memory that GC could not reclaim.",
+    "resolution_steps": [
+      "Take heap snapshots over time and diff retained objects",
+      "Find the growing listener count and remove listeners on request end",
+      "Deploy the fix and watch RSS flatten",
+      "Add a memory-growth alert and periodic snapshot in staging"
+    ],
+    "affected_service": "Gateway API (Node.js)",
+    "resolution_time_minutes": 125,
+    "tags": ["infra", "memory-leak", "nodejs", "heap-oom", "event-listener"]
+  },
+  {
+    "ticket_id": "INC0012031",
+    "title": "Kafka broker under-replicated partitions after disk failure",
+    "domain": "messaging",
+    "severity": "P1",
+    "reported_symptom": "Producers see errors and the cluster reports partitions without full replication.",
+    "error_details": "UnderReplicatedPartitions = 27; NotEnoughReplicasException; producer error 'NOT_ENOUGH_REPLICAS' (code 19); broker 3 log dir offline",
+    "root_cause": "A disk failed on broker 3 taking its log directory offline; partitions led by that broker fell below min.insync.replicas so producers with acks=all were rejected.",
+    "resolution_steps": [
+      "Confirm the offline log dir and under-replicated partitions",
+      "Replace the failed disk / move the log dir to a healthy volume",
+      "Reassign partitions and let replicas catch up to ISR",
+      "Verify UnderReplicatedPartitions returns to zero"
+    ],
+    "affected_service": "Kafka Broker Cluster",
+    "resolution_time_minutes": 140,
+    "tags": ["messaging", "kafka", "under-replicated", "not-enough-replicas", "disk-failure"]
+  },
+  {
+    "ticket_id": "INC0012032",
+    "title": "Canary deployment not shifting traffic",
+    "domain": "cicd",
+    "severity": "P2",
+    "reported_symptom": "A canary release was started but 100% of traffic still hits the stable version.",
+    "error_details": "Argo Rollouts: 'canary weight 20% set but 0% observed'; VirtualService weight not applied; istio-proxy config not synced (CDS push failed)",
+    "root_cause": "The Istio control plane failed to push the updated route config to the sidecars, so the canary weight was recorded but never enforced at the data plane.",
+    "resolution_steps": [
+      "Confirm the rollout set the weight but the mesh did not apply it",
+      "Restart the istiod control-plane pod to force a config push",
+      "Verify the VirtualService weights propagate to sidecars",
+      "Resume the canary and watch real traffic split"
+    ],
+    "affected_service": "Argo Rollouts / Istio",
+    "resolution_time_minutes": 75,
+    "tags": ["cicd", "canary", "istio", "traffic-shift", "argo-rollouts"]
+  },
+  {
+    "ticket_id": "INC0012033",
+    "title": "Frontend infinite re-render freezing the browser tab",
+    "domain": "frontend",
+    "severity": "P2",
+    "reported_symptom": "Opening a specific page makes the browser tab freeze and eventually crash.",
+    "error_details": "Warning: Maximum update depth exceeded; React error: 'Too many re-renders'; CPU pegged at 100% in the render loop",
+    "root_cause": "A useEffect updated state on every render without a proper dependency array, creating an infinite render loop that pegged the CPU.",
+    "resolution_steps": [
+      "Reproduce and confirm the maximum-update-depth error",
+      "Add the correct dependency array / guard to the offending effect",
+      "Verify renders settle and CPU returns to idle",
+      "Add a lint rule for exhaustive-deps to catch it in future"
+    ],
+    "affected_service": "Analytics Dashboard (React)",
+    "resolution_time_minutes": 50,
+    "tags": ["frontend", "react", "infinite-render", "max-update-depth", "useeffect"]
+  },
+  {
+    "ticket_id": "INC0012034",
+    "title": "Connection pool exhaustion on the auth service, not the database",
+    "domain": "auth",
+    "severity": "P2",
+    "reported_symptom": "Login requests hang and time out during peak; the database itself looks healthy.",
+    "error_details": "HTTP 503; 'Timeout acquiring connection from pool'; HikariPool waiting=61 active=20 max=20; but pg_stat_activity shows only 20 sessions",
+    "root_cause": "Unlike the payment-service incident, here the pool max (20) was simply undersized for peak login concurrency; the database had plenty of headroom, so the fix was pool sizing, not a leak.",
+    "resolution_steps": [
+      "Confirm the DB is healthy and the bottleneck is the app-side pool",
+      "Increase the Hikari maximumPoolSize within the DB's connection budget",
+      "Add a queue timeout and backpressure on login",
+      "Load-test peak login concurrency to validate the new size"
+    ],
+    "affected_service": "Auth Service / PostgreSQL",
+    "resolution_time_minutes": 70,
+    "tags": ["auth", "connection-pool", "hikaricp", "503", "pool-sizing"]
+  },
+  {
+    "ticket_id": "INC0012035",
+    "title": "Prometheus scrape failures causing gaps in dashboards",
+    "domain": "monitoring",
+    "severity": "P3",
+    "reported_symptom": "Grafana panels show gaps; some targets appear to have no data for stretches of time.",
+    "error_details": "Prometheus target DOWN: 'context deadline exceeded'; scrape_duration > scrape_timeout; too many series causing 'sample limit exceeded'",
+    "root_cause": "A service started exposing a high-cardinality metric (per-request label), so scrapes exceeded the timeout and sample limit and were dropped, creating gaps.",
+    "resolution_steps": [
+      "Identify the target failing scrapes and the high-cardinality metric",
+      "Drop or aggregate the offending label via metric_relabel_configs",
+      "Raise scrape_timeout modestly if still needed",
+      "Confirm the target scrapes reliably and gaps disappear"
+    ],
+    "affected_service": "Prometheus",
+    "resolution_time_minutes": 55,
+    "tags": ["monitoring", "prometheus", "scrape-timeout", "high-cardinality", "sample-limit"]
+  },
+  {
+    "ticket_id": "INC0012036",
+    "title": "Certificate expiry on internal service breaks a scheduled job",
+    "domain": "security",
+    "severity": "P2",
+    "reported_symptom": "A nightly data-sync job fails; interactive access to the same service works fine.",
+    "error_details": "x509: certificate has expired or is not yet valid; TLS alert certificate_expired (45); the job pinned an internal CA cert that rotated",
+    "root_cause": "Unlike the public-API cert incident, here the job had pinned a specific internal CA certificate that was rotated on schedule; the job's truststore was never updated, so only that client broke.",
+    "resolution_steps": [
+      "Confirm only the pinned-cert client fails while others succeed",
+      "Update the job's truststore with the rotated internal CA",
+      "Move from a pinned leaf to trusting the CA chain",
+      "Add the truststore update to the CA rotation runbook"
+    ],
+    "affected_service": "Data Sync Job (internal TLS)",
+    "resolution_time_minutes": 60,
+    "tags": ["security", "certificate-expiry", "x509", "ca-rotation", "truststore"]
+  },
+  {
+    "ticket_id": "INC0012037",
+    "title": "Load balancer 502 from idle-timeout mismatch with backend",
+    "domain": "networking",
+    "severity": "P2",
+    "reported_symptom": "Users occasionally get an error on long-lived requests; retrying works.",
+    "error_details": "HTTP/1.1 502 Bad Gateway; nginx: 'upstream prematurely closed connection while reading response header'; backend keep-alive 60s vs LB idle 75s",
+    "root_cause": "The backend's keep-alive timeout (60s) was shorter than the load balancer's idle timeout (75s), so the backend closed connections the LB still considered open, producing 502s on reused connections.",
+    "resolution_steps": [
+      "Correlate 502s with connection reuse near the 60s mark",
+      "Set the backend keep-alive timeout higher than the LB idle timeout",
+      "Reload and confirm the premature-close errors stop",
+      "Document the timeout ordering rule (backend > LB idle)"
+    ],
+    "affected_service": "NGINX Load Balancer",
+    "resolution_time_minutes": 65,
+    "tags": ["networking", "load-balancer", "502", "keep-alive", "idle-timeout"]
+  },
+  {
+    "ticket_id": "INC0012038",
+    "title": "Kubernetes job pods OOMKilled with exit 137 during batch run",
+    "domain": "infra",
+    "severity": "P2",
+    "reported_symptom": "A nightly batch Job fails partway; the pod restarts and fails again.",
+    "error_details": "State: Terminated Reason: OOMKilled exit code 137; container memory limit 512Mi exceeded; last log line mid-batch before kill",
+    "root_cause": "The batch loaded the entire input file into memory instead of streaming it; larger nightly inputs exceeded the 512Mi container limit and were OOMKilled (exit 137) — same exit code as the eviction incident but a different cause.",
+    "resolution_steps": [
+      "Confirm OOMKilled exit 137 and correlate with input size",
+      "Refactor the batch to stream/process the input in chunks",
+      "Right-size the container memory limit for the workload",
+      "Re-run the nightly Job and confirm it completes"
+    ],
+    "affected_service": "Nightly ETL Job (Kubernetes)",
+    "resolution_time_minutes": 100,
+    "tags": ["infra", "kubernetes", "oomkilled", "exit-137", "batch"]
+  },
+  {
+    "ticket_id": "INC0012039",
+    "title": "Consumer lag alert was a false positive after topic re-partition",
+    "domain": "monitoring",
+    "severity": "P3",
+    "reported_symptom": "A Kafka lag alert fired but consumers are actually healthy and processing in real time.",
+    "error_details": "Alert 'ConsumerLagHigh' lag=500k on partitions 6-11; but end-to-end latency normal; lag exporter reading offsets for newly added partitions with no committed offset",
+    "root_cause": "The topic was expanded from 6 to 12 partitions; the lag exporter treated the new partitions' missing committed offsets as huge lag, a false positive while consumers were fine.",
+    "resolution_steps": [
+      "Confirm real end-to-end latency is normal despite the reported lag",
+      "Let consumers commit offsets on the new partitions (or seed them)",
+      "Fix the exporter to ignore partitions without committed offsets",
+      "Confirm the alert clears and add a guard for future re-partitions"
+    ],
+    "affected_service": "Kafka Lag Exporter / Alerting",
+    "resolution_time_minutes": 45,
+    "tags": ["monitoring", "kafka", "false-positive", "consumer-lag", "repartition"]
+  },
+  {
+    "ticket_id": "INC0012040",
+    "title": "SSO outage from expired SAML signing certificate",
+    "domain": "auth",
+    "severity": "P1",
+    "reported_symptom": "No one can log in to any SSO-protected application company-wide.",
+    "error_details": "SAML: 'The signing certificate is expired'; IdP metadata notAfter passed; SP rejects assertion with 'certificate_expired'; distinct from the earlier metadata-rotation loop",
+    "root_cause": "Unlike the earlier SSO loop (wrong pinned cert after rotation), here the IdP's signing certificate simply expired with no rotation performed, so every assertion it signed was invalid.",
+    "resolution_steps": [
+      "Confirm the IdP signing certificate is expired (not merely rotated)",
+      "Generate and install a new IdP signing certificate",
+      "Publish updated IdP metadata and refresh it on all SPs",
+      "Add an IdP signing-cert expiry alert at 30 days"
+    ],
+    "affected_service": "Identity Provider (SAML IdP)",
+    "resolution_time_minutes": 85,
+    "tags": ["auth", "sso", "saml", "certificate-expiry", "idp-signing-cert"]
+  }
+]

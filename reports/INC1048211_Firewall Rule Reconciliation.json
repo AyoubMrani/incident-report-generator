@@ -1,0 +1,83 @@
+{
+  "editingFilename": null,
+  "markdown": "# Firewall Rule Reconciliation\n\ntwo overlapping firewall rules collided after a policy review, and the deny rule matched traffic that was meant to reach the app tier. The fix was to narrow the deny scope and preserve the allow path for the service subnet.\n\n### Remediation\n\n1. Review rule order and matching scope\n\n2. Remove the overly broad deny condition\n\n3. Reload the firewall policy cleanly\n\n4. Validate application ports are reachable again\n\nInspect and adjust firewall rules\n```bash\niptables -S\nfirewall-cmd --permanent --remove-rich-rule=\"rule family=ipv4 source address=10.12.0.0/16 reject\"\nfirewall-cmd --reload\n```\n\n| rule | effect |\n| --- | --- |\n| deny 10.12.0.0/16 | blocked app tier |\n| allow 10.12.8.0/24 | restored access |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048211",
+      "title": "Firewall Rule Reconciliation",
+      "caller": "Grace Wilson",
+      "category": "Security Operations",
+      "subcategory": "Firewall Rule Conflict",
+      "date": "2025-02-14",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "3acd72d3-52c2-4527-8cd8-730792b8351b",
+        "type": "heading",
+        "level": 1,
+        "content": "Firewall Rule Reconciliation",
+        "title": "Firewall Rule Reconciliation"
+      },
+      {
+        "id": "4802a180-28a4-4ae3-b530-603496f49f28",
+        "type": "paragraph",
+        "content": "<p>two overlapping firewall rules collided after a policy review, and the deny rule matched traffic that was meant to reach the app tier. The fix was to narrow the deny scope and preserve the allow path for the service subnet.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "53085606-1d72-416d-a505-438a4a23d9fb",
+        "type": "heading",
+        "level": 3,
+        "content": "Remediation",
+        "title": "Remediation"
+      },
+      {
+        "id": "d6850724-96d5-4ab1-9186-d164357f9392",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Review rule order and matching scope",
+          "Remove the overly broad deny condition",
+          "Reload the firewall policy cleanly",
+          "Validate application ports are reachable again"
+        ]
+      },
+      {
+        "id": "35952543-32bc-49fa-a830-b732af782f4d",
+        "type": "code",
+        "items": [
+          {
+            "id": "0faa318f-dd96-4a20-80cb-329d1201b445",
+            "type": "code",
+            "title": "Firewall Edit",
+            "header": "Inspect and adjust firewall rules",
+            "content": "iptables -S\nfirewall-cmd --permanent --remove-rich-rule=\"rule family=ipv4 source address=10.12.0.0/16 reject\"\nfirewall-cmd --reload",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "29d63a60-e63d-4c10-888c-9465c9049f69",
+        "type": "table",
+        "title": "policy conflict summary",
+        "headers": [
+          "rule",
+          "effect"
+        ],
+        "rows": [
+          [
+            "deny 10.12.0.0/16",
+            "blocked app tier"
+          ],
+          [
+            "allow 10.12.8.0/24",
+            "restored access"
+          ]
+        ]
+      }
+    ]
+  }
+}

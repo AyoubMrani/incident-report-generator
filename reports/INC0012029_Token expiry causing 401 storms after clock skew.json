@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Token expiry causing 401 storms after clock skew\n\nA whole fleet of services starts rejecting valid tokens at the same time, then recovers.\n\nNTP sync failed on the auth server, causing its clock to drift ahead; freshly issued tokens appeared to be 'from the future' to validators and were rejected until clocks realigned.\n\n1. Correlate the 401 spike with clock drift on the issuing host\n2. Restart/repair NTP and force a time sync on the auth server\n3. Add a small allowed clock-skew (leeway) to token validation\n4. Monitor NTP offset and alert on drift beyond 1s\n\nError Details\n```\nHTTP 401 invalid_token 'token used before issued (iat)'; nbf check failed; server clock drifted +90s from NTP; JWT validation window violated\n```\n\nTags: auth, 401, clock-skew, ntp, jwt-nbf",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012029",
+      "title": "Token expiry causing 401 storms after clock skew",
+      "caller": "System Generated",
+      "category": "auth",
+      "subcategory": "OAuth2 / JWT Validation",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "1f56e42d-6d0d-4949-800b-3e09b9353773",
+        "type": "heading",
+        "level": 1,
+        "content": "Token expiry causing 401 storms after clock skew",
+        "title": "Token expiry causing 401 storms after clock skew"
+      },
+      {
+        "id": "f6103292-2c2d-4a03-83e8-2746e2dcf19d",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A whole fleet of services starts rejecting valid tokens at the same time, then recovers.</p>"
+      },
+      {
+        "id": "16a0021a-a413-4837-9ae5-72d6080c1b76",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>NTP sync failed on the auth server, causing its clock to drift ahead; freshly issued tokens appeared to be 'from the future' to validators and were rejected until clocks realigned.</p>"
+      },
+      {
+        "id": "dc783460-226c-469b-8295-82ef06443ca8",
+        "type": "code",
+        "items": [
+          {
+            "id": "2717b6f4-9dad-4ee8-a021-34e583088387",
+            "type": "code",
+            "title": "Error Details",
+            "header": "OAuth2 / JWT Validation \u2014 error / log snippet",
+            "content": "HTTP 401 invalid_token 'token used before issued (iat)'; nbf check failed; server clock drifted +90s from NTP; JWT validation window violated",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "360d7d59-47c2-40e7-8716-15ac294c4fba",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Correlate the 401 spike with clock drift on the issuing host",
+          "Restart/repair NTP and force a time sync on the auth server",
+          "Add a small allowed clock-skew (leeway) to token validation",
+          "Monitor NTP offset and alert on drift beyond 1s"
+        ]
+      },
+      {
+        "id": "c4b74476-0d94-4330-a52d-cff0945581aa",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>auth, 401, clock-skew, ntp, jwt-nbf</p>"
+      }
+    ]
+  }
+}

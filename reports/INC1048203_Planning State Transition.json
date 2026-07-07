@@ -1,0 +1,63 @@
+{
+  "editingFilename": null,
+  "markdown": "## Planning State Transition\n\nthe property remained in the old planning state because the downstream sync never picked up the approved transition from construction to available. The fix was to update the planning record and refresh the status in the dependent registry.\n\n1. Confirm the source-of-truth system has the approved completion date\n\n2. Update the planning record to the target state\n\n3. Trigger the downstream refresh job\n\n4. Verify the dashboard and planning queue now match\n\nPlanning record update\n```sql\nupdate planning.homes\nset planning_state = 'AVAILABLE', status_updated_at = current_timestamp\nwhere home_reference = 'H-77219';\n```\n\n![Planning timeline snapshot](data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==)\nScreenshot of the planning transition review.",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048203",
+      "title": "Planning State Transition",
+      "caller": "Priya Nair",
+      "category": "Planning Systems",
+      "subcategory": "Home Status Change",
+      "date": "2024-05-21"
+    },
+    "blocks": [
+      {
+        "id": "6430deba-f736-4ce4-bda2-7d792b7478d5",
+        "type": "heading",
+        "level": 2,
+        "content": "Planning State Transition",
+        "title": "Planning State Transition"
+      },
+      {
+        "id": "d64ceb81-a029-4d45-a470-c223615ab961",
+        "type": "paragraph",
+        "content": "<p>the property remained in the old planning state because the downstream sync never picked up the approved transition from construction to available. The fix was to update the planning record and refresh the status in the dependent registry.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "deeb79cc-b76b-43c6-adbf-1e6e86399f5c",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Confirm the source-of-truth system has the approved completion date",
+          "Update the planning record to the target state",
+          "Trigger the downstream refresh job",
+          "Verify the dashboard and planning queue now match"
+        ]
+      },
+      {
+        "id": "22b0317f-e357-4ef7-b935-32382107535a",
+        "type": "code",
+        "items": [
+          {
+            "id": "eb655fb4-87a9-4abf-84c0-adf1b533437b",
+            "type": "code",
+            "title": "State Update",
+            "header": "Planning record update",
+            "content": "update planning.homes\nset planning_state = 'AVAILABLE', status_updated_at = current_timestamp\nwhere home_reference = 'H-77219';",
+            "language": "sql"
+          }
+        ]
+      },
+      {
+        "id": "ae905bca-2e07-4a9d-a97a-fd9bf4ff2ebf",
+        "type": "image",
+        "title": "Planning timeline snapshot",
+        "caption": "Screenshot of the planning transition review.",
+        "data_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg=="
+      }
+    ]
+  }
+}

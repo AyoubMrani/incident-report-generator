@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Dashboard renders blank on Safari after frontend deploy\n\nSafari users see a blank white page on the dashboard; Chrome and Firefox work fine.\n\nA build config change set the Babel target too high, so optional-chaining syntax shipped untranspiled and crashed on older Safari engines.\n\n1. Reproduce on the affected Safari version and capture the SyntaxError\n2. Restore the browserslist target to include the supported Safari range\n3. Rebuild and verify the bundle transpiles optional chaining\n4. Add a cross-browser smoke test to the pipeline\n\nError Details\n```\nUncaught SyntaxError: Unexpected token '?'; console: optional chaining not supported; bundle used ?. without transpilation target for older Safari\n```\n\nTags: frontend, safari, syntaxerror, transpilation, optional-chaining",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012015",
+      "title": "Dashboard renders blank on Safari after frontend deploy",
+      "caller": "System Generated",
+      "category": "frontend",
+      "subcategory": "Web Dashboard (SPA)",
+      "date": "2026-07-05",
+      "priority": "P2"
+    },
+    "blocks": [
+      {
+        "id": "7b5a2fea-3d20-4000-b3cb-d5fb164d2e43",
+        "type": "heading",
+        "level": 1,
+        "content": "Dashboard renders blank on Safari after frontend deploy",
+        "title": "Dashboard renders blank on Safari after frontend deploy"
+      },
+      {
+        "id": "401b3a07-6ad4-4198-9629-c63390f83bf6",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Safari users see a blank white page on the dashboard; Chrome and Firefox work fine.</p>"
+      },
+      {
+        "id": "57569d27-8ea6-48aa-8b68-bf91470a7704",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A build config change set the Babel target too high, so optional-chaining syntax shipped untranspiled and crashed on older Safari engines.</p>"
+      },
+      {
+        "id": "89f7a2f9-189c-4c7e-954b-fea9cd6fe6be",
+        "type": "code",
+        "items": [
+          {
+            "id": "2e53286b-303b-4799-9d08-29a37c32b8c7",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Web Dashboard (SPA) \u2014 error / log snippet",
+            "content": "Uncaught SyntaxError: Unexpected token '?'; console: optional chaining not supported; bundle used ?. without transpilation target for older Safari",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "9c807b47-e18d-4faf-9ac4-9bb408c6ac77",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Reproduce on the affected Safari version and capture the SyntaxError",
+          "Restore the browserslist target to include the supported Safari range",
+          "Rebuild and verify the bundle transpiles optional chaining",
+          "Add a cross-browser smoke test to the pipeline"
+        ]
+      },
+      {
+        "id": "d51b1d2a-af41-4309-9848-1553a6af6974",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>frontend, safari, syntaxerror, transpilation, optional-chaining</p>"
+      }
+    ]
+  }
+}

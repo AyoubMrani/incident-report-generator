@@ -1,0 +1,89 @@
+{
+  "editingFilename": null,
+  "markdown": "# S3 Access Policy Fix\n\nthe application lost object storage access after a policy change removed the required bucket read action. Restoring the least-privilege allow list on the bucket policy re-enabled downloads and report generation.\n\n1. Check the changed bucket policy against the application needs\n\n2. Restore the missing read and list permissions\n\n3. Re-test object listing and download operations\n\n4. Audit the policy for least-privilege compliance\n\nApply the corrected bucket policy\n```bash\naws s3api put-bucket-policy --bucket reports-prod --policy file://bucket-policy.json\naws s3 ls s3://reports-prod/incoming/\n```\n\nSecondary command or config excerpt\n```bash\naws s3 cp s3://reports-prod/incoming/sample.csv /tmp/sample.csv\n```\n\n| Field | Value |\n| --- | --- |\n| status | resolved |\n| owner | Jade Thompson |",
+  "report": {
+    "metadata": {
+      "incident_id": "INC1048215",
+      "title": "S3 Access Policy Fix",
+      "caller": "Jade Thompson",
+      "category": "Cloud Operations",
+      "subcategory": "S3 Bucket Permission Error",
+      "date": "2025-06-13"
+    },
+    "blocks": [
+      {
+        "id": "dae2bd93-a944-4cda-8cb7-b003bc0060aa",
+        "type": "heading",
+        "level": 1,
+        "content": "S3 Access Policy Fix",
+        "title": "S3 Access Policy Fix"
+      },
+      {
+        "id": "d75eb04c-a737-4486-a653-a9d55ef96dea",
+        "type": "paragraph",
+        "content": "<p>the application lost object storage access after a policy change removed the required bucket read action. Restoring the least-privilege allow list on the bucket policy re-enabled downloads and report generation.</p>",
+        "title": "Root Cause"
+      },
+      {
+        "id": "1c1d73b5-50e7-4339-bc27-6f77d3ef57ae",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Check the changed bucket policy against the application needs",
+          "Restore the missing read and list permissions",
+          "Re-test object listing and download operations",
+          "Audit the policy for least-privilege compliance"
+        ]
+      },
+      {
+        "id": "4ec21931-a5b4-4c12-8043-f400efc2c970",
+        "type": "code",
+        "items": [
+          {
+            "id": "f187e648-3165-481b-8e75-9a0400c91cc4",
+            "type": "code",
+            "title": "Bucket Policy Update",
+            "header": "Apply the corrected bucket policy",
+            "content": "aws s3api put-bucket-policy --bucket reports-prod --policy file://bucket-policy.json\naws s3 ls s3://reports-prod/incoming/",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "acf6ac23-9232-4b67-a728-cc030e5144a3",
+        "type": "code",
+        "items": [
+          {
+            "id": "d986a43b-9b25-49f5-8d78-bed2af711574",
+            "type": "code",
+            "title": "validation command",
+            "header": "Secondary command or config excerpt",
+            "content": "aws s3 cp s3://reports-prod/incoming/sample.csv /tmp/sample.csv",
+            "language": "bash"
+          }
+        ]
+      },
+      {
+        "id": "d7f9bf1f-ebb0-4e77-ab1e-b92de6335f5a",
+        "type": "table",
+        "title": "Supporting evidence",
+        "headers": [
+          "Field",
+          "Value"
+        ],
+        "rows": [
+          [
+            "status",
+            "resolved"
+          ],
+          [
+            "owner",
+            "Jade Thompson"
+          ]
+        ]
+      }
+    ]
+  }
+}

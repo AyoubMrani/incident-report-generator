@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# Kubernetes pods stuck in CrashLoopBackOff after config change\n\nA deployment rolled out and the new pods never become ready; the service is down.\n\nA typo in the ConfigMap key (redis_ur instead of redis_url) caused the app to fail config parsing on startup and exit(1), triggering the crash loop.\n\n1. Read the crashing container's logs to find the parse error\n2. Fix the ConfigMap key typo (redis_ur -> redis_url)\n3. Roll the deployment to pick up the corrected ConfigMap\n4. Confirm pods reach Ready and add config schema validation to CI\n\nError Details\n```\nCrashLoopBackOff; container exited with code 1; kubectl logs: 'FATAL: could not parse config: unexpected key redis_ur'; Back-off restarting failed container\n```\n\nTags: infra, kubernetes, crashloopbackoff, exit-1, configmap",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012012",
+      "title": "Kubernetes pods stuck in CrashLoopBackOff after config change",
+      "caller": "System Generated",
+      "category": "infra",
+      "subcategory": "Session Service (Kubernetes)",
+      "date": "2026-07-05",
+      "priority": "P1"
+    },
+    "blocks": [
+      {
+        "id": "ec8df7e8-2c55-482a-a28b-df7dafb9657a",
+        "type": "heading",
+        "level": 1,
+        "content": "Kubernetes pods stuck in CrashLoopBackOff after config change",
+        "title": "Kubernetes pods stuck in CrashLoopBackOff after config change"
+      },
+      {
+        "id": "25bc950c-3f80-41ca-b87a-b0734317f1c6",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>A deployment rolled out and the new pods never become ready; the service is down.</p>"
+      },
+      {
+        "id": "3dcf4fed-23c4-475e-9f23-f10fb4a5c9e7",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>A typo in the ConfigMap key (redis_ur instead of redis_url) caused the app to fail config parsing on startup and exit(1), triggering the crash loop.</p>"
+      },
+      {
+        "id": "698099dc-6a7d-4199-b34b-432ce55adb10",
+        "type": "code",
+        "items": [
+          {
+            "id": "476388b4-2f19-48dc-bab2-50e5935c05b3",
+            "type": "code",
+            "title": "Error Details",
+            "header": "Session Service (Kubernetes) \u2014 error / log snippet",
+            "content": "CrashLoopBackOff; container exited with code 1; kubectl logs: 'FATAL: could not parse config: unexpected key redis_ur'; Back-off restarting failed container",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "346023ae-cc4e-427e-a29d-eae4d796ba08",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Read the crashing container's logs to find the parse error",
+          "Fix the ConfigMap key typo (redis_ur -> redis_url)",
+          "Roll the deployment to pick up the corrected ConfigMap",
+          "Confirm pods reach Ready and add config schema validation to CI"
+        ]
+      },
+      {
+        "id": "9075df36-b116-4c34-bdb8-7b98acbe99ba",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>infra, kubernetes, crashloopbackoff, exit-1, configmap</p>"
+      }
+    ]
+  }
+}

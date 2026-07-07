@@ -1,0 +1,69 @@
+{
+  "editingFilename": null,
+  "markdown": "# CI pipeline failing intermittently on flaky integration tests\n\nDevelopers report the pipeline randomly goes red and passes on re-run, slowing merges.\n\nThe integration test harness leaked HTTP connections across tests, eventually exhausting file descriptors and causing sporadic timeouts depending on test order.\n\n1. Reproduce by running the full suite and watching FD count climb\n2. Close/reuse HTTP clients between tests and raise the ulimit in CI\n3. Add test isolation so ordering does not affect resources\n4. Confirm ten consecutive green pipeline runs\n\nError Details\n```\nTest failed: 'Timed out waiting for element'; exit code 1; container ran out of file descriptors: 'too many open files' (EMFILE)\n```\n\nTags: cicd, flaky-tests, emfile, file-descriptors, intermittent",
+  "report": {
+    "metadata": {
+      "incident_id": "INC0012021",
+      "title": "CI pipeline failing intermittently on flaky integration tests",
+      "caller": "System Generated",
+      "category": "cicd",
+      "subcategory": "CI Pipeline (integration stage)",
+      "date": "2026-07-05",
+      "priority": "P3"
+    },
+    "blocks": [
+      {
+        "id": "de1d40c8-3b4d-44a1-8ff5-868658e02229",
+        "type": "heading",
+        "level": 1,
+        "content": "CI pipeline failing intermittently on flaky integration tests",
+        "title": "CI pipeline failing intermittently on flaky integration tests"
+      },
+      {
+        "id": "806f2eb5-464e-4133-b36a-769eff61a38b",
+        "type": "paragraph",
+        "title": "Reported Symptom",
+        "content": "<p>Developers report the pipeline randomly goes red and passes on re-run, slowing merges.</p>"
+      },
+      {
+        "id": "5f3b513e-db7e-422f-a0ec-c04f00af4e44",
+        "type": "paragraph",
+        "title": "Root Cause",
+        "content": "<p>The integration test harness leaked HTTP connections across tests, eventually exhausting file descriptors and causing sporadic timeouts depending on test order.</p>"
+      },
+      {
+        "id": "cf3055d4-851b-4b51-9c49-650a195dff14",
+        "type": "code",
+        "items": [
+          {
+            "id": "c8382f32-4fcb-41ac-9a03-b34dbed8754c",
+            "type": "code",
+            "title": "Error Details",
+            "header": "CI Pipeline (integration stage) \u2014 error / log snippet",
+            "content": "Test failed: 'Timed out waiting for element'; exit code 1; container ran out of file descriptors: 'too many open files' (EMFILE)",
+            "language": "text"
+          }
+        ]
+      },
+      {
+        "id": "4b153d34-42c3-4c2b-b356-d4a34c847c3f",
+        "type": "list",
+        "title": "Resolution Steps",
+        "ordered": true,
+        "label": "",
+        "items": [
+          "Reproduce by running the full suite and watching FD count climb",
+          "Close/reuse HTTP clients between tests and raise the ulimit in CI",
+          "Add test isolation so ordering does not affect resources",
+          "Confirm ten consecutive green pipeline runs"
+        ]
+      },
+      {
+        "id": "e7c21b0b-34a1-40f1-8fc0-6f34456e1696",
+        "type": "paragraph",
+        "title": "Tags",
+        "content": "<p>cicd, flaky-tests, emfile, file-descriptors, intermittent</p>"
+      }
+    ]
+  }
+}
