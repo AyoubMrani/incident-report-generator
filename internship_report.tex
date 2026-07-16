@@ -25,23 +25,23 @@
     escapeinside={(*@}{@*)}
 }
 
-% Placeholder box for figures to be added manually later.
+% Placeholder for figures to be inserted manually.
 \newcommand{\figplaceholder}[2]{%
   \begin{figure}[H]
   \centering
-  \fbox{\begin{minipage}[c][0.28\textheight][c]{0.85\textwidth}
+  \fbox{\begin{minipage}[c][0.26\textheight][c]{0.85\textwidth}
     \centering
     \textbf{[FIGURE PLACEHOLDER]}\\[4pt]
-    \textit{To add: #1}\\[2pt]
+    \textit{#1}\\[2pt]
     {\small Suggested file: \texttt{#2}}
   \end{minipage}}
   \caption{#1}
   \end{figure}}
 
-\title{\textbf{A Privacy-Preserving Retrieval-Augmented Incident Assistant:\\Unified Architecture, Hybrid Retrieval, Robustness, and Chat-to-Report Automation}}
+\title{\textbf{Hybrid Sparse--Dense Retrieval for Privacy-Constrained\\Incident Resolution: Design and Evaluation of a\\Locally-Hosted Retrieval-Augmented Assistant}}
 
 \author{Ayoub Aarab\\
-\textit{Master Data Science — End-of-Year Internship Project}\\
+\textit{Master Data Science — End-of-Year Project}\\
 \textit{Ecole Normale Supérieure, Martil}}
 
 \date{\today}
@@ -52,11 +52,11 @@
 \maketitle
 
 \begin{abstract}
-This report presents the complete design, optimization, and evaluation of a unified incident-management platform that merges two previously separate applications — a React-based incident-report generator and a Streamlit prototype chatbot — into a single, fully local, production-oriented system. The platform runs entirely on self-hosted models (Ollama for text generation, a local sentence-transformer for embeddings) to satisfy a strict data-privacy constraint: no incident content ever leaves the organization's infrastructure.
+Retrieval-augmented generation (RAG) grounds a language model's output in an external corpus, but its quality is bounded by the retrieval stage. In operational IT incident management, queries are heterogeneous: some are paraphrased descriptions of a symptom, while others are exact identifiers — incident numbers, error codes, function and table names. Dense embedding retrieval handles the former well and the latter poorly, since semantically near-identical identifier strings are not separable in embedding space.
 
-The engineering contribution is a maintainable modular monolith (FastAPI backend, React frontend, Docker deployment) whose two modules share a single report schema, making the system's two halves genuinely interoperable. The data-science contribution is a \textbf{hybrid retrieval} component that fuses a dense embedding search with a sparse BM25 lexical index via Reciprocal Rank Fusion (RRF), evaluated on a labeled benchmark of 272 queries over a corpus of 68 incident reports spanning nine IT domains.
+This work designs and evaluates an incident-resolution assistant built on a hybrid retriever that fuses a dense sentence-embedding index with a sparse Okapi BM25 index using Reciprocal Rank Fusion (RRF). The system operates under a strict privacy constraint: all inference — embeddings and generation — executes on locally-hosted models, with no external API calls. The retriever is evaluated on a labeled benchmark of 272 queries in four stylistic classes over a corpus of 68 incident reports spanning nine technical domains, using Recall@$k$, Mean Reciprocal Rank, and nDCG@5.
 
-Our evaluation demonstrates that: (1) \textbf{hybrid retrieval} reaches Recall@5 = 1.000 and MRR = 0.987, versus 0.768 and 0.678 for dense-only search; (2) the improvement is concentrated on \textbf{exact-identifier queries}, where dense-only Recall@5 collapses to 0.221 while hybrid recovers 1.000; (3) retrieval quality is \textbf{insensitive to chunk size} and plateaus at $k \ge 3$; and (4) the residual failure rate is \textbf{0.0\%} (0 of 272 queries). On top of this core, we contribute a robustness layer (intent-based abstention, prompt-injection defense, grounded generation), a human-feedback loop, and a \textbf{chat-to-report} feature that converts a diagnosed conversation into a schema-validated report with no invented fields. The final system comprises 27 backend modules and is covered by 115 automated tests.
+Hybrid retrieval attains Recall@5 $=$ 1.000 and MRR $=$ 0.987, against 0.768 and 0.678 for dense-only retrieval. A per-class analysis localizes the improvement: on exact-identifier queries, dense-only Recall@5 is 0.221 while the hybrid attains 1.000, confirming that the fusion supplies precisely the lexical precision the dense index lacks. Ablations show retrieval quality is invariant to chunk size over $[400, 1000]$ characters and saturates at $k \geq 3$, a result used to bound the generation context. Error analysis records a 0.0\% failure rate over the benchmark. The retrieval component is embedded in a grounded generation pipeline with intent-based abstention and adversarial-input defenses, and in an automated report-synthesis mechanism that maps a resolved dialogue onto a validated structured schema.
 \end{abstract}
 
 \newpage
@@ -64,105 +64,112 @@ Our evaluation demonstrates that: (1) \textbf{hybrid retrieval} reaches Recall@5
 \newpage
 
 %=============================================================================
-\section{Introduction and Context}
+\section{Introduction}
 %=============================================================================
 
-\subsection{Industrial Context}
+\subsection{Problem Setting}
 
-Incident management in large IT and telecom operations rests on two complementary activities. The first is \emph{documentation}: capturing each resolved incident as a structured report (symptom, root cause, resolution steps, supporting code or configuration) so that institutional knowledge is preserved. The second is \emph{retrieval and reuse}: when a new incident arrives, quickly finding similar past incidents to accelerate diagnosis and resolution.
+Incident management in large-scale IT operations produces a corpus of structured post-mortem reports: each documents a symptom, a diagnosed root cause, a sequence of resolution steps, and supporting artifacts such as queries, commands, or configuration. This corpus is institutional knowledge. Its operational value depends entirely on whether an engineer facing a new incident can retrieve the relevant prior cases quickly and reliably.
 
-In the host organization, these two activities were served by two disconnected tools:
+Retrieval-augmented generation~\cite{lewis2020rag} is the natural formulation: retrieve the most relevant prior reports, condition a language model on them, and synthesize a grounded resolution. The scientific difficulty lies not in the generation stage but in retrieval. Incident queries are stylistically heterogeneous, and the two dominant retrieval paradigms fail on disjoint subsets of them:
+
 \begin{itemize}
-    \item An \textbf{incident-report generator}: a modern React/TypeScript single-page application with a rich block-based editor (headings, paragraphs, lists, code snippets, tables, images), backed by a small Express server that persisted reports as JSON files.
-    \item A \textbf{chatbot prototype}: a Python application built on Streamlit that performed retrieval over the generated reports and used a local language model to propose resolutions. The Streamlit interface was explicitly a throwaway prototype.
+    \item \textbf{Dense retrieval} embeds queries and documents into a shared metric space and ranks by cosine similarity. It captures paraphrase and semantic proximity, but identifiers such as \texttt{INC0012017} and \texttt{INC0012018} are lexically near-identical and semantically indistinguishable; the embedding space does not separate them.
+    \item \textbf{Sparse retrieval} (Okapi BM25~\cite{robertson2009bm25}) ranks by weighted term overlap. It matches identifiers and rare technical tokens exactly, but is blind to synonymy and paraphrase.
 \end{itemize}
 
-These tools lived on separate Git branches, were written in different languages, and shared no interface. The internship mandate was to merge them into a single production-oriented application with one coherent user experience.
+An incident assistant must serve both query classes. This motivates a hybrid retriever, and it raises the central empirical question of this work: \emph{how much does hybridization actually contribute, and on which queries does that contribution arise?}
 
-\subsection{Problem Statement and Constraints}
+\subsection{Deployment Constraint: Local Inference}
 
-The project was shaped by four hard constraints, each of which materially affected the design:
+The system is subject to a hard privacy requirement: incident reports contain sensitive operational detail and must not be transmitted to third-party inference APIs. Consequently every model — the sentence encoder and the generative model — is self-hosted, and the pipeline performs no external network calls at query time.
 
-\begin{enumerate}
-    \item \textbf{Privacy (non-negotiable).} Incident data frequently contains sensitive operational detail. The organization required that no incident content ever be sent to a third-party cloud API. Consequently, all inference — both embeddings and text generation — had to run on self-hosted, local models. This single constraint ruled out the simplest high-quality path (a hosted LLM API) and set the performance ceiling for the entire system.
-    \item \textbf{Accuracy.} Retrieval had to surface genuinely relevant historical incidents. In particular it had to work on \emph{exact identifiers} — incident IDs, error codes, table and function names — where purely semantic (embedding) search is known to be weak.
-    \item \textbf{Robustness.} As an LLM-facing tool used under operational pressure, the assistant had to behave safely on ambiguous, out-of-scope, or adversarial input rather than confidently fabricating a root cause.
-    \item \textbf{Maintainability.} The result had to be a tested, deployable, single-command application — not a research notebook.
-\end{enumerate}
+This constraint is not incidental; it conditions the design. It excludes frontier hosted models, imposing a lower generation-quality ceiling and a hardware-bound latency floor. It therefore shifts the engineering leverage away from model scale and toward \emph{context quality}: what is retrieved, and how it is presented to the model. This shift is the technical thesis of the work.
 
-\subsection{Contributions}
+\subsection{Objectives and Structure}
 
-This report documents the full journey and makes the following contributions:
-\begin{itemize}
-    \item A \textbf{unified architecture} (modular monolith) that absorbs the existing React report generator and re-implements the chatbot as a headless service behind one API.
-    \item A \textbf{hybrid dense/sparse retriever} fused with RRF, and a rigorous \textbf{evaluation} on a labeled benchmark with standard IR metrics and ablations.
-    \item A sequence of \textbf{optimizations} — a critical ingestion-accuracy fix, latency reductions, and a measured model choice — each of which is described with its motivation and effect.
-    \item A \textbf{robustness layer} with an abstention mechanism, prompt-injection defense, and a red-team test suite.
-    \item A \textbf{chat-to-report} feature closing the loop between the two modules, and a \textbf{human-feedback} mechanism.
-\end{itemize}
+The objectives are: (i) to design a retrieval pipeline that serves both semantic and lexical query classes under local-inference constraints; (ii) to quantify its behavior on a labeled benchmark with standard information-retrieval metrics and ablations; (iii) to embed it in a generation pipeline that abstains rather than fabricates when evidence is insufficient; and (iv) to close the documentation loop by synthesizing new structured reports from resolved dialogues.
 
-\subsection{Learning Objectives}
-
-The project exercised the core competencies of an applied data-science practitioner: retrieval-augmented generation over a domain corpus; information-retrieval evaluation (labeled benchmark, Recall@$k$, MRR, nDCG); hybrid retrieval and rank fusion justified by ablations; robustness engineering for LLM systems; and delivery of a tested, containerized software product.
+Section~\ref{sec:background} reviews the relevant retrieval background. Section~\ref{sec:arch} presents the system architecture. Section~\ref{sec:corpus} describes the corpus, its representation, and the evaluation protocol. Section~\ref{sec:retrieval} formalizes the retrieval method. Section~\ref{sec:eval} reports results. Sections~\ref{sec:generation}--\ref{sec:synthesis} cover grounded generation, robustness, and report synthesis. Section~\ref{sec:discussion} discusses limitations.
 
 %=============================================================================
-\section{Related Work and Background}
+\section{Background}
+\label{sec:background}
 %=============================================================================
 
 \subsection{Retrieval-Augmented Generation}
 
-Retrieval-Augmented Generation (RAG)~\cite{lewis2020rag} grounds a language model's output in documents retrieved from an external corpus, reducing hallucination and enabling the model to cite evidence. Our system is a domain-specific RAG pipeline: the corpus is the set of incident reports, retrieval selects the most relevant past incidents, and the local LLM synthesizes a resolution grounded in them.
+RAG~\cite{lewis2020rag} conditions a generative model on documents retrieved from a non-parametric memory. Formally, given a query $q$, a retriever selects a set $D_q \subset \mathcal{D}$ from a corpus $\mathcal{D}$, and a generator produces an answer $a \sim p(a \mid q, D_q)$. Two properties make this attractive for incident resolution: the model's output can be traced to cited evidence, and the corpus can be updated without retraining. The critical dependency is that $p(a \mid q, D_q)$ can only be as good as $D_q$: retrieval failure is unrecoverable downstream, since a model conditioned on irrelevant context either hallucinates or abstains.
 
-\subsection{Dense and Sparse Retrieval}
+\subsection{Sparse Retrieval: Okapi BM25}
 
-Two retrieval paradigms dominate. \emph{Dense} retrieval encodes queries and documents into a shared vector space (here with Sentence-BERT-style embeddings~\cite{reimers2019sbert}) and ranks by cosine similarity; it excels at capturing meaning and paraphrase. \emph{Sparse} retrieval, exemplified by Okapi BM25~\cite{robertson2009bm25}, ranks by weighted term overlap; it excels at exact-term matching but is blind to synonymy. Their complementary strengths motivate hybrid approaches.
+BM25~\cite{robertson2009bm25} scores a document $d$ against query $q$ as
+\begin{equation}
+\text{BM25}(q,d) = \sum_{t \in q} \text{IDF}(t) \cdot \frac{f(t,d)\,(k_1+1)}{f(t,d) + k_1\left(1 - b + b\,\frac{|d|}{\text{avgdl}}\right)},
+\label{eq:bm25}
+\end{equation}
+where $f(t,d)$ is the frequency of term $t$ in $d$, $|d|$ the document length, $\text{avgdl}$ the mean document length, and $\text{IDF}(t)$ the inverse document frequency. The parameter $k_1$ controls term-frequency saturation and $b$ the strength of length normalization. The inverse-document-frequency factor assigns high weight to rare terms — exactly the regime of incident identifiers, error codes, and function names.
+
+\subsection{Dense Retrieval}
+
+Dense retrieval encodes text with a transformer bi-encoder trained so that semantically related pairs are close under cosine similarity~\cite{reimers2019sbert}. Ranking is by
+\begin{equation}
+s_{\text{dense}}(q,d) = \frac{\phi(q) \cdot \phi(d)}{\lVert \phi(q) \rVert \, \lVert \phi(d) \rVert},
+\label{eq:dense}
+\end{equation}
+with $\phi$ the encoder. This generalizes across surface form, but its inductive bias — mapping semantically similar text to nearby vectors — is precisely what makes it unable to discriminate between distinct identifiers that are semantically equivalent (all are "an incident number").
 
 \subsection{Rank Fusion}
 
-Reciprocal Rank Fusion (RRF)~\cite{cormack2009rrf} combines multiple ranked lists using only the rank position of each document, avoiding the need to calibrate incomparable score scales (cosine similarity versus BM25 weights). This robustness and its single, standard parameter make RRF a natural choice for fusing dense and sparse retrieval, and it is the fusion method used in this project.
+Combining Eq.~\eqref{eq:bm25} and Eq.~\eqref{eq:dense} by score arithmetic is ill-posed: the two are on incomparable, unnormalized scales, and any weighting requires per-corpus calibration. Reciprocal Rank Fusion~\cite{cormack2009rrf} avoids this by discarding magnitudes and using only rank position:
+\begin{equation}
+\text{RRF}(d) = \sum_{r \in R} \frac{1}{k + \text{rank}_r(d)},
+\label{eq:rrf}
+\end{equation}
+where $R$ is the set of ranked lists and $k$ a smoothing constant that damps the influence of top ranks. RRF is scale-free and effectively parameter-free, which is why it is adopted here.
 
 %=============================================================================
 \section{System Architecture}
+\label{sec:arch}
 %=============================================================================
 
-\subsection{Architectural Style: Modular Monolith}
+\subsection{Design Overview}
 
-The most consequential early decision was the overall architectural style. A microservice decomposition was considered and rejected: the deployment target is a single internal host, there is no independent-scaling requirement, and the two modules share data. A microservice split would have added network hops, service discovery, and duplicated configuration for no benefit. Instead the system is a \textbf{modular monolith}: one backend process with clean internal package boundaries, and one frontend application. This preserves separability (the chatbot and report logic are distinct packages) without distribution overhead.
+The system is a single application exposing two functional modules over a shared corpus: an \emph{assistant} that answers incident questions by retrieval-augmented generation, and a \emph{report editor} that authors and maintains the structured reports that constitute the corpus. Both are served by one backend process and one web client.
 
-\figplaceholder{High-level system architecture: the React frontend (chatbot + report-generator modules) over a single FastAPI backend, which hosts the chatbot pipeline, the reports service, and the shared LLM-provider interface, all talking to local models and a shared reports directory.}{figures/architecture\_overview.png}
+The implementation is a modular monolith: a FastAPI backend with separated internal packages (retrieval and generation; report persistence; a shared schema and model-provider abstraction) and a React single-page client. A distributed decomposition is unwarranted — the modules share a corpus, target a single host, and have no independent scaling requirement — and would introduce network and operational overhead without benefit.
 
-\subsection{Backend Structure}
+\figplaceholder{System architecture: the web client (assistant and report-editor modules) over a FastAPI backend hosting the RAG pipeline, the report service, and the model-provider abstraction, against locally-hosted models and the shared report corpus.}{figures/architecture\_overview.png}
 
-The backend is a FastAPI application organized into four packages:
-\begin{itemize}
-    \item \texttt{chatbot/} — the retrieval-augmented pipeline: ingestion, the BM25 index, retrieval and fusion, prompt templates, resolution parsing, the intent classifier, security guards, the persistence store, and the chat-to-report builder.
-    \item \texttt{reports/} — report CRUD and HTML export, ported from the original Express server.
-    \item \texttt{shared/} — the report schema (the cross-module contract) and a swappable LLM-provider interface.
-    \item \texttt{routers/} — the HTTP surface (chat and reports endpoints).
-\end{itemize}
-In total the backend comprises 27 Python modules. The frontend is a React~18 + Vite + Tailwind application in which the two modules sit behind a shared sidebar-navigation shell.
+\subsection{Structured Report Schema as a Shared Contract}
 
-\subsection{The Shared Data Contract}
+Reports are represented by a typed schema, $\texttt{Report} = (\texttt{metadata}, \texttt{blocks})$, defined once as Pydantic models and mirrored in the client's type system. The \texttt{metadata} record carries identifying attributes (identifier, title, category, subcategory, reporter, date). The \texttt{blocks} field is a sequence over a discriminated union of content types: heading, paragraph, ordered/unordered list, code, table, image, and cross-referenced incident example.
 
-The integration seam between the two modules is a single report schema, \texttt{\{metadata, blocks[]\}}, defined once on the backend as Pydantic models and mirrored on the frontend in TypeScript. \emph{Metadata} carries the identifying fields (incident id, title, caller, category, subcategory, date). \emph{Blocks} form a discriminated union of content types: heading, paragraph, list, code, table, image, and incident-example. The report generator \emph{writes} reports in this shape; the chatbot \emph{ingests} them; and — as described in Section~\ref{sec:chat2report} — the chatbot can also \emph{produce} them. This single shared contract is what makes the two halves of the system genuinely one product rather than two co-located tools.
+This schema is the system's central abstraction. It is simultaneously (i) the editor's document model, (ii) the unit of ingestion for retrieval, and (iii) the output type of report synthesis (Section~\ref{sec:synthesis}). A single validated contract across all three roles is what permits the assistant to both consume and produce corpus documents without translation layers.
 
-\subsection{Swappable LLM Provider and Local Inference}
+\subsection{Model Provider Abstraction}
 
-Because incident data cannot leave the organization, all model inference is local. The LLM is abstracted behind a provider interface with a self-hosted Ollama implementation as the default (and a stubbed cloud provider available only if the privacy policy were ever relaxed). Embeddings are computed by a local sentence-transformer. No external network calls occur during retrieval or generation. This abstraction also isolates the rest of the system from the specific model, which proved valuable when the text model was later changed for performance reasons (Section~\ref{sec:opt}).
+Generation is accessed through a provider interface exposing text and vision completion, with a locally-hosted implementation as the deployed backend. Decoupling the pipeline from a concrete model permits the generative model to be selected by configuration, and isolates the retrieval and orchestration logic from model-specific concerns. The deployed configuration uses a 3B-parameter instruction-tuned model for text and a 3B vision-language model for screenshot analysis; sentence embeddings use \texttt{all-MiniLM-L6-v2}, a 384-dimensional encoder.
 
 \subsection{Deployment}
 
-The platform is containerized with a multi-stage Docker build: one stage builds the React frontend, and the backend stage serves the compiled single-page application as static files, so the entire product runs as one process on one port. A Docker Compose file brings the application up (optionally alongside a containerized Ollama), with persistent volumes for the shared reports directory, the embedding-model cache, and the chat history database.
+The application is containerized with a multi-stage build in which the client is compiled and served as static assets by the backend process, yielding a single-process deployment. Persistent state comprises the report corpus, the embedding-model cache, and a SQLite database holding dialogue history.
 
 %=============================================================================
-\section{Corpus and Preprocessing}
+\section{Corpus, Representation, and Evaluation Protocol}
+\label{sec:corpus}
 %=============================================================================
 
-\subsection{The Incident Report Corpus}
+\subsection{Corpus}
 
-The evaluation corpus consists of ServiceNow-style incident reports spanning nine IT domains — networking, database, authentication, infrastructure, frontend, messaging/queues, CI/CD, monitoring, and security — each carrying domain-specific error signatures such as HTTP status codes, Kafka error codes, Kubernetes exit codes, TLS handshake alerts, and DNS resolution errors. The corpus was deliberately constructed to include \emph{retrieval-precision traps}: pairs of incidents that share a symptom but differ in root cause (for example, two \texttt{HTTP 503} connection-pool cases — one a connection leak, one an undersized pool), and the same error code in different contexts (for example, Kubernetes \texttt{exit 137} arising from node eviction versus a batch out-of-memory kill). These traps test whether retrieval genuinely discriminates rather than keyword-matching.
+The corpus comprises 68 incident reports spanning nine technical domains: networking, databases, authentication, infrastructure, frontend, messaging and queueing, continuous integration and delivery, monitoring, and security. Each report carries domain-characteristic failure signatures — HTTP status codes, message-broker error codes, container exit codes, TLS handshake alerts, DNS resolution failures.
 
-Table~\ref{tab:corpus} reports the corpus statistics, all measured by the exploratory-data-analysis stage of the evaluation notebook.
+The corpus is constructed to be discriminative rather than merely representative. It contains two families of near-miss pairs designed to defeat shallow matching:
+\begin{itemize}
+    \item \textbf{Shared symptom, distinct root cause}: e.g. two incidents presenting as \texttt{HTTP 503} from connection-pool exhaustion, one caused by a connection leak in an unrelated workload, the other by an undersized pool at peak concurrency.
+    \item \textbf{Shared error code, distinct context}: e.g. container exit code 137 arising from node-level memory-pressure eviction versus a batch process exceeding its own memory limit.
+\end{itemize}
+A retriever that keyword-matches on \texttt{503} or \texttt{137} cannot separate these; correct ranking requires discriminating on context.
 
 % SOURCE: eval/evaluation.ipynb, cell 3 (corpus_eda output):
 %   "reports: 68   categories: 30"
@@ -171,17 +178,17 @@ Table~\ref{tab:corpus} reports the corpus statistics, all measured by the explor
 %    'table': 20, 'incident_example': 12, 'image': 7, 'description_box': 8}"
 \begin{table}[H]
 \centering
-\caption{Incident Report Corpus Characteristics (source: notebook cell~3).}
+\caption{Corpus statistics (source: evaluation notebook, cell~3).}
 \begin{tabular}{lc}
 \toprule
 \textbf{Property} & \textbf{Value} \\
 \midrule
-Total reports & 68 \\
+Reports & 68 \\
 Distinct categories & 30 \\
-Tokens per report (median) & 147.5 \\
-Tokens per report (range) & [103, 175] \\
+Median tokens per report & 147.5 \\
+Token range per report & $[103,\ 175]$ \\
 \midrule
-\multicolumn{2}{c}{\textbf{Content Block Types (counts)}} \\
+\multicolumn{2}{c}{\textbf{Block-type frequency}} \\
 \midrule
 Paragraph & 148 \\
 Heading & 89 \\
@@ -189,8 +196,8 @@ Code & 72 \\
 List & 68 \\
 Table & 20 \\
 Incident example & 12 \\
-Image & 7 \\
 Description box & 8 \\
+Image & 7 \\
 \bottomrule
 \end{tabular}
 \label{tab:corpus}
@@ -199,103 +206,105 @@ Description box & 8 \\
 \begin{figure}[H]
 \centering
 \includegraphics[width=0.85\textwidth]{eval/figures/categories.png}
-\caption{Distribution of incident reports across categories (source: notebook cell~3, \texttt{corpus\_eda}).}
+\caption{Category distribution over the corpus (source: notebook cell~3).}
 \label{fig:categories}
 \end{figure}
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.75\textwidth]{eval/figures/lengths.png}
+\includegraphics[width=0.72\textwidth]{eval/figures/lengths.png}
 \caption{Report length distribution in tokens (source: notebook cell~3).}
 \label{fig:lengths}
 \end{figure}
 
-\begin{figure}[H]
-\centering
-\includegraphics[width=0.75\textwidth]{eval/figures/block_types.png}
-\caption{Content block-type composition of the corpus (source: notebook cell~3).}
-\label{fig:blocktypes}
-\end{figure}
+\subsection{Document Representation}
 
-\subsection{Schema-Aware Ingestion: A Decisive Quality Fix}
-\label{sec:ingestion}
+Reports are stored as structured documents, not free text, so the indexed representation must be derived by a projection $\pi: \texttt{Report} \to \Sigma^*$. The choice of $\pi$ is consequential and easy to get wrong.
 
-The single most important quality fix in the entire project was in ingestion. The original chatbot indexed reports by \emph{flattening} the raw report JSON to text. This injected large amounts of structural noise into the indexed content — block identifiers, type tags, nesting keys, and base64 image data — while burying the actual incident prose. The symptom was severe: the assistant \emph{felt} as though it were not retrieving at all, returning generic or wrong answers, because the language model was being handed structural garbage as context.
+A naive projection serializes the document tree verbatim, emitting structural tokens — block identifiers, type discriminators, nesting keys, encoded image payloads — interleaved with content. The resulting string is dominated by tokens carrying no incident semantics. Both stages degrade: the encoder $\phi$ maps such strings into a region governed by shared structural vocabulary rather than incident content, collapsing inter-document distances; and BM25's IDF weighting is diluted by high-frequency structural terms. Downstream, the generator is conditioned on text in which the actual symptom and resolution are a minority of tokens.
 
-The fix was to make ingestion \textbf{schema-aware}: rather than flattening, the ingester walks the block structure and extracts only the human-readable content per block type — the heading, the symptom and root-cause paragraphs (with HTML stripped), the resolution list items, the code snippets, and table cells — while discarding identifiers, type tags, and binary image data. This clean text is what is embedded and indexed. This change is the prerequisite for the retrieval quality reported in Section~\ref{sec:eval}; without it, no amount of retrieval tuning would have helped.
+The system therefore defines $\pi$ \emph{schema-aware}: it dispatches on block type and emits only the semantic payload of each — heading text, symptom and root-cause prose with markup stripped, resolution list items, code content, table cells — while discarding identifiers, type tags, and binary data. Metadata is emitted as a leading header so that identifiers and category remain lexically searchable. This projection is a precondition for the retrieval results of Section~\ref{sec:eval}: no amount of ranking refinement compensates for an uninformative representation.
 
-\subsection{Report-Shape Normalization}
+\subsection{Chunking and Indexing}
 
-A related, smaller fix addressed a data-quality inconsistency: some legacy reports were stored in a wrapped envelope shape while others were stored flat. The report viewer expected the flat shape, so wrapped reports rendered as blank pages, and their content was mis-parsed during ingestion. Normalizing both shapes to a single canonical form at the API boundary fixed both the blank-page rendering and the retrieval of those reports, without changing the viewer.
+Projected documents are segmented into overlapping character windows (700 characters, 120-character overlap) to bound the encoder's input and to localize matching. Each chunk is encoded by $\phi$ into $\mathbb{R}^{384}$ and simultaneously tokenized into the BM25 index. Retrieval operates over chunks; results are aggregated to the report level by taking each source document's maximum-scoring chunk, so a report is ranked by its single best-matching passage.
 
-\subsection{Labeled Evaluation Set}
+\subsection{Evaluation Protocol}
 
-To measure retrieval quality objectively, a labeled query set is auto-generated from the corpus. For each report, several queries are derived in four styles — \emph{title} (a question form of the title), \emph{symptom} (the root-cause sentence), \emph{id} (the bare incident identifier), and \emph{keyword} (salient tokens such as function and table names) — each labeled with the report it was derived from. This yields \textbf{272 labeled queries} over the 68 reports.
+Evaluation requires query--document relevance labels. Absent production query logs, labels are constructed by inversion: for each report $d$, queries are synthesized that a user seeking $d$ plausibly issues, with $d$ as the gold document. Four stylistic classes are generated, chosen to span the semantic--lexical axis that motivates the hybrid:
 
-\textbf{Honest limitation.} The queries are synthetic — derived from the reports themselves — because no real user query logs were available. This measures whether retrieval can recover a report from a paraphrase of its own content; real queries are noisier and more varied. The reported numbers should therefore be read as an optimistic bound. This limitation is stated explicitly in the evaluation notebook and revisited in Section~\ref{sec:limits}.
-
-%=============================================================================
-\section{Retrieval Pipeline}
-%=============================================================================
-
-\subsection{Pipeline Overview}
-
-For an incident query, the pipeline proceeds as follows: the query is routed by an intent classifier (Section~\ref{sec:robustness}); if it is a genuine, sufficiently specific incident, the text is embedded and searched against the report index, in parallel with a BM25 lexical search; the two rankings are fused with RRF; the top-ranked report chunks are formatted into a resolution prompt together with any relevant learned corrections; and the local LLM produces a structured resolution that is parsed and returned with its cited sources.
-
-\figplaceholder{End-to-end chatbot pipeline: intent routing $\rightarrow$ security screening $\rightarrow$ dense + sparse retrieval $\rightarrow$ RRF fusion $\rightarrow$ prompt construction $\rightarrow$ local LLM $\rightarrow$ parsed structured answer with cited sources.}{figures/pipeline\_flow.png}
-
-\subsection{Dense, Sparse, and Hybrid Retrieval}
-
-Three configurations are compared:
 \begin{itemize}
-    \item \textbf{Dense (vector)}: cosine similarity over sentence-transformer embeddings. Strong on paraphrase and meaning; weak on exact tokens.
-    \item \textbf{Sparse (BM25)}: an in-repository Okapi BM25 index over the same chunks. Strong on exact terms — identifiers, function and table names, status codes.
-    \item \textbf{Hybrid}: the two rankings fused with RRF.
+    \item \textbf{title} — an interrogative form of the report title (semantic, high signal);
+    \item \textbf{symptom} — the root-cause sentence (semantic, paraphrastic);
+    \item \textbf{id} — the bare incident identifier (purely lexical);
+    \item \textbf{keyword} — salient technical tokens such as function and table names (lexical, moderate).
 \end{itemize}
-Notably, the BM25 index is implemented directly in the repository as a compact, dependency-free component rather than pulled from a library. This keeps the system fully local and reproducible (no external package to fetch at build time), consistent with the privacy and maintainability constraints.
 
-\subsection{Reciprocal Rank Fusion}
+This yields 272 labeled queries over the 68 reports. Stratifying by class is essential: an aggregate score would mask the fact that the two retrieval paradigms fail on \emph{disjoint} query classes, which is the phenomenon under study.
 
-RRF assigns each document the score
-\begin{equation}
-\text{RRF}(d) = \sum_{r \in R} \frac{1}{k + \text{rank}_r(d)},
-\end{equation}
-summed over the dense and sparse ranked lists $R$, with the standard constant $k = 60$. Because RRF depends only on rank position, it requires no calibration between the cosine and BM25 score scales — a property that makes the hybrid robust and essentially parameter-free.
+\textbf{Validity.} The queries are synthetic and derived from the documents they retrieve, so the protocol measures recovery of a document from a paraphrase of its own content. Real queries are noisier, use vocabulary absent from the report, and may under-specify. The reported figures are therefore an upper bound on field performance. The protocol is nonetheless informative for its purpose here — it is a \emph{comparative} instrument, and the dense/sparse/hybrid contrast is measured under identical conditions, so the relative ordering and the per-class localization of error are robust to this bias even where the absolute values are optimistic.
+
+Metrics are Recall@$k$ (whether the gold report appears in the top $k$), Mean Reciprocal Rank, and nDCG@5, computed with a single relevant document per query.
 
 %=============================================================================
-\section{Evaluation Results}
+\section{Retrieval Method}
+\label{sec:retrieval}
+%=============================================================================
+
+\subsection{Components}
+
+Three configurations are compared under identical chunking and identical corpus:
+
+\begin{enumerate}
+    \item \textbf{Dense}: cosine ranking by Eq.~\eqref{eq:dense} using \texttt{all-MiniLM-L6-v2}.
+    \item \textbf{Sparse}: BM25 by Eq.~\eqref{eq:bm25} with standard parameters $k_1 = 1.5$, $b = 0.75$. The index is implemented directly rather than by dependency, which keeps the retrieval stack self-contained and its behavior fully specified — relevant under a constraint that forbids external services. Tokenization preserves underscores, so composite identifiers such as \texttt{support\_remove\_opv\_duplicate} remain single high-IDF terms rather than fragmenting into common subwords.
+    \item \textbf{Hybrid}: RRF over the dense and sparse rankings by Eq.~\eqref{eq:rrf}, with $k = 60$.
+\end{enumerate}
+
+\subsection{Fusion}
+
+Each component produces a ranking over chunks. Documents scoring zero under BM25 are excluded from its list rather than appended arbitrarily, so that non-matching documents contribute no reciprocal-rank mass. The fused score of Eq.~\eqref{eq:rrf} is then aggregated per source report as described above, and the top $K$ reports are returned.
+
+Two parameters govern the interface with the generator. $\texttt{TOP\_K} = 5$ reports are retrieved and surfaced to the user as citations. Only the top $\texttt{RESOLUTION\_CONTEXT\_K} = 3$ are placed in the generation context; Section~\ref{sec:ablation} shows this choice is lossless with respect to retrieval coverage while materially reducing prompt length.
+
+\figplaceholder{Retrieval architecture: a query is encoded and simultaneously matched against the dense index and the BM25 index; the two rankings are fused by RRF and aggregated per source report.}{figures/retrieval\_architecture.png}
+
+%=============================================================================
+\section{Experimental Results}
 \label{sec:eval}
 %=============================================================================
 
-All results in this section are reproduced verbatim from \texttt{eval/evaluation.ipynb}; each table and quantitative claim is annotated with its source cell. Metrics not present in the notebook are intentionally not stated here (see Section~\ref{sec:limits}).
+All quantitative results are produced by the evaluation notebook (\texttt{eval/evaluation.ipynb}); each table cites its source cell.
 
-\subsection{Retrieval Quality}
+\subsection{Aggregate Retrieval Quality}
 
 % SOURCE: eval/evaluation.ipynb, cell 6 (benchmark_retrieval output):
 %   mode        R@1    R@3    R@5    MRR  nDCG@5
 %   vector    0.629  0.713  0.768  0.678   0.700
 %   bm25      0.779  0.982  0.989  0.872   0.902
 %   hybrid    0.974  1.000  1.000  0.987   0.991
-Table~\ref{tab:retrieval} reports the headline result. Hybrid retrieval dominates both components on every metric, reaching Recall@5 = 1.000 and MRR = 0.987, against 0.768 and 0.678 for dense-only search. BM25 alone is already strong on this corpus (Recall@5 = 0.989), reflecting the prevalence of distinctive technical terms; the hybrid nonetheless improves precision at the top rank (Recall@1 rises from 0.779 for BM25 to 0.974 for hybrid).
+Table~\ref{tab:retrieval} reports aggregate performance over the 272-query benchmark. The hybrid dominates both components on every metric, attaining Recall@5 $=$ 1.000 and MRR $=$ 0.987 against 0.768 and 0.678 for dense retrieval.
 
 \begin{table}[H]
 \centering
-\caption{Retrieval quality on the 272-query benchmark (source: notebook cell~6).}
+\caption{Aggregate retrieval performance, 272 labeled queries (source: notebook cell~6).}
 \begin{tabular}{lccccc}
 \toprule
 \textbf{Configuration} & \textbf{R@1} & \textbf{R@3} & \textbf{R@5} & \textbf{MRR} & \textbf{nDCG@5} \\
 \midrule
-Dense (vector) & 0.629 & 0.713 & 0.768 & 0.678 & 0.700 \\
-Sparse (BM25)  & 0.779 & 0.982 & 0.989 & 0.872 & 0.902 \\
+Dense & 0.629 & 0.713 & 0.768 & 0.678 & 0.700 \\
+Sparse (BM25) & 0.779 & 0.982 & 0.989 & 0.872 & 0.902 \\
 \textbf{Hybrid (RRF)} & \textbf{0.974} & \textbf{1.000} & \textbf{1.000} & \textbf{0.987} & \textbf{0.991} \\
 \bottomrule
 \end{tabular}
 \label{tab:retrieval}
 \end{table}
 
-\figplaceholder{Bar chart of Recall@1/@3/@5 for the three configurations (this figure is generated by notebook cell~7; export it and place it here).}{figures/recall\_by\_config.png}
+Two observations merit attention. First, sparse retrieval is the stronger single component on this corpus (Recall@5 $=$ 0.989 versus 0.768), which is consistent with a domain whose documents are dense in rare, discriminative technical tokens; this is a corpus property, not a general claim about BM25. Second, and more informative, the hybrid's advantage over BM25 is concentrated at the top rank: Recall@1 improves from 0.779 to 0.974 while Recall@5 improves only from 0.989 to 1.000. The dense signal is therefore acting chiefly as a \emph{re-ranking} prior — BM25 places the gold document in the candidate set, and the semantic signal promotes it to rank one. This is the mechanism by which the fusion earns its gain on this corpus.
 
-\subsection{Where the Gain Comes From: Per-Style Breakdown}
+\figplaceholder{Recall@1/@3/@5 by retrieval configuration (this figure is produced by notebook cell~7; export and insert here).}{figures/recall\_by\_config.png}
+
+\subsection{Per-Class Analysis}
 
 % SOURCE: eval/evaluation.ipynb, cell 6 ("Recall@5 by query style"):
 %   style       vector     bm25   hybrid
@@ -303,25 +312,30 @@ Sparse (BM25)  & 0.779 & 0.982 & 0.989 & 0.872 & 0.902 \\
 %   keyword      0.853    0.956    1.000
 %   symptom      1.000    1.000    1.000
 %   title        1.000    1.000    1.000
-The per-style breakdown (Table~\ref{tab:bystyle}) explains \emph{why} the hybrid is preferred and is the most instructive single result in the study. On \emph{symptom} and \emph{title} queries — paraphrased and meaning-rich — dense retrieval already scores 1.000. But on \emph{id} queries (bare incident identifiers), dense-only Recall@5 collapses to \textbf{0.221}, because semantic embeddings cannot distinguish near-identical identifier strings from one another. BM25 recovers these exactly (1.000), and the hybrid keeps the best of both regimes across all four styles. This is a textbook illustration of the complementarity of dense and sparse retrieval, demonstrated on a realistic corpus.
+The aggregate figures conceal the phenomenon of interest. Table~\ref{tab:bystyle} stratifies Recall@5 by query class and localizes the entire dense/sparse asymmetry.
 
 \begin{table}[H]
 \centering
-\caption{Recall@5 by query style (source: notebook cell~6).}
+\caption{Recall@5 stratified by query class (source: notebook cell~6).}
 \begin{tabular}{lccc}
 \toprule
-\textbf{Query style} & \textbf{Vector} & \textbf{BM25} & \textbf{Hybrid} \\
+\textbf{Query class} & \textbf{Dense} & \textbf{Sparse} & \textbf{Hybrid} \\
 \midrule
-id       & 0.221 & 1.000 & 1.000 \\
-keyword  & 0.853 & 0.956 & 1.000 \\
-symptom  & 1.000 & 1.000 & 1.000 \\
-title    & 1.000 & 1.000 & 1.000 \\
+id (identifier) & 0.221 & 1.000 & 1.000 \\
+keyword & 0.853 & 0.956 & 1.000 \\
+symptom & 1.000 & 1.000 & 1.000 \\
+title & 1.000 & 1.000 & 1.000 \\
 \bottomrule
 \end{tabular}
 \label{tab:bystyle}
 \end{table}
 
+On \textbf{symptom} and \textbf{title} queries — paraphrastic and semantically rich — dense retrieval is already saturated at 1.000; the sparse component contributes nothing there, and critically, costs nothing either. On \textbf{identifier} queries the dense retriever collapses to 0.221. This is not a tuning deficiency but a consequence of the encoder's inductive bias: all incident identifiers occupy a narrow region of the embedding space because they are semantically the same object, so cosine similarity cannot rank the correct one above its near-neighbors. BM25's IDF term, which assigns near-maximal weight to a token appearing in exactly one document, resolves these exactly (1.000).
+
+The hybrid attains 1.000 on all four classes. It does not merely average the components' performance — it attains the upper envelope, because RRF requires only that \emph{one} constituent rank the gold document highly, and the two components' failure modes do not overlap. Their complementarity is what makes the fusion effective; had both failed on the same queries, no rank fusion could recover them.
+
 \subsection{Ablations}
+\label{sec:ablation}
 
 % SOURCE: eval/evaluation.ipynb, cell 10 (ablations output):
 %   chunk_size ablation:
@@ -333,33 +347,37 @@ title    & 1.000 & 1.000 & 1.000 \\
 %     k= 3  Recall@5=1.000  MRR=0.987
 %     k= 5  Recall@5=1.000  MRR=0.987
 %     k=10  Recall@5=1.000  MRR=0.987
-Two hyperparameters were ablated on the hybrid retriever (Table~\ref{tab:ablation}). First, retrieval quality is \textbf{insensitive to chunk size}: Recall@5 = 1.000 at 400, 700, and 1000 characters, even as the number of chunks varies from 334 down to 146. This is expected given the short median report length — most reports fit in one or two chunks regardless. Second, retrieval quality \textbf{plateaus at $k \ge 3$}: Recall@5 rises from 0.974 at $k = 1$ to 1.000 at $k = 3$ and remains there. This ablation directly justifies a production decision: feeding only the top-three chunks into the generation prompt, which halves prompt size (and therefore generation latency) at no measured retrieval cost.
+Two parameters are ablated on the hybrid configuration (Table~\ref{tab:ablation}).
 
 \begin{table}[H]
 \centering
-\caption{Hyperparameter ablations on the hybrid retriever (source: notebook cell~10).}
+\caption{Hyperparameter ablations, hybrid configuration (source: notebook cell~10).}
 \begin{tabular}{lcc}
 \toprule
-\multicolumn{3}{c}{\textbf{Chunk size}} \\
+\multicolumn{3}{c}{\textbf{(a) Chunk size}} \\
 \midrule
-\textbf{Size (chars)} & \textbf{\# chunks} & \textbf{Recall@5} \\
+\textbf{Size (chars)} & \textbf{Chunks} & \textbf{Recall@5} \\
 \midrule
-400  & 334 & 1.000 \\
-700  & 180 & 1.000 \\
+400 & 334 & 1.000 \\
+700 & 180 & 1.000 \\
 1000 & 146 & 1.000 \\
 \midrule
-\multicolumn{3}{c}{\textbf{Top-$k$}} \\
+\multicolumn{3}{c}{\textbf{(b) Retrieved $k$}} \\
 \midrule
 \textbf{$k$} & \textbf{Recall@5} & \textbf{MRR} \\
 \midrule
-1  & 0.974 & 0.974 \\
-3  & 1.000 & 0.987 \\
-5  & 1.000 & 0.987 \\
+1 & 0.974 & 0.974 \\
+3 & 1.000 & 0.987 \\
+5 & 1.000 & 0.987 \\
 10 & 1.000 & 0.987 \\
 \bottomrule
 \end{tabular}
 \label{tab:ablation}
 \end{table}
+
+\textbf{Chunk size.} Recall@5 is invariant at 1.000 across $[400, 1000]$ characters, though the index size varies by a factor of $2.3$ (334 to 146 chunks). The invariance follows from the corpus geometry: at a median of 147.5 tokens (Table~\ref{tab:corpus}), most reports are shorter than even the smallest window, so segmentation rarely splits a report's discriminative content across chunks. Chunking would become a live hyperparameter on a corpus of longer documents; on this one it is not, and reporting it as insensitive is more useful than reporting a tuned value that does not generalize.
+
+\textbf{Retrieved $k$.} Recall@5 saturates at $k = 3$ (0.974 at $k=1$, 1.000 for $k \geq 3$). This licenses a design decision with direct cost consequences: the generation context is bounded to the top three reports rather than five. Since the marginal reports contribute no additional recall, the truncation is lossless with respect to retrieval while reducing prompt length — which, under local inference, is the dominant controllable term in generation cost. The ablation converts an arbitrary constant into a justified one.
 
 \subsection{Error Analysis}
 
@@ -367,125 +385,80 @@ Two hyperparameters were ablated on the hybrid retriever (Table~\ref{tab:ablatio
 %   "failures: 0/272 (0.0%)"
 %   "by style: {}"
 %   "by cause: {}"
-On the clean corpus, the hybrid retriever produces \textbf{zero failures}: 0 of 272 queries fail to place the gold report in the top-5 (notebook cell~13: ``failures: 0/272 (0.0\%)''; the failure-by-style and failure-by-cause maps are empty). An earlier iteration of the corpus contained a small number of malformed placeholder reports (lorem-ipsum content with invalid identifiers); the error analysis at that stage showed that essentially all residual failures traced to those two reports rather than to the retrieval method. Removing them yielded the zero-failure result, confirming that the residual difficulty was a data-quality artifact, not a limitation of the approach.
+The hybrid configuration records \textbf{0 failures over 272 queries} (0.0\%), with empty failure-by-class and failure-by-cause distributions (notebook cell~13). No query fails to place its gold report in the top five.
+
+A zero error rate warrants scrutiny rather than celebration, and it should be read against the protocol's stated bias (Section~\ref{sec:corpus}): with queries synthesized from the documents they retrieve, and a corpus of 68 documents rich in discriminative tokens, the task is easier than field retrieval. The result establishes that the retriever is not the limiting component under these conditions, and that the near-miss pairs deliberately embedded in the corpus are correctly separated — but it does not establish a field error rate, and a harder benchmark would be required to differentiate configurations further. Notably, the aggregate is already saturated at Recall@5 for the hybrid, which means this benchmark has no remaining headroom to measure improvements against; this is itself a reason to construct a harder evaluation (Section~\ref{sec:discussion}).
 
 %=============================================================================
-\section{System Optimizations}
-\label{sec:opt}
+\section{Grounded Generation}
+\label{sec:generation}
 %=============================================================================
 
-Beyond the ingestion-accuracy fix (Section~\ref{sec:ingestion}), several optimizations shaped the final quality and responsiveness of the system. Each is described with its motivation and effect. (The latency figures that motivated some of these were measured during development but are not part of the evaluation notebook; per the sourcing discipline of this report, they are described qualitatively here and flagged in Section~\ref{sec:limits}.)
+\subsection{Conditioning and Output Structure}
 
-\subsection{Eliminating a Redundant Generation Call}
+Retrieved reports are formatted into a prompt with their similarity scores and identifiers, and the model is constrained to emit a structured JSON object: an incident classification, a confidence score, an ordered sequence of resolution steps each with a purpose, action, validation criterion, and evidence references, and typed supporting artifacts. Constrained JSON decoding removes conversational preamble and makes parsing deterministic. Generation length is capped, bounding worst-case latency.
 
-The original pipeline made two sequential LLM calls per answer: one to rephrase the query into a search string (``understand''), and one to generate the resolution. Profiling showed retrieval itself was negligible while the two generations dominated wall-clock time. Because embedding search operates well on the raw query text, the separate rephrasing call was removed for text queries (it is retained only for screenshots, where a vision model genuinely must convert an image to text). This roughly halved the number of generations per answer.
+Artifacts are typed by language rather than assumed. The correct artifact for an incident is domain-dependent — a shell command for a missing file, a manifest fragment for a container misconfiguration, a query for a data defect — and the model selects the language accordingly. Fixing the artifact type a priori (for instance, always emitting SQL) produces confidently-formatted but semantically irrelevant output on incidents outside that domain.
 
-\subsection{Trimming the Generation Context}
+\subsection{Abstention Under Insufficient Evidence}
 
-Guided by the top-$k$ ablation (Table~\ref{tab:ablation}), the number of report chunks fed into the resolution prompt was reduced to the top three, and each chunk's length was capped. This reduces the prompt size substantially, which directly reduces generation latency on local hardware, with no measured loss in retrieval coverage.
+A generator instructed to always produce a resolution will produce one regardless of evidence, which converts absent information into fabricated content. The pipeline therefore admits abstention at two points.
 
-\subsection{Constrained, Warm Generation}
+First, before retrieval, an intent classifier routes each turn. Inputs that are conversational, or that are incident-flavored but carry no diagnosable content (no error code, identifier, file path, service name, or quoted message), are answered with a request for specifics. Because this precedes both retrieval and generation, fabrication on under-specified input is structurally impossible rather than discouraged. Follow-up turns are exempt, as prior dialogue supplies the missing context.
 
-Two provider-level settings improved responsiveness and reliability: constraining the model to emit JSON directly (removing conversational preamble and making parsing robust), and keeping the model resident in memory between requests to avoid repeated cold loads.
+Second, the generation prompt permits the model to declare insufficient evidence and lower its confidence rather than emit a fixed number of steps, and forbids citing identifiers absent from the retrieved set. The system also distinguishes a model backend failure from a low-confidence answer: an unreachable model raises an explicit error rather than returning a well-formed but empty result, which would otherwise be indistinguishable from a genuine negative diagnosis.
 
-\subsection{A Measured Model Choice}
+\figplaceholder{Intent routing and abstention: conversational, under-specified, and diagnosable inputs are separated before retrieval, with only diagnosable inputs entering the RAG pipeline.}{figures/intent\_routing.png}
 
-The default text model was selected empirically rather than by assumption. A larger and a smaller local model were compared on the same query with clean context; the smaller model produced answers of equal or better structured quality while generating substantially faster. It was therefore made the default, subject to override by configuration. The key lesson — consistent with Section~\ref{sec:ingestion} — was that model size was not the bottleneck; \emph{context quality} was.
+\subsection{Adversarial Input}
 
-\subsection{Failing Loudly Instead of Silently}
+User text is screened for instruction-override and prompt-extraction patterns; detected inputs are enclosed in an explicit untrusted-data delimiter within the prompt, so the model treats them as content to analyze rather than instructions to follow, and the system prompt is never emitted. A legitimate incident containing such phrasing is still processed as an incident, with the detection surfaced to the user, rather than refused. Secrets and personal data (credentials, bearer tokens, connection strings, private keys, email addresses) are redacted from dialogue text before persistence.
 
-An important reliability fix concerned the behavior when the local model backend was momentarily unreachable. The original code silently returned an error string that the parser then turned into a confident-looking but empty ``Unknown'' answer — fast, but wrong and misleading. This was changed so that an unreachable backend raises a distinct condition and the API surfaces a clear ``model unavailable'' error, rather than fabricating a result. This is a small change with an outsized effect on trust.
+\subsection{Feedback}
 
-%=============================================================================
-\section{Robustness and Safety}
-\label{sec:robustness}
-%=============================================================================
-
-An LLM-facing operational tool must behave safely on non-ideal input. Three safeguards were added and covered by a dedicated red-team test suite spanning normal, ambiguous, out-of-scope, injection, manipulation, and malformed-input categories.
-
-\subsection{Intent-Based Routing and Abstention}
-
-A lightweight, rule-based intent classifier routes each turn \emph{before} any LLM call. Greetings and meta-questions receive a brief reply with no retrieval and no generation. The crucial case is \emph{ambiguity}: incident-flavored but low-context inputs (for example ``it is broken again'' or ``health-check-error'') are routed to a \textbf{clarification} response that asks for specifics — the exact error, the affected service, what changed — rather than fabricating a root cause. This enforces the ``be conservative when uncertain'' principle directly, and because it happens before any model call, it makes hallucination on vague input structurally impossible. Follow-up turns within an ongoing conversation are exempt from the ambiguity check, since prior turns supply the missing context.
-
-\figplaceholder{Intent-routing decision flow: an input is classified as greeting, small-talk, meta, ambiguous (clarify), or incident, with only the incident path invoking retrieval and the LLM.}{figures/intent\_routing.png}
-
-\subsection{Prompt-Injection and Jailbreak Defense}
-
-User text is screened for injection and jailbreak patterns — attempts to override instructions, reveal the system prompt, or enable an ``admin/DAN mode''. Detected attempts are flagged, and the user text is fenced as untrusted data within the prompt so the model treats it as content to analyze rather than instructions to obey. The system prompt is never exposed. Importantly, a genuine incident that happens to contain an injection phrase is still answered as an incident, with a security note attached, rather than being refused outright.
-
-\subsection{Grounded, Domain-Neutral Generation}
-
-Two prompt-level changes improved grounding. First, the resolution prompt was made \emph{domain-neutral}: the supporting-artifact language is chosen to fit the incident (shell, YAML, Python, Java, SQL, and others) instead of always defaulting to SQL, which had caused nonsensical SQL suggestions for non-database incidents such as a missing configuration file. Second, the prompt was changed to permit \emph{abstention}: the model is instructed to flag insufficient evidence and lower its confidence on incoherent input, and to never invent an incident identifier that is not among the retrieved reports, rather than being forced to always produce a fixed number of steps.
-
-\subsection{Data Redaction}
-
-User messages are screened for secrets and personal data (passwords, tokens, bearer credentials, connection-string credentials, private keys, email addresses) and these are redacted before the message is persisted or logged, so sensitive strings are not retained in the chat history.
+Answers may be rated, and a negative rating admits a free-text correction. Corrections are stored and, on subsequent queries with lexical overlap to the corrected question, injected into the prompt as high-priority guidance. The mechanism is explicitly a retrieval-time intervention over an inspectable store, not parameter adaptation: no model weights are modified, and the system makes no claim to the contrary.
 
 %=============================================================================
-\section{Human Feedback Loop}
+\section{Report Synthesis}
+\label{sec:synthesis}
 %=============================================================================
 
-The system captures human feedback and, crucially, uses it to influence future answers rather than merely recording it. Each answer can be rated with a thumbs up or down. On a thumbs-down, the user may provide a correction — the guidance that \emph{should} have been given. This correction is stored and, on future incidents whose question overlaps the corrected one, injected into the prompt as a high-authority ``learned correction''.
+The corpus is the system's memory, so its growth determines long-term utility. Because the assistant's output and the corpus documents share the schema of Section~\ref{sec:arch}, a resolved dialogue can be projected directly onto a report, inverting the ingestion projection $\pi$.
 
-It is important to be precise about what this does and does not claim: the correction is a \emph{retrieval hint} surfaced into the prompt, not a modification of the model's weights. The system never claims to retrain the model or alter its global behavior; corrections are inspectable data scoped to matching questions. This is an honest, local feedback mechanism appropriate to a privacy-constrained deployment.
+The synthesis maps dialogue elements onto schema fields under a strict grounding rule: the reported symptom is taken from the initiating query, the root cause from the model's diagnosis, the resolution steps from the generated step sequence, code blocks from the typed artifacts, and cross-references from the cited reports. Fields not determined by the dialogue are left empty rather than filled by inference, and identifying metadata records provenance. Every populated value is therefore traceable to dialogue content.
 
-%=============================================================================
-\section{Chat-to-Report Automation}
-\label{sec:chat2report}
-%=============================================================================
+The synthesized report is validated against the same schema as authored reports and persisted through the same service, so it is indistinguishable downstream: it is editable in the report editor and, once written, becomes retrievable corpus. This closes the loop between the system's two modules — the assistant consumes the corpus to resolve incidents and extends it with each resolution.
 
-\subsection{Motivation}
-
-Because the two modules share the \texttt{\{metadata, blocks[]\}} contract, it is natural to \emph{produce} a report from a diagnosed conversation, not only to \emph{consume} reports for retrieval. This closes the loop of the entire platform: an engineer diagnoses an incident in the chat, then generates a structured, editable report in a single action — no manual re-entry.
-
-\subsection{Grounded Construction}
-
-A builder assembles the report strictly from conversation data, with an explicit no-invention rule:
-\begin{itemize}
-    \item \textbf{Metadata}: the title and category are taken from the diagnosed incident type; the identifier and date are factual provenance; fields that cannot be grounded in the conversation (for example subcategory) are left empty rather than fabricated.
-    \item \textbf{Blocks}: a \emph{Reported Symptom} paragraph (the first user message), a \emph{Root Cause} paragraph (the assistant's summary), an ordered \emph{Resolution Steps} list, code blocks for any supporting artifacts the assistant produced, and \emph{incident-example} references for the reports the assistant cited.
-\end{itemize}
-Every populated value therefore traces to the conversation. The resulting report is validated against the same Pydantic schema used throughout the system, then saved via the report generator's existing service using its established file-naming convention, so it opens and edits in the report viewer exactly like a manually authored report.
-
-\figplaceholder{Chat-to-report flow: a diagnosed conversation (symptom, root cause, steps, cited incidents) is mapped, field by field, onto the \{metadata, blocks[]\} schema and saved as a viewer-compatible report.}{figures/chat\_to\_report.png}
-
-\subsection{Validation}
-
-The feature is covered by automated tests that: build a report from a mock conversation and re-validate it against the schema with zero errors; confirm that three distinct example conversations each yield a report with all required metadata fields non-empty and the expected block types present; confirm that the saved JSON is served by the report viewer's content endpoint and uses the generator's file-naming convention; and reject conversations with no diagnosis (greeting- or clarification-only), which have nothing to report.
+\figplaceholder{Report synthesis: a resolved dialogue is projected onto the (metadata, blocks) schema, validated, and persisted into the corpus, becoming retrievable for subsequent queries.}{figures/report\_synthesis.png}
 
 %=============================================================================
-\section{Software Quality and Testing}
+\section{Discussion}
+\label{sec:discussion}
 %=============================================================================
 
-Quality was maintained through an automated test suite that grew alongside the system. At the final state the backend is covered by \textbf{115 passing tests} across seven test modules, spanning: report CRUD and HTML export; the chatbot pipeline; conversation persistence; intent routing, redaction, and injection detection; retrieval, BM25, and RRF fusion; the human-feedback loop; the red-team robustness categories; and chat-to-report generation. Several real defects were caught by these tests during development — including an injection-phrase pattern that evaded detection and a mis-routed ambiguous input — and fixed before release. The frontend builds cleanly, and the entire application runs from a single Docker Compose command.
+\subsection{Interpretation}
 
-\figplaceholder{Screenshot of the unified application: the chat interface on the left with a diagnosed incident answer (steps, supporting artifact, cited sources) and the ``Generate report'' action, alongside the report-generator module.}{figures/app\_screenshot.png}
+The central result is the per-class decomposition of Table~\ref{tab:bystyle}. It shows that the hybrid's aggregate advantage is not a uniform improvement but the union of two disjoint competencies: the dense component contributes on paraphrastic queries where it is already saturated, and the sparse component contributes on identifier queries where the dense component fails almost completely (0.221). The fusion attains the upper envelope precisely because the failure modes are disjoint — a property of this query distribution, not a universal one.
 
-%=============================================================================
-\section{Discussion, Limitations, and Perspectives}
-\label{sec:limits}
-%=============================================================================
-
-\subsection{What Worked}
-
-The strongest outcome is the demonstration, on a realistic and deliberately adversarial corpus, that hybrid retrieval decisively outperforms dense-only search precisely where it matters operationally — on exact identifiers and error codes — while matching it on paraphrased queries. The project also showed, twice over, that \emph{context quality dominates model size}: the ingestion fix and the model-choice experiment both pointed to the same conclusion, which is a valuable lesson for privacy-constrained RAG systems where the largest models are not an option.
+The secondary result is methodological. Both the representation analysis (Section~\ref{sec:corpus}) and the $k$-ablation (Section~\ref{sec:ablation}) indicate that this system's quality is governed by \emph{what is retrieved and how it is represented}, not by generative capacity. Under a constraint that caps model scale, this is the actionable conclusion: the tractable levers are the projection $\pi$, the retrieval method, and the context bound.
 
 \subsection{Limitations}
 
-Several limitations are stated honestly:
-\begin{itemize}
-    \item \textbf{Synthetic evaluation queries.} The benchmark queries are derived from the reports themselves; they are a reproducible proxy for real query logs, which were unavailable. The reported metrics are therefore an optimistic bound. A benchmark of real user queries with human relevance judgments would strengthen external validity.
-    \item \textbf{Unquantified latency and generation quality.} The evaluation notebook measures retrieval quality only. Generation latency and answer quality were observed during development but are not quantified in the notebook, and are therefore deliberately not stated as numeric claims in this report. Quantifying them is left to future work.
-    \item \textbf{Local-hardware performance ceiling.} Because generation runs on a local model, response latency is bounded by local hardware rather than by the algorithm; this is an accepted consequence of the privacy constraint.
-\end{itemize}
+\textbf{Protocol validity.} Queries are synthesized from the documents they retrieve. This measures recovery from self-paraphrase and yields an upper bound on field performance; real queries use vocabulary absent from the report and may under-specify. The comparative conclusions are more robust than the absolute values, since all configurations are measured under the same bias.
+
+\textbf{Benchmark saturation.} The hybrid attains Recall@5 $=$ 1.000 and zero errors, leaving no headroom to distinguish further improvements. The benchmark has served its discriminative purpose but cannot support finer comparison.
+
+\textbf{Corpus scale.} With 68 documents, the retrieval task is comparatively easy and the IDF statistics that make BM25 effective are estimated from few documents. Behavior at larger corpus scale — where dense retrieval's approximate-nearest-neighbor regime and BM25's term statistics both change — is not characterized here.
+
+\textbf{Unmeasured generation.} The evaluation covers retrieval only. Generation quality and end-to-end latency are not quantified, and no claims about them are made.
 
 \subsection{Future Work}
 
-Natural next steps include: constructing a real-query, human-judged evaluation set; quantifying end-to-end latency and generation quality; learning a re-ranker from accumulated human feedback rather than injecting corrections as prompt hints; incremental re-indexing so newly generated reports become searchable without a restart; and adding authentication (the design is already prepared for it, with a per-client identifier that maps directly to a future user identity).
+The natural extensions follow from the limitations. A benchmark of real queries with human relevance judgments would establish field validity and restore measurement headroom. Evaluating generation — faithfulness to retrieved evidence, and correctness of proposed resolutions — would characterize the component this work leaves unmeasured. Learning a re-ranker from accumulated feedback would replace the current retrieval-time correction injection with a parametric model. Finally, scaling the corpus by an order of magnitude would test whether the per-class asymmetry observed here persists.
 
 \subsection{Conclusion}
 
-This internship delivered a unified, fully local, tested incident-management platform whose retrieval core is rigorously evaluated. Hybrid retrieval reaches Recall@5 = 1.000 and MRR = 0.987 (notebook cell~6), with the gain concentrated on exact-identifier queries where dense-only Recall@5 is 0.221 (cell~6); ablations show robustness to chunk size and a plateau at $k \ge 3$ (cell~10); and the error analysis reports 0.0\% residual failures (cell~13). Around this core, a robustness layer, a human-feedback loop, and a grounded chat-to-report feature make the system practically useful while respecting the privacy constraint end to end.
+This work designs and evaluates a locally-hosted retrieval-augmented incident assistant whose retrieval stage fuses dense and sparse indices by Reciprocal Rank Fusion. On a 272-query benchmark, the hybrid attains Recall@5 $=$ 1.000 and MRR $=$ 0.987 against 0.768 and 0.678 for dense-only retrieval, with the gain localized by per-class analysis to identifier queries where dense retrieval attains 0.221. Ablations establish invariance to chunk size on this corpus and saturation at $k \geq 3$, which bounds the generation context without recall loss. The retriever is embedded in a generation pipeline that abstains under insufficient evidence rather than fabricating, and in a synthesis mechanism that returns resolved dialogues to the corpus as validated structured documents. The system satisfies its privacy constraint throughout, executing all inference locally.
 
 \begin{thebibliography}{9}
 
@@ -497,7 +470,7 @@ Foundations and Trends in Information Retrieval, 3(4), 333--389.
 \bibitem{cormack2009rrf}
 Cormack, G. V., Clarke, C. L. A., \& Buettcher, S. (2009).
 \textit{Reciprocal Rank Fusion Outperforms Condorcet and Individual Rank Learning Methods}.
-In Proceedings of the 32nd ACM SIGIR Conference, 758--759.
+In Proceedings of the 32nd ACM SIGIR Conference on Research and Development in Information Retrieval, 758--759.
 
 \bibitem{reimers2019sbert}
 Reimers, N., \& Gurevych, I. (2019).
@@ -505,19 +478,19 @@ Reimers, N., \& Gurevych, I. (2019).
 In Proceedings of EMNLP-IJCNLP, 3982--3992.
 
 \bibitem{lewis2020rag}
-Lewis, P., et al. (2020).
+Lewis, P., Perez, E., Piktus, A., et al. (2020).
 \textit{Retrieval-Augmented Generation for Knowledge-Intensive NLP Tasks}.
 In Advances in Neural Information Processing Systems 33, 9459--9474.
 
-\bibitem{ollamadocs}
-Ollama Documentation. (2026).
-\textit{Run large language models locally}.
-Retrieved from https://ollama.com/
+\bibitem{karpukhin2020dpr}
+Karpukhin, V., Oğuz, B., Min, S., et al. (2020).
+\textit{Dense Passage Retrieval for Open-Domain Question Answering}.
+In Proceedings of EMNLP, 6769--6781.
 
-\bibitem{fastapidocs}
-FastAPI Documentation. (2026).
-\textit{FastAPI framework, high performance, easy to learn}.
-Retrieved from https://fastapi.tiangolo.com/
+\bibitem{jarvelin2002ndcg}
+Järvelin, K., \& Kekäläinen, J. (2002).
+\textit{Cumulated Gain-Based Evaluation of IR Techniques}.
+ACM Transactions on Information Systems, 20(4), 422--446.
 
 \end{thebibliography}
 
