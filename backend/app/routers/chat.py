@@ -328,6 +328,48 @@ def feedback_summary(request: Request) -> dict:
     return _store(request).feedback_summary()
 
 
+# ── chat-to-report ────────────────────────────────────────────────────────────
+
+
+@router.post("/api/conversations/{conversation_id}/report")
+def generate_report(
+    conversation_id: str,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    """Turn a diagnosed conversation into a saved incident report.
+
+    Builds an IncidentReport strictly from the conversation (symptom, diagnosis,
+    steps, artifacts, cited reports — nothing invented), validates it against the
+    schema, and persists it via the report generator's ReportService using its
+    existing file-naming convention.
+    """
+    from app.chatbot.report_builder import (
+        NoDiagnosisError,
+        build_report_from_conversation,
+    )
+    from app.reports.service import DuplicateReportError
+
+    client_id = _client_id(x_client_id)
+    store = _store(request)
+    if not store.get_conversation(client_id, conversation_id):
+        raise HTTPException(status_code=404, detail="Conversation not found")
+
+    messages = store.list_messages(client_id, conversation_id)
+    try:
+        report, markdown = build_report_from_conversation(messages)
+    except NoDiagnosisError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+    report_service = request.app.state.report_service
+    try:
+        result = report_service.save(report, markdown)
+    except DuplicateReportError as exc:
+        raise HTTPException(status_code=409, detail=str(exc))
+    # Return the saved filename + the report so the UI can open it in the viewer.
+    return {"success": True, "report": report.model_dump(), **result}
+
+
 # ── conversation CRUD ─────────────────────────────────────────────────────────
 
 
