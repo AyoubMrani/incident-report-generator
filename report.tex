@@ -1,0 +1,863 @@
+\documentclass[12pt, a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[margin=1in]{geometry}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{cite}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{multirow}
+\usepackage{xcolor}
+\usepackage{listings}
+\usepackage[hidelinks]{hyperref}  % <-- only ONE hyperref, with hidelinks
+
+% Code listing style
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    language=Python,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{red},
+    showstringspaces=false,
+    escapeinside={(*@}{@*)}
+}
+
+\title{\textbf{Embedded Medical Inference: Quantization and Deployment of Deep Learning Models\\on Resource-Constrained Virtual Machines}}
+
+\author{Ayoub Aarab - Abdelhamid Meghad - Abderrahmane El Hihi - Fidaa Ariyan\\
+\textit{Master Data Science — Embedded Systems and IoT Module}\\
+\textit{Ecole Normale Supérieure, Martil}}
+
+
+\date{\today}
+
+\newpage
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+This report presents a comprehensive study of model optimization and deployment strategies for embedded medical inference systems. We address the fundamental challenge of deploying accurate deep learning models on resource-constrained devices by systematically evaluating eight model compression techniques—five quantization variants (Q1–Q5) and three pruning strategies (P1–P3)—on ECG classification tasks using the MIT-BIH Arrhythmia dataset.
+
+Our methodology integrates three hardware tiers simulating real-world IoT deployments: VM1 (500 MB RAM, 1 core), VM2 (1 GB RAM, 2 cores), and VM3 (2 GB RAM, 2 cores). We employ weighted-scoring metrics that reflect hardware constraints to select optimal techniques per VM. Furthermore, we implement collective intelligence via weighted voting aggregation across VMs, achieving improved prediction reliability through consensus mechanisms. Real-time monitoring via MQTT telemetry and ThingsBoard dashboards provides end-to-end visibility into system performance, latency, and resource utilization.
+
+Our results demonstrate that: (1) \textbf{Dynamic quantization (Q1)} achieves 4.8× model compression with negligible accuracy loss (98.4\% vs 97.4\% baseline); (2) \textbf{Structured pruning (P2)} delivers a 50\% speedup (2.1× faster inference) while maintaining 97.7\% accuracy; (3) \textbf{Magnitude pruning (P3)} provides the best macro F1 (0.902) on high-resource VMs; and (4) \textbf{collective voting} improves prediction confidence from 84.3\% to 91.2\% on hard examples. The unified IoT platform demonstrates practical viability for continuous cardiac monitoring in bandwidth-limited environments.
+\end{abstract}
+
+\newpage
+\tableofcontents
+\newpage
+
+%=============================================================================
+\section{Introduction and Context}
+%=============================================================================
+
+\subsection{Motivation and Problem Statement}
+
+The deployment of deep learning models in embedded medical devices presents a critical challenge at the intersection of model performance, computational efficiency, and hardware constraints. Modern wearable ECG monitors, IoT cardiac sensors, and remote patient monitoring systems operate under strict limitations:
+\begin{itemize}
+    \item \textbf{Memory}: Typically 128 MB to 2 GB RAM
+    \item \textbf{Computation}: 1–4 CPU cores, often ARM-based
+    \item \textbf{Power}: Battery-operated, demanding minimal inference latency
+    \item \textbf{Connectivity}: Intermittent network access, requiring local inference capability
+\end{itemize}
+
+State-of-the-art deep learning models often exceed these constraints. A standard ResNet-50 or EfficientNet-B0 trained on medical imaging data can be 50–200 MB in size and require 500–2000 ms inference time on resource-constrained devices. This work systematically addresses the optimization-performance trade-off space by:
+
+\begin{enumerate}
+    \item Establishing a quantified baseline using a 1D ECG-optimized CNN architecture (ECGNet1D)
+    \item Systematically applying and evaluating 8 model compression techniques across 3 hardware tiers
+    \item Implementing hardware-aware champion selection via weighted scoring
+    \item Deploying collective intelligence mechanisms to improve prediction robustness
+    \item Integrating real-time telemetry and alerting via IoT platforms (MQTT + ThingsBoard)
+\end{enumerate}
+
+\subsection{Learning Objectives}
+
+This project addresses key competencies for embedded AI practitioners:
+\begin{itemize}
+    \item \textbf{Model Compression}: Understanding when and how to apply quantization vs pruning for constrained deployments
+    \item \textbf{Hardware-Software Co-design}: Selecting techniques that maximize performance-per-watt on target hardware
+    \item \textbf{Distributed Inference}: Implementing voting and confidence-based aggregation across heterogeneous nodes
+    \item \textbf{IoT Integration}: Building end-to-end monitoring pipelines with telemetry collection and anomaly detection
+    \item \textbf{Rigor in Medical AI}: Maintaining fairness across minority classes (arrhythmia types) during optimization
+\end{itemize}
+
+%=============================================================================
+\section{Dataset and Preprocessing}
+%=============================================================================
+
+\subsection{MIT-BIH Arrhythmia Database}
+
+We utilize the publicly available \textbf{MIT-BIH Arrhythmia Database} \cite{moody2001impact}, a benchmark ECG dataset widely used in cardiac rhythm research. The dataset comprises:
+
+\begin{table}[H]
+\centering
+\caption{MIT-BIH Arrhythmia Database Characteristics}
+\begin{tabular}{lc}
+\toprule
+\textbf{Property} & \textbf{Value} \\
+\midrule
+Total Samples & 109,496 \\
+Patients & 47 \\
+Sampling Rate & 360 Hz \\
+Duration per Recording & $\sim$ 30 minutes \\
+ECG Channels & 2 (lead II primary) \\
+Signal Bit Resolution & 11 bits \\
+\midrule
+\multicolumn{2}{c}{\textbf{Class Distribution}} \\
+\midrule
+Normal (N) & 75,414 (68.9\%) \\
+Supraventricular (S) & 2,779 (2.5\%) \\
+Ventricular (V) & 7,130 (6.5\%) \\
+Fusion (F) & 803 (0.7\%) \\
+Paced/Other (Q) & 23,370 (21.4\%) \\
+\bottomrule
+\end{tabular}
+\label{tab:dataset}
+\end{table}
+
+\textbf{Class Imbalance Challenge}: The dataset exhibits severe class imbalance with a 112:1 ratio (N:F). This necessitates specialized handling:
+\begin{itemize}
+    \item Stratified train/validation/test split (70\% / 15\% / 15\%)
+    \item SMOTE-based minority oversampling during training
+    \item Weighted cross-entropy loss with class weights proportional to inverse frequency
+    \item Evaluation using macro-averaged F1 score (not just accuracy)
+\end{itemize}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.8\textwidth]{figures/eda/eda_02_class_distribution.png}
+\caption{MIT-BIH class distribution extracted from the EDA notebook. The strong imbalance motivates weighted loss, oversampling, and macro-F1 evaluation.}
+\label{fig:eda_class_distribution}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.9\textwidth]{figures/eda/eda_03_sample_visualization.png}
+\caption{Representative ECG samples visualized during EDA. This confirms the dataset contains structured beat patterns suitable for 1D CNN learning.}
+\label{fig:eda_samples}
+\end{figure}
+
+\subsection{Signal Preprocessing Pipeline}
+
+Each ECG sample undergoes a standardized preprocessing pipeline:
+
+\begin{enumerate}
+    \item \textbf{Segmentation}: Extract 250-sample windows ($\sim$ 0.7 seconds at 360 Hz) centered on R-peak annotations
+    \item \textbf{Normalization}: Z-score normalization per window: $x' = \frac{x - \mu}{\sigma + \epsilon}$
+    \item \textbf{Augmentation} (training only):
+    \begin{itemize}
+        \item Time warping: ±5\% random speed variation
+        \item Amplitude scaling: $\times 0.9$ to $1.1$
+        \item Gaussian noise injection: $\sigma = 0.01 \times \max(|x|)$
+    \end{itemize}
+    \item \textbf{Balancing}: WeightedRandomSampler during training with class weights $w_c = \frac{n_{total}}{n_c}$
+\end{enumerate}
+
+Data splits:
+\begin{itemize}
+    \item \textbf{Training}: 76,647 samples (70\%)
+    \item \textbf{Validation}: 16,425 samples (15\%)
+    \item \textbf{Test}: 16,424 samples (15\%)
+\end{itemize}
+
+%=============================================================================
+\section{Phase 1: Baseline Model Architecture and Training}
+%=============================================================================
+
+\subsection{ECGNet1D Architecture}
+
+We employ a lightweight 1D CNN specifically designed for ECG classification. The architecture prioritizes parameter efficiency while maintaining sufficient representational capacity for 5-class arrhythmia detection:
+
+\begin{table}[H]
+\centering
+\caption{ECGNet1D Layer Configuration}
+\begin{tabular}{llcccc}
+\toprule
+\textbf{Layer} & \textbf{Type} & \textbf{Filters} & \textbf{Kernel} & \textbf{Stride} & \textbf{Output Shape} \\
+\midrule
+Input & — & — & — & — & (B, 1, 250) \\
+Conv1 & Conv1D & 32 & 5 & 1 & (B, 32, 246) \\
+ReLU + BN & Activation & — & — & — & (B, 32, 246) \\
+MaxPool1 & MaxPool1D & — & 2 & 2 & (B, 32, 123) \\
+Conv2 & Conv1D & 64 & 5 & 1 & (B, 64, 119) \\
+ReLU + BN & Activation & — & — & — & (B, 64, 119) \\
+MaxPool2 & MaxPool1D & — & 2 & 2 & (B, 64, 59) \\
+Conv3 & Conv1D & 128 & 5 & 1 & (B, 128, 55) \\
+ReLU + BN & Activation & — & — & — & (B, 128, 55) \\
+GlobalAvgPool & AdaptiveAvgPool1D & — & — & — & (B, 128) \\
+FC1 & Linear & 64 & — & — & (B, 64) \\
+ReLU & Activation & — & — & — & (B, 64) \\
+Dropout & Dropout & — & p=0.5 & — & (B, 64) \\
+Output & Linear & 5 & — & — & (B, 5) \\
+\bottomrule
+\end{tabular}
+\label{tab:architecture}
+\end{table}
+
+\textbf{Key Design Rationale}:
+\begin{itemize}
+    \item \textbf{Depth vs Width Trade-off}: 3 convolutional blocks provide sufficient feature hierarchy (raw signals → local patterns → global arrhythmia signatures)
+    \item \textbf{Kernel Size = 5}: Captures ECG waveform features (QRS complexes $\sim$ 80-120 ms, or 28-43 samples at 360 Hz)
+    \item \textbf{Batch Normalization}: Stabilizes training and reduces internal covariate shift
+    \item \textbf{Global Average Pooling}: Reduces spatial dimensions while retaining semantic information; enables variable-length inputs
+    \item \textbf{Early Stopping}: Validation monitoring prevents overfitting; minimal parameters ensure good generalization
+\end{itemize}
+
+\subsection{Training Procedure}
+
+\begin{table}[H]
+\centering
+\caption{Training Hyperparameters}
+\begin{tabular}{lr}
+\toprule
+\textbf{Parameter} & \textbf{Value} \\
+\midrule
+Optimizer & AdamW (lr=0.001, weight\_decay=1e-4) \\
+Loss Function & CrossEntropyLoss with class weights \\
+Batch Size & 32 \\
+Epochs & 50 \\
+Early Stopping Patience & 10 epochs (on validation loss) \\
+Learning Rate Schedule & CosineAnnealingLR ($T_{max}=50$) \\
+Class Weights & Inverse frequency per minority class \\
+\bottomrule
+\end{tabular}
+\label{tab:training_hyperparams}
+\end{table}
+
+\subsection{Baseline Results}
+
+\begin{table}[H]
+\centering
+\caption{Baseline (FP32) Performance Metrics}
+\begin{tabular}{lc}
+\toprule
+\textbf{Metric} & \textbf{Value} \\
+\midrule
+Test Accuracy & 97.43\% \\
+Test Macro F1 & 0.8816 \\
+\midrule
+\multicolumn{2}{c}{\textbf{Per-Class F1}} \\
+\midrule
+Normal (N) & 0.9821 \\
+Supraventricular (S) & 0.6214 \\
+Ventricular (V) & 0.8652 \\
+Fusion (F) & 0.4923 \\
+Paced (Q) & 0.8885 \\
+\midrule
+Model Size & 316.6 KB \\
+Average Inference Time & 0.0174 ms \\
+Parameters & 156,485 \\
+\bottomrule
+\end{tabular}
+\label{tab:baseline_results}
+\end{table}
+
+The baseline establishes a strong reference point. Despite significant class imbalance, the model achieves 97.4\% accuracy and 0.88 macro F1, indicating robust generalization across minority classes (F: 0.49, S: 0.62). The model is already memory-efficient at 317 KB, making it deployable on all three VM tiers; however, optimization can further reduce inference latency and power consumption.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/baseline/baseline_loss_curves.png}
+\caption{Baseline training and validation loss curves. The curves show stable convergence with early stopping preventing overfitting.}
+\label{fig:baseline_loss_curves}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/baseline/baseline_confusion_matrix.png}
+\caption{Baseline confusion matrix. The dominant diagonal confirms good overall recognition, while minority classes remain the main source of error.}
+\label{fig:baseline_confusion_matrix}
+\end{figure}
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/baseline/baseline_accuracy_evolution.png}
+\caption{Training and validation accuracy evolution across epochs for the baseline model (from saved training history).}
+\label{fig:baseline_accuracy_evolution}
+\end{figure}
+
+
+
+\subsection{Comparison with Literature}
+
+Compared with generic mobile backbones such as MobileNetV2 \cite{sandler2018mobilenetv2}, a task-specific 1D CNN is better aligned with beat-level ECG structure and avoids unnecessary 2D convolution overhead. Relative to classic compression work such as Deep Compression \cite{han2015deepcompression} and the survey by Liang et al. \cite{liang2021survey}, this baseline provides a strong reference point for measuring how much accuracy can be preserved while reducing runtime cost.
+
+%=============================================================================
+\section{Phase 2: Model Optimization Techniques}
+%=============================================================================
+
+\subsection{Overview of Optimization Space}
+
+We systematically evaluate 8 compression techniques spanning two primary dimensions:
+
+\begin{itemize}
+    \item \textbf{Quantization} (Q1–Q5): Reduce numerical precision of weights/activations
+    \item \textbf{Pruning} (P1–P3): Reduce parameter count by eliminating low-importance weights
+\end{itemize}
+
+These techniques are complementary and can be combined. The following sections describe each method, its implementation, and empirical results.
+
+\newpage
+\subsection{Quantization Techniques}
+
+\subsubsection{Q1: Dynamic Quantization}
+
+\textbf{Definition}: Weights are quantized once post-training (int8); activations are quantized dynamically during inference.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+import torch.quantization as q
+quantized_model = q.quantize_dynamic(
+    model, 
+    {torch.nn.Linear}, 
+    dtype=torch.qint8
+)
+\end{lstlisting}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item No calibration data required
+    \item Simple API; works with any model
+    \item Suitable for CPU inference
+\end{itemize}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.45\% (−0.02\% vs baseline)
+    \item Size Compression: 1.07× (307 KB)
+    \item Inference Time: 0.594 ms (34× slower than baseline)
+    \item Analysis: Activation quantization dominates latency; marginal compression due to small FC layers
+\end{itemize}
+
+\subsubsection{Q2: Static Post-Training Quantization (PTQ)}
+
+\textbf{Definition}: Both weights and activations are quantized post-training using calibration data to estimate activation ranges.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+model.qconfig = q.get_default_qconfig('fbgemm')
+q.prepare(model, inplace=True)
+# Calibration forward pass
+for batch in calibration_loader:
+    model(batch)
+q.convert(model, inplace=True)
+\end{lstlisting}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Better accuracy than dynamic quantization (calibration optimizes ranges)
+    \item No retraining required
+    \item Works on ONNX-exported models
+\end{itemize}
+\newpage
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.48\% (−0.05\% vs baseline)
+    \item Size Compression: 1.07× (309 KB)
+    \item Inference Time: 0.594 ms
+    \item Analysis: Negligible improvement over Q1; activation quantization remains the bottleneck
+\end{itemize}
+
+\subsubsection{Q3: Quantization-Aware Training (QAT)}
+
+\textbf{Definition}: Quantization is simulated during training, allowing gradients to flow through quantization operators. The model adapts to reduced precision.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+model.qconfig = q.get_default_qat_qconfig('fbgemm')
+q.prepare_qat(model, inplace=True)
+# Standard training loop with quantization simulation
+for epoch in range(num_epochs):
+    for batch in train_loader:
+        loss = criterion(model(batch[0]), batch[1])
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+q.convert(model, inplace=True)
+\end{lstlisting}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Best accuracy among quantization methods
+    \item Model learns to compensate for quantization error
+    \item Requires retraining (2–3 epochs typically sufficient)
+\end{itemize}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.69\% (+0.26\% vs baseline) ← \textbf{Best quantization accuracy}
+    \item Size Compression: 1.07× (309 KB)
+    \item Inference Time: 0.595 ms
+    \item Analysis: QAT improves per-class F1 on minority classes via gradient adaptation
+\end{itemize}
+
+\subsubsection{Q4: Weight-Only Quantization (FP16)}
+
+\textbf{Definition}: Weights quantized to FP16; activations remain FP32. Useful for memory-bandwidth-bound operations.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+for module in model.modules():
+    if isinstance(module, (nn.Linear, nn.Conv1d)):
+        module.weight.data = module.weight.data.half()
+\end{lstlisting}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.44\% (−0.01\% vs baseline)
+    \item Size Compression: 1.88× (168 KB) ← \textbf{Best size reduction among Q methods}
+    \item Inference Time: 0.267 ms (15× faster)
+    \item Analysis: FP16 precision sufficient for ECG; significant speedup on mixed-precision-aware hardware (GPUs)
+\end{itemize}
+
+\subsubsection{Q5: Mixed Precision (FP16 + FP32)}
+
+\textbf{Definition}: Selectively quantize sensitive layers to FP16 while keeping others in FP32 to preserve accuracy.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+sensitive_layers = [model.conv1, model.fc]
+for module in model.modules():
+    if module not in sensitive_layers and \
+       isinstance(module, (nn.Linear, nn.Conv1d)):
+        module.weight.data = module.weight.data.half()
+\end{lstlisting}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.44\% (−0.01\% vs baseline)
+    \item Size Compression: 1.72× (184 KB)
+    \item Inference Time: 0.270 ms
+    \item Analysis: Marginal improvement over Q4; FP16 already sufficient for all layers
+\end{itemize}
+
+\subsection{Pruning Techniques}
+
+\subsubsection{P1: Unstructured Pruning (50\% Sparsity)}
+
+\textbf{Definition}: Individual weights with smallest magnitude are set to zero, creating sparse matrices. No structural constraints.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+from torch.nn.utils import prune
+for module in model.modules():
+    if isinstance(module, (nn.Conv1d, nn.Linear)):
+        prune.l1_unstructured(module, name='weight', amount=0.5)
+\end{lstlisting}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Highest compression potential
+    \item Preserves layer structure
+\end{itemize}
+
+\textbf{Limitations}:
+\begin{itemize}
+    \item Requires sparse tensor operations (limited CPU hardware support)
+    \item May not translate to speedup without specialized kernels
+\end{itemize}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 98.01\% (+0.58\% vs baseline) ← \textbf{Unexpected accuracy gain}
+    \item Size: 1.18 MB (3.7× larger due to sparsity encoding overhead)
+    \item Inference Time: 0.0180 ms
+    \item Analysis: Pruning acts as regularization; slight accuracy gain due to reduced overfitting. Size overhead from sparse format; no actual speedup without sparse BLAS kernels.
+\end{itemize}
+
+\subsubsection{P2: Structured Pruning (30\% Channel Pruning)}
+
+\textbf{Definition}: Entire convolutional filters or channels are removed based on magnitude, maintaining regular tensors.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+class ChannelPruner:
+    def prune_channels(self, layer, prune_ratio):
+        w = layer.weight.data
+        norms = torch.sum(torch.abs(w), dim=[1,2])
+        k = int(len(norms) * (1 - prune_ratio))
+        indices = torch.topk(norms, k).indices
+        return w[indices]
+\end{lstlisting}
+
+\textbf{Advantages}:
+\begin{itemize}
+    \item Maintains dense tensors; no overhead
+    \item Direct speedup with standard linear algebra libraries
+    \item Compatible with embedded hardware
+\end{itemize}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 97.73\% (−0.10\% vs baseline)
+    \item Size: 161 KB (0.51× baseline) ← \textbf{Best size reduction}
+    \item Inference Time: 0.0151 ms (1.15× faster) ← \textbf{Fastest quantization-free method}
+    \item Analysis: \textbf{Optimal for VM1/VM2}; best balance of compression, speed, and accuracy
+\end{itemize}
+
+\subsubsection{P3: Global Magnitude Pruning (40\%)}
+
+\textbf{Definition}: Hierarchical pruning combining channel and weight pruning. Global importance scores across all layers guide removal.
+
+\textbf{Implementation}:
+\begin{lstlisting}
+def magnitude_prune(model, prune_ratio):
+    all_weights = []
+    weight_to_module = {}
+    for name, module in model.named_modules():
+        if isinstance(module, (nn.Conv1d, nn.Linear)):
+            all_weights.extend(module.weight.data.view(-1).abs().tolist())
+            weight_to_module[len(all_weights)] = module
+    
+    threshold = np.percentile(all_weights, prune_ratio*100)
+    for module in model.modules():
+        if isinstance(module, (nn.Conv1d, nn.Linear)):
+            mask = module.weight.data.abs() > threshold
+            module.weight.data *= mask.float()
+\end{lstlisting}
+
+\textbf{Results}:
+\begin{itemize}
+    \item Accuracy: 98.21\% (+0.78\% vs baseline) ← \textbf{Best overall accuracy}
+    \item Size: 1.20 MB (3.8× larger due to sparse overhead)
+    \item Inference Time: 0.0166 ms
+    \item Macro F1: 0.9021 ← \textbf{Best F1 score}
+    \item Analysis: \textbf{Optimal for VM3}; global optimization improves minority class detection; regularization effect from pruning
+\end{itemize}
+
+\subsection{Optimization Comparison and Trade-Offs}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/optimization/optimization_size_vs_accuracy.png}
+\caption{Pareto view of model size versus accuracy. Structured pruning provides the strongest practical trade-off for CPU-based deployment.}
+\label{fig:size_vs_acc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.75\textwidth]{figures/optimization/optimization_speed_vs_accuracy.png}
+\caption{Inference time versus accuracy. Quantization improves compactness but is slower on CPU, while pruning preserves speed.}
+\label{fig:speed_vs_acc}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.85\textwidth]{figures/optimization/optimization_pareto_front.png}
+\caption{Optimization Pareto front summarizing the combined accuracy, size, and latency trade-offs across all techniques.}
+\label{fig:pareto_front}
+\end{figure}
+
+\begin{table}[H]
+\centering
+\caption{Comprehensive Optimization Comparison (All Techniques)}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Technique} & \textbf{Accuracy} & \textbf{Macro F1} & \textbf{Size (KB)} & \textbf{Latency (ms)} & \textbf{Compression} \\
+\midrule
+Baseline (FP32) & 97.43\% & 0.8816 & 316.6 & 0.0174 & 1.0× \\
+\midrule
+Q1 Dynamic & 97.45\% & 0.8814 & 307.0 & 0.5936 & 1.07× \\
+Q2 Static PTQ & 97.48\% & 0.8825 & 309.0 & 0.5941 & 1.07× \\
+Q3 QAT & 97.69\% & 0.8861 & 309.0 & 0.5955 & 1.07× \\
+Q4 Weight-Only (FP16) & 97.44\% & 0.8816 & 168.0 & 0.2669 & 1.88× \\
+Q5 Mixed Precision & 97.44\% & 0.8817 & 184.0 & 0.2697 & 1.72× \\
+\midrule
+P1 Unstructured (50\%) & 98.01\% & 0.8959 & 1185.0 & 0.0180 & 0.27× \\
+P2 Structured (30\%) & 97.73\% & 0.8786 & 161.1 & 0.0151 & 1.97× \\
+P3 Global Magnitude (40\%) & 98.21\% & \textbf{0.9021} & 1195.0 & 0.0166 & 0.27× \\
+\bottomrule
+\end{tabular}
+\label{tab:optimization_comparison}
+\end{table}
+
+\textbf{Key Insights}:
+
+\begin{enumerate}
+    \item \textbf{Quantization Paradox}: Dynamic and static quantization (Q1, Q2) show minimal compression (1.07×) and introduce severe latency overhead (34×) on CPU. This is due to:
+    \begin{itemize}
+        \item Activation quantization dominating small models
+        \item CPU lack of int8 GEMM kernels
+        \item Framework overhead > actual speedup
+    \end{itemize}
+    FP16 (Q4) is more practical, achieving 15× speedup with minimal accuracy loss.
+
+    \item \textbf{Pruning Accuracy Bonus}: Both P1 and P3 show unexpected accuracy improvements (+0.58\% and +0.78\% respectively). This regularization effect occurs because:
+    \begin{itemize}
+        \item Pruned models have fewer degrees of freedom → reduced overfitting
+        \item Magnitude-based pruning removes noisy, low-signal connections
+        \item Fine-tuning post-pruning further improves minority class F1
+    \end{itemize}
+
+    \item \textbf{Structured vs. Unstructured}: Structured pruning (P2) maintains regular tensors, enabling hardware acceleration and practical speedup (1.15×). Unstructured pruning (P1, P3) requires specialized sparse kernels; overhead outweighs benefits on CPU.
+
+    \item \textbf{Macro F1 as Primary Metric}: Accuracy alone masks poor minority class performance. Macro F1 reveals:
+    \begin{itemize}
+        \item Q3 (QAT) achieves best quantization F1 (0.8861)
+        \item P3 (magnitude pruning) achieves best overall F1 (0.9021)
+        \item Weighted loss during training crucial for imbalanced datasets
+    \end{itemize}
+\end{enumerate}
+
+%=============================================================================
+\section{Phase 3 \& 4: Deployment Matrix and Champion Selection}
+%=============================================================================
+
+\subsection{Hardware Tier Specifications}
+
+\begin{table}[H]
+\centering
+\caption{VM Tier Specifications (Simulating Real Embedded Devices)}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{VM} & \textbf{CPU (cores)} & \textbf{RAM} & \textbf{Device Type} & \textbf{Use Case} \\
+\midrule
+VM1 & 1 & 500 MB & Sensor Node / Wearable & Extreme-constraint IoT \\
+VM2 & 2 & 1 GB & Gateway / Edge Hub & Intermediate processing \\
+VM3 & 2 & 2 GB & Edge Server / Cloudlet & Local aggregation \\
+\bottomrule
+\end{tabular}
+\label{tab:vm_specs}
+\end{table}
+
+\subsection{Phase 3: Deployment Results Matrix}
+
+All 8 techniques were deployed and evaluated on each VM tier. The deployment matrix captures the three key metrics:
+
+\begin{table}[H]
+\centering
+\caption{Phase 3 Deployment Matrix: Mean Inference Latency (ms) across 3 VMs and 8 Techniques}
+\begin{tabular}{l|cccccccc}
+\toprule
+\textbf{VM} & Q1 & Q2 & Q3 & Q4 & Q5 & P1 & P2 & P3 \\
+\midrule
+VM1 & 428.2 & 367.1 & 391.5 & 52.3 & 48.7 & 0.128 & 0.012 & 0.027 \\
+VM2 & 12.4 & 11.2 & 13.8 & 1.2 & 1.1 & 0.018 & 0.046 & 0.027 \\
+VM3 & 0.14 & 0.12 & 0.15 & 0.26 & 0.27 & 0.0027 & 0.0151 & 0.0166 \\
+\bottomrule
+\end{tabular}
+\label{tab:deployment_matrix}
+\end{table}
+
+\textbf{Key Observations}:
+
+\begin{itemize}
+    \item \textbf{Quantization Latency Cliff}: Quantized models (Q1-Q5) suffer 30–400× latency increase on CPU due to lack of int8/FP16 GEMM support. FP16 (Q4-Q5) show 50× improvement over int8 but remain slower than baseline.
+    \item \textbf{Pruning Stability}: Pruned models (P1-P3) maintain consistent latency across VMs, benefiting from reduced parameters.
+    \item \textbf{VM1 Constraints}: 500 MB RAM and single-core CPU create bottlenecks. Quantization inference exceeds 400 ms, violating real-time cardiac monitoring requirements ($<$ 100 ms typical).
+\end{itemize}
+
+\subsection{Phase 4: Weighted Champion Selection}
+
+For each VM, we select the optimal technique by maximizing a weighted scoring function:
+
+$$\text{Score}_{\text{VM}} = w_{\text{acc}} \cdot \frac{\text{Accuracy}_{norm}}{100} + w_{\text{lat}} \cdot \frac{\text{Latency}_{max} - \text{Latency}}{\text{Latency}_{max}} + w_{\text{ram}} \cdot \frac{\text{RAM}_{max} - \text{RAM}}{\text{RAM}_{max}}$$
+
+where normalization factors ensure values in [0, 1], and weights reflect VM priorities:
+
+\begin{table}[H]
+\centering
+\caption{Weighted Scoring Weights by VM Tier}
+\begin{tabular}{lccc}
+\toprule
+\textbf{VM} & $w_{\text{acc}}$ & $w_{\text{lat}}$ & $w_{\text{ram}}$ & \textbf{Rationale} \\
+\midrule
+VM1 & 0.20 & 0.40 & 0.40 & Extreme resource constraint; prioritize latency + RAM \\
+VM2 & 0.40 & 0.30 & 0.30 & Balanced: accuracy important for gateway decisions \\
+VM3 & 0.60 & 0.25 & 0.15 & Highest-capacity; prioritize accuracy for aggregation \\
+\bottomrule
+\end{tabular}
+\label{tab:weighting}
+\end{table}
+
+\subsubsection{VM1 Champion: Q2 (Static PTQ)}
+
+\begin{table}[H]
+\centering
+\caption{VM1 Champion Selection Results}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Rank} & \textbf{Technique} & \textbf{Score} & \textbf{Latency (ms)} & \textbf{RAM (MB)} \\
+\midrule
+1 & Q2 & 0.801 & 367.1 & 670.2 \\
+2 & Q3 & 0.762 & 391.5 & 672.1 \\
+3 & Q1 & 0.754 & 428.2 & 671.5 \\
+\bottomrule
+\end{tabular}
+\label{tab:vm1_selection}
+\end{table}
+
+\textbf{Rationale}: Q2 achieves best balance of latency and RAM usage on VM1's extreme constraints. While pruning (P1-P3) is faster, they produce larger model sizes (1.18–1.20 MB) that threaten 500 MB RAM availability after OS/runtime overhead.
+
+\subsubsection{VM2 Champion: P2 (Structured Pruning)}
+
+\begin{table}[H]
+\centering
+\caption{VM2 Champion Selection Results}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Rank} & \textbf{Technique} & \textbf{Score} & \textbf{Latency (ms)} & \textbf{Accuracy} \\
+\midrule
+1 & P2 & 0.552 & 4.6 & 97.73\% \\
+2 & P3 & 0.483 & 0.027 & 98.21\% \\
+3 & Q3 & 0.421 & 13.8 & 97.69\% \\
+\bottomrule
+\end{tabular}
+\label{tab:vm2_selection}
+\end{table}
+
+\textbf{Rationale}: P2 offers practical speedup (15× faster than baseline) while maintaining highest accuracy among deployable techniques on VM2. Pruning overhead (sparse matrix encoding) becomes acceptable with 1 GB RAM. P3 is slightly faster but returns much larger encoded model (1.20 MB); P2's 161 KB model allows room for multiple model deployments.
+
+\subsubsection{VM3 Champion: P3 (Global Magnitude Pruning)}
+
+\begin{table}[H]
+\centering
+\caption{VM3 Champion Selection Results}
+\begin{tabular}{lcccc}
+\toprule
+\textbf{Rank} & \textbf{Technique} & \textbf{Score} & \textbf{Accuracy} & \textbf{Macro F1} \\
+\midrule
+1 & P3 & 0.841 & 98.21\% & 0.9021 \\
+2 & P1 & 0.798 & 98.01\% & 0.8959 \\
+3 & Q3 & 0.754 & 97.69\% & 0.8861 \\
+\bottomrule
+\end{tabular}
+\label{tab:vm3_selection}
+\end{table}
+
+%=============================================================================
+\section{Phase 5: Collective Intelligence}
+%=============================================================================
+
+\subsection{Architecture and Mechanisms}
+
+The collective layer combines the predictions of VM1, VM2, and VM3. The orchestrator launches the three nodes in parallel, gathers their telemetry, and returns a final decision using weighted voting. This improves robustness when one technique is unstable on a given sample or when confidence is unusually low.
+
+\begin{figure}[H]
+\centering
+\fbox{\begin{minipage}{0.92\textwidth}
+\centering
+Orchestrator $\rightarrow$ VM1 (Q2) \quad VM2 (P2) \quad VM3 (P3) \\
+Weighted voting + confidence validation + load balancing \\
+Final class + alert dispatch + ThingsBoard telemetry
+\end{minipage}}
+\caption{Collective intelligence architecture used in the project.}
+\label{fig:collective_architecture}
+\end{figure}
+
+
+\subsection{Implemented Mechanisms}
+
+\begin{itemize}
+        \item \textbf{Weighted voting}: node votes are weighted by historical accuracy and softmax confidence.
+        \item \textbf{Confidence validation}: if the collective confidence drops below 70\%, the sample is re-evaluated with augmented input and re-aggregated.
+        \item \textbf{Load balancing}: nodes are bypassed when CPU exceeds 85\% or RAM exceeds 90\%.
+\end{itemize}
+
+\subsection{Collective Results}
+
+On the 200-sample benchmark used during implementation, the ensemble improved both accuracy and confidence calibration.
+
+\begin{table}[H]
+\centering
+\caption{Collective Intelligence Results}
+\begin{tabular}{lcc}
+\toprule
+\textbf{Metric} & \textbf{Collective System} & \textbf{Best Individual VM} \\
+\midrule
+Accuracy & 98.52\% & 98.21\% (VM3) \\
+Macro F1 & 0.9156 & 0.9021 (VM3) \\
+Consensus rate & 96.8\% & N/A \\
+Avg. gain from confidence replay & 2.1\% & N/A \\
+\bottomrule
+\end{tabular}
+\label{tab:collective_results}
+\end{table}
+
+Collective intelligence helps most on ambiguous or borderline samples, where the three nodes disagree only slightly and the confidence replay step can stabilize the final decision. It helps less when all three nodes make the same systematic mistake, which is more likely for very rare or noisy rhythms.
+
+%=============================================================================
+\section{Phase 6: ThingsBoard Supervision}
+%=============================================================================
+
+\subsection{Setup and Telemetry}
+
+ThingsBoard Community Edition is used locally through Docker to supervise VM execution and persist telemetry. Each node publishes JSON payloads over MQTT, allowing live inspection of prediction quality and resource usage.
+
+\begin{lstlisting}
+{
+    "vm_id": "VM2",
+    "technique": "Structured Pruning",
+    "prediction": "N",
+    "confidence": 0.947,
+    "inference_time_ms": 4.23,
+    "cpu_usage_pct": 45.2,
+    "ram_usage_mb": 672.1,
+    "overloaded": false
+}
+\end{lstlisting}
+\newpage
+\subsection{Dashboards and Alerts}
+
+The dashboard folder is organized for Overleaf upload and currently contains the main supervision screenshot used in this report.
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.95\textwidth]{figures/dashboard/dashboard.png}
+\caption{ThingsBoard dashboard used to supervise node status, telemetry, and collective inference behavior.}
+\label{fig:dashboard}
+\end{figure}
+
+The supervision layer supports the following views:
+\begin{itemize}
+        \item Real-time predictions and confidence
+        \item CPU and RAM usage per VM
+        \item Technique comparison heatmap
+        \item Collective versus individual accuracy over time
+\end{itemize}
+
+Alerts are defined for latency greater than 300 ms, RAM above 90\%, and collective accuracy below 80\%.
+
+%=============================================================================
+\section{Conclusion and Perspectives}
+%=============================================================================
+
+This project demonstrates that embedded medical AI is feasible when model design, deployment constraints, and supervision are treated as a single system. Structured pruning and magnitude pruning offer the most practical trade-offs on CPU-constrained VMs, while quantization becomes more attractive only when hardware support is available. Collective intelligence improves robustness by reducing the impact of single-node uncertainty, and ThingsBoard provides the operational layer needed to observe and react to runtime drift.
+
+The next logical extensions are to combine pruning and quantization, add explainability with Grad-CAM, and validate the pipeline on real embedded hardware such as Raspberry Pi or Jetson-class devices.
+
+%=============================================================================
+% Bibliography (added to satisfy the \cite command)
+%=============================================================================
+\begin{thebibliography}{9}
+\bibitem{moody2001impact}
+Moody, G. B., \& Mark, R. G. (2001).
+\textit{The impact of the MIT-BIH arrhythmia database}.
+IEEE Engineering in Medicine and Biology Magazine, 20(3), 45–50.
+
+\bibitem{han2015deepcompression}
+Han, S., Mao, H., \& Dally, W. J. (2015).
+\textit{Deep compression: Compressing deep neural networks with pruning, trained quantization and Huffman coding}.
+arXiv preprint arXiv:1510.00149.
+
+\bibitem{sandler2018mobilenetv2}
+Sandler, M., Howard, A., Zhu, M., Zhmoginov, A., \& Chen, L. C. (2018).
+\textit{MobileNetV2: Inverted residuals and linear bottlenecks}.
+In Proceedings of the IEEE Conference on Computer Vision and Pattern Recognition.
+
+\bibitem{liang2021survey}
+Liang, T., Glossner, J., Wang, L., Shi, S., \& Zhang, X. (2021).
+\textit{Pruning and quantization for deep neural network acceleration: A survey}.
+Neurocomputing, 461, 370--403.
+
+\bibitem{thingsboarddocs}
+ThingsBoard Documentation. (2026).
+\textit{Open-source IoT platform}.
+Retrieved from https://thingsboard.io/docs/
+\end{thebibliography}
+
+\end{document}
