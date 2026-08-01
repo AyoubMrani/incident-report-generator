@@ -35,6 +35,7 @@ from .resolution import (
     parse_resolution,
 )
 from .retrieval import combine_retrieval_queries, search_multimodal
+from .selection import select_sources
 from .security import injection_scan, wrap_untrusted
 
 # How many prior turns of a conversation to feed back into the resolution prompt
@@ -197,6 +198,11 @@ class ChatbotService:
             bm25=self.kb.bm25,   # fuse lexical BM25 with vector search (RRF)
         )
 
+        # Gate 3 — select only the reports that genuinely answer the question.
+        # Topically-similar-but-wrong candidates are discarded here so they can
+        # neither contribute resolution steps nor appear as cited sources.
+        results = select_sources(text_query or query, results)
+
         # Build the resolution prompt: prior-turn memory + untrusted-fenced input.
         problem = combine_retrieval_queries(text_query or query, image_query or None)
         problem = _history_block(history) + wrap_untrusted(problem)
@@ -211,9 +217,13 @@ class ChatbotService:
                 problem=problem,
                 image_analysis=image_analysis,
                 corrections=corrections_block,
-                # Feed only the top few chunks into the prompt (latency); all
-                # retrieved hits still surface as sources in _shape().
-                knowledge=format_retrieval_context(results, limit=RESOLUTION_CONTEXT_K),
+                # Gate 3 already narrowed this to the reports that genuinely
+                # match (at most MAX_SELECTED), so every one of them goes into
+                # the prompt in full — the model must be able to reproduce a
+                # matching report's complete documented resolution.
+                knowledge=format_retrieval_context(
+                    results, limit=len(results), max_chars_per_chunk=2000
+                ),
             )
         else:
             prompt = format_prompt(
@@ -245,6 +255,14 @@ class ChatbotService:
         )
         parsed["is_chat"] = False
         parsed["needs_clarification"] = bool(parsed.get("insufficient"))
+
+        # Contradiction guard: an answer cannot both claim no documented
+        # resolution exists AND present resolution steps. When the model does
+        # both, the steps win — they came from a selected report — so the
+        # misleading "nothing documented" banner is dropped.
+        if parsed.get("no_documented_resolution") and parsed.get("recommended_resolution"):
+            parsed["no_documented_resolution"] = False
+
         if injection is not None and injection.detected:
             parsed["security_note"] = injection.note
         return parsed

@@ -185,3 +185,79 @@ def test_report_sections_parsed():
     assert p["validation"].startswith("latency")
     assert p["additional_notes"].startswith("requires")
     assert p["has_media"] is True
+
+
+# ── Gate 3: source selection & relevance ranking ──────────────────────────────
+
+
+def _hit(title, text="", inc=None, score=0.04):
+    return {"title": title, "text": text, "incident_id": inc, "source": f"reports/{title}.json",
+            "score": score, "path": "", "chunk_id": 0}
+
+
+def test_gate3_selects_only_the_direct_match():
+    """The reported failure: a rollback query pulled in unrelated ETL reports."""
+    from app.chatbot.selection import select_sources
+    hits = [
+        _hit("Doing Rollback for LineIDs", "extract LineIDs then run menu.py rollback", score=0.042),
+        _hit("INC1048213 ETL Transformation Repair", "transform_orders.py S3 pipeline", "INC1048213", 0.041),
+        _hit("INC0012020 Rollback failed image GC", "registry manifest unknown", "INC0012020", 0.040),
+    ]
+    sel = select_sources("how to rollback lineIds", hits)
+    titles = [s["title"] for s in sel]
+    assert titles == ["Doing Rollback for LineIDs"], titles
+    # The unrelated reports are discarded entirely — they can neither contribute
+    # steps nor appear as sources.
+    assert not any("ETL" in t or "INC0012020" in t for t in titles)
+
+
+def test_gate3_caps_at_two_sources():
+    from app.chatbot.selection import select_sources, MAX_SELECTED
+    hits = [_hit(f"Kafka consumer lag {i}", "kafka consumer lag rebalance", f"INC{i}", 0.04)
+            for i in range(5)]
+    sel = select_sources("kafka consumer lag", hits)
+    assert len(sel) <= MAX_SELECTED == 2
+
+
+def test_gate3_deduplicates_same_report():
+    from app.chatbot.selection import select_sources
+    hits = [
+        _hit("Doing Rollback for LineIDs", "chunk one", score=0.042),
+        _hit("Doing Rollback for LineIDs", "chunk two", score=0.041),
+    ]
+    assert len(select_sources("rollback lineIds", hits)) == 1
+
+
+def test_gate3_keeps_two_when_both_genuinely_match():
+    from app.chatbot.selection import select_sources
+    hits = [
+        _hit("Kafka consumer lag growing", "consumer lag rebalance", "INC1", 0.05),
+        _hit("Kafka consumer lag false positive", "consumer lag rebalance", "INC2", 0.05),
+        _hit("DNS record correction", "dns servfail resolver", "INC3", 0.01),
+    ]
+    sel = select_sources("kafka consumer lag", hits)
+    assert len(sel) == 2
+    assert all("Kafka" in s["title"] for s in sel)
+
+
+def test_gate3_empty_when_nothing_retrieved():
+    from app.chatbot.selection import select_sources
+    assert select_sources("anything", []) == []
+
+
+# ── contradiction ban ─────────────────────────────────────────────────────────
+
+
+def test_no_documented_resolution_cannot_coexist_with_steps(client):
+    """An answer must not claim nothing is documented while showing steps."""
+    svc = client.app.state.chatbot
+    parsed = svc._shape(
+        json.dumps({
+            "incident_summary": "s", "incident_type": "t", "confidence": 80,
+            "no_documented_resolution": True,   # model contradicts itself
+            "recommended_resolution": [{"step": 1, "title": "a", "action": "b"}],
+        }),
+        results=[], injection=None,
+    )
+    assert parsed["recommended_resolution"]              # steps kept
+    assert parsed["no_documented_resolution"] is False   # contradiction resolved
