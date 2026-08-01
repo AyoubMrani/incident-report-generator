@@ -37,8 +37,54 @@ def _empty_result(raw: str) -> dict:
         "warnings": [],
         "missing": [],
         "insufficient": False,
+        # Report sections (Problem Summary / Root Cause / Investigation /
+        # Resolution / Validation / Notes) and gate outcomes.
+        "root_cause": "",
+        "investigation": "",
+        "validation": "",
+        "additional_notes": "",
+        "has_media": False,
+        "no_documented_resolution": False,
+        "ai_suggestion": "",
+        "refused": False,
         "raw": raw,
     }
+
+
+# The solution types a resolution step can be classified as. A single report
+# legitimately mixes several of these in sequence (e.g. extract with SQL, then
+# run a script), so each step carries its own type rather than the whole
+# resolution being labelled once.
+ACTION_TYPES = (
+    "SQL_QUERY",
+    "CODE",
+    "CONFIG_CHANGE",
+    "INFRA_ACTION",
+    "INVESTIGATION_MEDIA",
+    "LOG_ANALYSIS",
+    "MANUAL_PROCEDURE",
+    "DOC_REFERENCE",
+)
+
+# Fallback when the model omits or invents a type: infer from the step's
+# artifact language, else treat it as a manual procedure (never assume SQL).
+_LANG_TO_TYPE = {
+    "sql": "SQL_QUERY",
+    "bash": "CODE", "sh": "CODE", "shell": "CODE", "python": "CODE",
+    "powershell": "CODE", "javascript": "CODE", "typescript": "CODE", "java": "CODE",
+    "yaml": "CONFIG_CHANGE", "json": "CONFIG_CHANGE", "xml": "CONFIG_CHANGE",
+    "ini": "CONFIG_CHANGE", "hcl": "CONFIG_CHANGE", "dockerfile": "CONFIG_CHANGE",
+    "log": "LOG_ANALYSIS",
+}
+
+
+def _normalize_action_type(value, artifact_language: str = "") -> str:
+    """Coerce a model-supplied action_type onto the known set."""
+    candidate = str(value or "").strip().upper().replace(" ", "_").replace("-", "_")
+    if candidate in ACTION_TYPES:
+        return candidate
+    inferred = _LANG_TO_TYPE.get((artifact_language or "").strip().lower())
+    return inferred or "MANUAL_PROCEDURE"
 
 
 def format_retrieval_context(
@@ -133,13 +179,29 @@ def _parse_resolution_step(item: dict, default_step: int) -> dict | None:
         evidence = [evidence]
     evidence = [str(e).strip() for e in evidence if str(e).strip()]
 
+    # Optional per-step artifact (query, script, config, or log excerpt).
+    artifact = None
+    raw_artifact = item.get("artifact")
+    if isinstance(raw_artifact, dict):
+        content = str(raw_artifact.get("content") or "").strip()
+        if content:
+            artifact = {
+                "language": str(raw_artifact.get("language") or "text").strip().lower(),
+                "title": str(raw_artifact.get("title") or "").strip(),
+                "content": content,
+            }
+
     return {
         "step": _coerce_int(item.get("step"), default_step),
+        "action_type": _normalize_action_type(
+            item.get("action_type"), artifact["language"] if artifact else ""
+        ),
         "title": title,
         "purpose": str(item.get("purpose") or "").strip(),
         "action": action or title,
         "validation": str(item.get("validation") or "").strip(),
         "evidence": evidence,
+        "artifact": artifact,
     }
 
 
@@ -154,6 +216,16 @@ def _normalize_from_json(data: dict, raw: str) -> dict:
     result["incident_type"] = str(data.get("incident_type") or "Unknown").strip()
     result["confidence"] = _coerce_confidence(data.get("confidence", 0))
     result["reasoning"] = str(data.get("reasoning") or "").strip()
+
+    # Report sections and gate outcomes.
+    result["root_cause"] = str(data.get("root_cause") or "").strip()
+    result["investigation"] = str(data.get("investigation") or "").strip()
+    result["validation"] = str(data.get("validation") or "").strip()
+    result["additional_notes"] = str(data.get("additional_notes") or "").strip()
+    result["has_media"] = bool(data.get("has_media"))
+    result["refused"] = bool(data.get("refused"))
+    result["no_documented_resolution"] = bool(data.get("no_documented_resolution"))
+    result["ai_suggestion"] = str(data.get("ai_suggestion") or "").strip()
 
     similar = data.get("similar_incidents") or data.get("matched_reports") or []
     for item in similar:
@@ -186,6 +258,15 @@ def _normalize_from_json(data: dict, raw: str) -> dict:
         step = _parse_resolution_step(item, idx)
         if step:
             result["recommended_resolution"].append(step)
+            # Surface a step's artifact in the top-level list too, so consumers
+            # that read `artifacts` (report synthesis, legacy UI) still see it.
+            if step.get("artifact"):
+                a = step["artifact"]
+                result["artifacts"].append({
+                    "language": a["language"],
+                    "title": a["title"] or step["title"],
+                    "content": a["content"],
+                })
 
     # Typed artifacts (new): each {language, title, content}. The model now
     # picks the right language (bash, python, java, yaml, sql, ...) per incident.

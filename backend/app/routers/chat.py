@@ -72,6 +72,16 @@ class ChatAnswer(BaseModel):
     is_chat: bool = False               # True for greeting/smalltalk (no incident)
     needs_clarification: bool = False   # too vague / insufficient evidence to diagnose
     security_note: str | None = None    # set when prompt-injection was detected
+    # Report sections: Problem Summary (answer) / Root Cause / Investigation /
+    # Resolution Steps (steps) / Validation / Additional Notes.
+    root_cause: str = ""
+    investigation: str = ""
+    validation: str = ""
+    additional_notes: str = ""
+    has_media: bool = False             # source report includes screenshots
+    no_documented_resolution: bool = False
+    ai_suggestion: str = ""             # shown marked as AI-suggested, not documented
+    refused: bool = False               # out-of-scope / injection refusal
 
 
 def _to_answer(parsed: dict) -> ChatAnswer:
@@ -90,6 +100,14 @@ def _to_answer(parsed: dict) -> ChatAnswer:
         is_chat=parsed.get("is_chat", False),
         needs_clarification=parsed.get("needs_clarification", False),
         security_note=parsed.get("security_note"),
+        root_cause=parsed.get("root_cause", ""),
+        investigation=parsed.get("investigation", ""),
+        validation=parsed.get("validation", ""),
+        additional_notes=parsed.get("additional_notes", ""),
+        has_media=parsed.get("has_media", False),
+        no_documented_resolution=parsed.get("no_documented_resolution", False),
+        ai_suggestion=parsed.get("ai_suggestion", ""),
+        refused=parsed.get("refused", False),
     )
 
 

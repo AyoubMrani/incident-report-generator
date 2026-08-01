@@ -22,9 +22,29 @@ from enum import Enum
 class Intent(str, Enum):
     GREETING = "greeting"
     SMALLTALK = "smalltalk"   # thanks / bye / acknowledgements
-    META = "meta"             # "what can you do", "who are you", "help"
+    META = "meta"             # "what can you do", "how do I use this" (in scope)
+    OUT_OF_SCOPE = "out_of_scope"  # architecture/model questions, general knowledge
     CLARIFY = "clarify"       # incident-flavored but too vague -> ask, don't guess
     INCIDENT = "incident"     # -> run the retrieval + resolution pipeline
+
+
+# Gate 1 — scope check. Questions about how the assistant itself is built, and
+# general-knowledge / unrelated-coding / creative requests, are out of scope: the
+# assistant answers about incidents only. Note this is narrower than META: "how
+# do I use this?" is in scope, "what model are you?" is not.
+_OUT_OF_SCOPE = re.compile(
+    r"(?i)("
+    r"\b(what|which)\s+(model|llm|ai|architecture|framework|version)\b|"
+    r"\b(are|were)\s+you\s+(built|trained|made|created|fine[\s-]?tuned)\b|"
+    r"\bhow\s+(were|are)\s+you\s+(built|trained|made|created)\b|"
+    r"\byour\s+(training|architecture|model|weights|parameters|source\s+code|prompt)\b|"
+    r"\b(gpt|claude|llama|openai|anthropic|ollama)\b|"
+    r"\bwrite\s+(me\s+)?(a\s+)?(poem|song|story|essay|joke)\b|"
+    r"\b(who|what)\s+(won|is\s+the\s+(capital|president|weather))\b|"
+    r"\btranslate\s+(this|the following)\b|"
+    r"\bwhat('?s| is)\s+the\s+weather\b"
+    r")"
+)
 
 
 _GREETING = re.compile(
@@ -124,6 +144,12 @@ def classify(text: str, has_image: bool = False, has_history: bool = False) -> I
     if not t:
         return Intent.INCIDENT  # empty text but no image is handled upstream
 
+    # Gate 1 — scope. Questions about the assistant's own construction, and
+    # general-knowledge requests, are refused before anything else, even if they
+    # happen to contain incident-sounding words.
+    if _OUT_OF_SCOPE.search(t):
+        return Intent.OUT_OF_SCOPE
+
     # A clear incident signal wins over any chatty surface form — BUT if it's
     # incident-flavored yet too vague, ask for clarification instead of guessing.
     if _INCIDENT_HINT.search(t):
@@ -169,6 +195,11 @@ _REPLIES: dict[Intent, str] = {
     ),
     Intent.SMALLTALK: "You're welcome! 🙂 Ping me whenever you have an incident to look into.",
     Intent.META: _META_REPLY,
+    Intent.OUT_OF_SCOPE: (
+        "I'm built specifically to help with IT incident reports and resolutions — "
+        "I don't have information outside that scope. If you've got an incident, "
+        "error message, or procedure you're troubleshooting, I'm glad to help with that."
+    ),
     Intent.CLARIFY: (
         "I don't have enough detail to diagnose this safely yet, and I won't "
         "guess at a root cause. Could you share any of the following?\n"

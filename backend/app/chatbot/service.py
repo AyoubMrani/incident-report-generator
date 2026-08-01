@@ -20,7 +20,7 @@ from app.shared.llm.provider import LLMProvider
 
 from .config import CONFIDENCE_THRESHOLD, RESOLUTION_CONTEXT_K, TOP_K
 from .ingestion import KnowledgeBase, build_knowledge_base
-from .intent import Intent, canned_reply, classify
+from .intent import Intent, canned_reply, classify, is_ambiguous
 from .llm import understand_screenshot
 from .prompts import (
     FALLBACK_PROMPT,
@@ -63,8 +63,27 @@ def _chat_reply(text: str, *, needs_clarification: bool = False) -> dict:
         "matched_report_ids": [],
         "retrieval": [],
         "low_confidence": needs_clarification,
+        "root_cause": "",
+        "investigation": "",
+        "validation": "",
+        "additional_notes": "",
+        "has_media": False,
+        "no_documented_resolution": False,
+        "ai_suggestion": "",
+        "refused": False,
         "raw": text,
     }
+
+
+def _refusal_reply() -> dict:
+    """Gate 2 refusal: brief, firm, no explanation of what triggered it."""
+    reply = _chat_reply(
+        "I can't do that. I'm restricted to helping with incident reports and "
+        "resolutions — happy to help if you've got an incident to look into."
+    )
+    reply["refused"] = True
+    reply["incident_type"] = "Out of scope"
+    return reply
 
 
 def _history_block(history: list[dict] | None) -> str:
@@ -145,9 +164,13 @@ class ChatbotService:
             # Greeting / smalltalk / meta: reply as a chatbot, no LLM, no search.
             return {"short_circuit": _chat_reply(canned_reply(intent))}
 
-        # Security: flag prompt-injection so the user text is fenced as untrusted
-        # data and we can surface a note. (We never obey instructions in it.)
+        # Gate 2 — injection / jailbreak. Flag it so the user text is fenced as
+        # untrusted data downstream. If the message is ONLY an injection attempt
+        # (no diagnosable incident content), refuse outright and stop; if a real
+        # incident merely contains such phrasing, continue and attach the note.
         scan = injection_scan(query)
+        if scan.detected and is_ambiguous(query):
+            return {"short_circuit": _refusal_reply()}
 
         # Understand:
         #   - TEXT: skip the extra LLM rephrase call. The embedding model
