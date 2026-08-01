@@ -209,6 +209,14 @@ export async function sendCorrection(question: string, correction: string): Prom
   }));
 }
 
+// Turn a diagnosed conversation into a saved incident report.
+export interface GeneratedReport { success: boolean; jsonFilename: string; report: any }
+export async function generateReport(conversationId: string): Promise<GeneratedReport> {
+  return json(await fetch(`/api/conversations/${conversationId}/report`, {
+    method: 'POST', headers: headers(),
+  }));
+}
+
 // Fetch a cited report's JSON (for opening in-app).
 export async function fetchReport(openUrl: string): Promise<any> {
   return json(await fetch(openUrl, { headers: headers() }));

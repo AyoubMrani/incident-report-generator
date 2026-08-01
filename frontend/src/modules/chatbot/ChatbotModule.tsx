@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import {
   streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
-  getActiveConversationId, setActiveConversationId,
+  generateReport, getActiveConversationId, setActiveConversationId,
   ChatAnswer, SourceLink, Conversation, StoredMessage,
 } from '../../api/chat';
 import { ReportViewer } from '../reports/components/ReportViewer';
@@ -297,8 +297,23 @@ export default function ChatbotModule() {
   const [image, setImage] = useState<{ b64: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [openReport, setOpenReport] = useState<string | null>(null);
+  const [reportBusy, setReportBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+
+  // Turn the current diagnosed conversation into a saved report, then open it.
+  async function generateReportFromChat() {
+    if (!activeId || reportBusy) return;
+    setReportBusy(true);
+    try {
+      const res = await generateReport(activeId);
+      setOpenReport(res.jsonFilename);          // open it in the in-app viewer
+    } catch (err) {
+      setMessages((m) => [...m, { role: 'error', text: (err as Error).message }]);
+    } finally {
+      setReportBusy(false);
+    }
+  }
 
   // Load the conversation list + restore the active thread on mount.
   useEffect(() => { refreshConversations(); }, []);
@@ -446,6 +461,20 @@ export default function ChatbotModule() {
 
       {/* Conversation panel + input */}
       <div className="flex flex-col flex-1 min-w-0 max-w-3xl">
+        {/* Chat-to-report: offer to save the diagnosed incident as a report. */}
+        {activeId && messages.some((m) => m.role === 'assistant') && (
+          <div className="mb-2 flex items-center justify-end">
+            <button
+              onClick={generateReportFromChat}
+              disabled={reportBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              title="Create an incident report from this conversation"
+            >
+              <FileText className="w-3.5 h-3.5" />
+              {reportBusy ? 'Generating…' : 'Generate report'}
+            </button>
+          </div>
+        )}
         <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pb-4">
           {messages.length === 0 && (
             <div className="text-center text-gray-400 mt-16">
