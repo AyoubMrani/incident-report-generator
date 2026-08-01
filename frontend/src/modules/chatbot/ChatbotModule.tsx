@@ -7,7 +7,7 @@ import {
 import {
   streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
   generateReport, getActiveConversationId, setActiveConversationId,
-  ChatAnswer, SourceLink, Conversation, StoredMessage,
+  ChatAnswer, SourceLink, Conversation, StoredMessage, ResolutionStep,
 } from '../../api/chat';
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
@@ -205,6 +205,69 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
   );
 }
 
+// Section header used throughout the incident response layout.
+function Section({ icon, title, children }: {
+  icon: string; title: string; children: React.ReactNode;
+}) {
+  return (
+    <div>
+      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
+        {icon} {title}
+      </h4>
+      {children}
+    </div>
+  );
+}
+
+// Human label + rendering hint per solution type.
+const ACTION_LABEL: Record<string, string> = {
+  SQL_QUERY: 'Data extraction (SQL)',
+  CODE: 'Script / Terminal',
+  CONFIG_CHANGE: 'Configuration change',
+  INFRA_ACTION: 'Infrastructure action',
+  INVESTIGATION_MEDIA: 'Screenshots / media',
+  LOG_ANALYSIS: 'Log analysis',
+  MANUAL_PROCEDURE: 'Manual procedure',
+  DOC_REFERENCE: 'Documentation reference',
+};
+
+// One resolution step, formatted according to its solution type.
+function StepBlock({ step }: { step: ResolutionStep }) {
+  const type = step.action_type || 'MANUAL_PROCEDURE';
+  const label = ACTION_LABEL[type] || 'Step';
+  const art = step.artifact;
+
+  return (
+    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+      <div className="text-sm font-medium text-gray-900">
+        Step {step.step} — {step.title}
+        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          {label}
+        </span>
+      </div>
+      {step.purpose && <div className="mt-0.5 text-xs text-gray-500">Purpose: {step.purpose}</div>}
+      <div className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{step.action}</div>
+
+      {/* LOG_ANALYSIS renders its excerpt as a quote; code/config as a block. */}
+      {art && type === 'LOG_ANALYSIS' && (
+        <blockquote className="mt-2 border-l-4 border-gray-300 bg-white pl-3 py-1.5 text-xs font-mono text-gray-600 whitespace-pre-wrap">
+          {art.content}
+        </blockquote>
+      )}
+      {art && type !== 'LOG_ANALYSIS' && (
+        <div className="mt-2"><CodeBlock code={art.content} language={art.language} /></div>
+      )}
+
+      {step.validation && (
+        <div className="mt-1 text-xs text-gray-600 italic">Validate: {step.validation}</div>
+      )}
+      {step.evidence && step.evidence.length > 0 && (
+        <div className="mt-1 text-xs text-blue-700">Evidence: {step.evidence.join(', ')}</div>
+      )}
+    </div>
+  );
+}
+
 function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
   answer: ChatAnswer; onOpen: (filename: string) => void;
   feedback?: number | null; onRate?: (v: 1 | -1) => void;
@@ -212,6 +275,18 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
 }) {
   const badge = confidenceBadge(answer.confidence);
   const linksInReasoning = extractLinks(answer.raw || '');
+  // Steps render their own artifact; only show the rest in a trailing block.
+  const stepArtifactContents = new Set(
+    answer.steps.map((s) => (s as ResolutionStep).artifact?.content).filter(Boolean) as string[],
+  );
+  const unattachedArtifacts = answer.artifacts.filter((a) => !stepArtifactContents.has(a.content));
+  // Warn on destructive SQL wherever it appears (step artifact or standalone).
+  const hasDestructive =
+    answer.artifacts.some((a) => a.language === 'sql' && isDestructiveSql(a.content)) ||
+    answer.steps.some((s) => {
+      const art = (s as ResolutionStep).artifact;
+      return !!art && art.language === 'sql' && isDestructiveSql(art.content);
+    });
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-2">
@@ -230,43 +305,88 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
         </div>
       )}
 
-      {answer.answer && <RichText text={answer.answer} />}
+      {/* 📋 Problem Summary */}
+      {answer.answer && (
+        <Section icon="📋" title="Problem Summary"><RichText text={answer.answer} /></Section>
+      )}
 
-      {answer.artifacts.some((a) => a.language === 'sql' && isDestructiveSql(a.content)) && (
+      {/* 🔍 Root Cause */}
+      {answer.root_cause && (
+        <Section icon="🔍" title="Root Cause">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.root_cause}</p>
+        </Section>
+      )}
+
+      {/* 🕵️ Investigation */}
+      {answer.investigation && (
+        <Section icon="🕵️" title="Investigation">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.investigation}</p>
+        </Section>
+      )}
+
+      {/* Gate 4 — no documented resolution in the source report. */}
+      {answer.no_documented_resolution && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-900">
+          No documented resolution was found in the retrieved incident report(s) for this issue.
+        </div>
+      )}
+
+      {hasDestructive && (
         <div className="flex items-start gap-2 rounded-lg bg-red-50 border border-red-200 px-3 py-2 text-xs text-red-700">
           <AlertTriangle className="w-3.5 h-3.5 mt-0.5 shrink-0" />
           Some suggested SQL is destructive (DROP/DELETE/TRUNCATE/UPDATE). Review carefully and back up before running.
         </div>
       )}
 
+      {/* 🛠️ Resolution Steps — one labelled sub-block per solution type, in order */}
       {answer.steps.length > 0 && (
-        <ol className="space-y-3">
-          {answer.steps.map((s) => (
-            <li key={s.step} className="rounded-lg border border-gray-200 bg-gray-50 p-3">
-              <div className="text-sm font-medium text-gray-900">Step {s.step}: {s.title}</div>
-              {s.purpose && <div className="mt-0.5 text-xs text-gray-500">Purpose: {s.purpose}</div>}
-              <div className="mt-1 text-sm text-gray-700">{s.action}</div>
-              {s.validation && <div className="mt-1 text-xs text-gray-600 italic">Validate: {s.validation}</div>}
-              {s.evidence && s.evidence.length > 0 && (
-                <div className="mt-1 text-xs text-blue-700">Evidence: {s.evidence.join(', ')}</div>
-              )}
-            </li>
-          ))}
-        </ol>
+        <Section icon="🛠️" title="Resolution Steps">
+          <div className="space-y-3">
+            {answer.steps.map((s, i) => <StepBlock key={s.step ?? i} step={s as ResolutionStep} />)}
+          </div>
+          {answer.has_media && (
+            <p className="mt-2 text-xs italic text-gray-500">
+              📸 This report includes screenshots illustrating the above steps; refer to the
+              original incident report to view them.
+            </p>
+          )}
+        </Section>
       )}
 
-      {answer.artifacts.length > 0 && (
-        <div>
-          <div className="text-xs font-semibold text-gray-600 mb-1">
-            Supporting {answer.artifacts.length > 1 ? 'artifacts' : 'artifact'}
+      {/* 🤖 AI suggestion — visibly separated from documented resolutions */}
+      {answer.ai_suggestion && (
+        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
+          <div className="text-xs font-bold text-purple-800 mb-1">
+            🤖 AI-Suggested Recommendation (not a documented resolution)
           </div>
-          {answer.artifacts.map((a, i) => (
+          <p className="text-sm text-purple-900 whitespace-pre-wrap">{answer.ai_suggestion}</p>
+        </div>
+      )}
+
+      {/* Artifacts not already shown inside a step. */}
+      {unattachedArtifacts.length > 0 && (
+        <Section icon="📎" title={`Supporting ${unattachedArtifacts.length > 1 ? 'artifacts' : 'artifact'}`}>
+          {unattachedArtifacts.map((a, i) => (
             <div key={i}>
               {a.title && <div className="text-xs text-gray-500 mb-0.5">{a.title}</div>}
               <CodeBlock code={a.content} language={a.language} />
             </div>
           ))}
-        </div>
+        </Section>
+      )}
+
+      {/* ✅ Validation / Verification */}
+      {answer.validation && (
+        <Section icon="✅" title="Validation / Verification">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.validation}</p>
+        </Section>
+      )}
+
+      {/* 📝 Additional Notes */}
+      {answer.additional_notes && (
+        <Section icon="📝" title="Additional Notes">
+          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.additional_notes}</p>
+        </Section>
       )}
 
       <Sources retrieval={answer.retrieval} onOpen={onOpen} />

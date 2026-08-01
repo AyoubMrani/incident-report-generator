@@ -26,13 +26,21 @@ function headers(): HeadersInit {
 
 // ── types ─────────────────────────────────────────────────────────────────────
 
+// The solution type of a single resolution step. One report legitimately mixes
+// several of these in sequence (e.g. extract with SQL, then run a script).
+export type ActionType =
+  | 'SQL_QUERY' | 'CODE' | 'CONFIG_CHANGE' | 'INFRA_ACTION'
+  | 'INVESTIGATION_MEDIA' | 'LOG_ANALYSIS' | 'MANUAL_PROCEDURE' | 'DOC_REFERENCE';
+
 export interface ResolutionStep {
   step: number;
+  action_type?: ActionType;
   title: string;
   purpose?: string;
   action: string;
   validation?: string;
   evidence?: string[];
+  artifact?: { language: string; title: string; content: string } | null;
 }
 
 export interface SourceLink {
@@ -64,6 +72,16 @@ export interface ChatAnswer {
   is_chat: boolean;               // greeting/smalltalk reply, not an incident
   needs_clarification?: boolean;  // too vague / insufficient evidence to diagnose
   security_note?: string | null;  // set when prompt-injection was detected
+  // Report sections rendered in order: Problem Summary (answer) / Root Cause /
+  // Investigation / Resolution Steps / Validation / Additional Notes.
+  root_cause?: string;
+  investigation?: string;
+  validation?: string;
+  additional_notes?: string;
+  has_media?: boolean;                 // source report includes screenshots
+  no_documented_resolution?: boolean;
+  ai_suggestion?: string;              // shown marked as AI-suggested
+  refused?: boolean;
 }
 
 export interface ChatResponse {

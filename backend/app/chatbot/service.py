@@ -20,7 +20,7 @@ from app.shared.llm.provider import LLMProvider
 
 from .config import CONFIDENCE_THRESHOLD, RESOLUTION_CONTEXT_K, TOP_K
 from .ingestion import KnowledgeBase, build_knowledge_base
-from .intent import Intent, canned_reply, classify, is_ambiguous
+from .intent import Intent, canned_reply, classify, has_incident_signal
 from .llm import understand_screenshot
 from .prompts import (
     FALLBACK_PROMPT,
@@ -169,7 +169,9 @@ class ChatbotService:
         # (no diagnosable incident content), refuse outright and stop; if a real
         # incident merely contains such phrasing, continue and attach the note.
         scan = injection_scan(query)
-        if scan.detected and is_ambiguous(query):
+        if scan.detected and not has_incident_signal(query):
+            # The message is ONLY an injection attempt — no diagnosable incident
+            # content to serve. Refuse briefly and stop.
             return {"short_circuit": _refusal_reply()}
 
         # Understand:

@@ -111,6 +111,16 @@ def _meaningful_words(text: str) -> int:
     return len({w for w in words if w not in stop})
 
 
+def has_incident_signal(text: str) -> bool:
+    """True when the text contains concrete, diagnosable incident content.
+
+    Used to tell a message that is ONLY an injection attempt from a genuine
+    incident that happens to contain injection-like phrasing: the latter still
+    deserves an answer (with a security note), the former is refused.
+    """
+    return bool(_SPECIFIC_SIGNAL.search(text or ""))
+
+
 def is_ambiguous(text: str, has_history: bool = False) -> bool:
     """True when an incident-flavored input is too low-context to diagnose safely.
 
