@@ -14,7 +14,6 @@ CHUNK_OVERLAP = 120
 
 # ── Retrieval ─────────────────────────────────────────────────────────────────
 TOP_K = 5                    # hits retrieved (all shown as sources/citations)
-RESOLUTION_CONTEXT_K = 3     # top hits actually fed into the LLM prompt (latency)
 # Cap the resolution generation. This must be large enough for a full answer:
 # a documented procedure can carry several steps plus a verbatim multi-line
 # query, and a cap that truncates the JSON mid-string loses the entire answer.
