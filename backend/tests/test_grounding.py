@@ -266,3 +266,35 @@ def test_selection_of_an_empty_hit_list_is_empty():
     from app.chatbot.selection import select_sources
 
     assert select_sources("anything", []) == []
+
+
+def test_an_answer_with_no_sources_is_capped():
+    """The fallback path answers from general knowledge, not from the estate.
+
+    Live, the model rated an invented COBOL batch-scheduler procedure 85%.
+    Nothing in the corpus documents it, so the badge must not suggest the same
+    authority as guidance traced to a real incident.
+    """
+    shaped = _shaped(
+        {"incident_summary": "Configure the scheduler", "confidence": 85,
+         "recommended_resolution": [
+             {"step": 1, "action_type": "MANUAL_PROCEDURE", "title": "Check docs",
+              "action": "read the manual"}]},
+        [],  # nothing selected
+    )
+
+    assert shaped["confidence"] <= 35
+    assert shaped["low_confidence"] is True
+
+
+def test_a_grounded_answer_is_not_affected_by_the_no_sources_cap():
+    shaped = _shaped(
+        {"incident_summary": "s", "confidence": 90,
+         "recommended_resolution": [
+             {"step": 1, "action_type": "SQL_QUERY", "title": "Run it",
+              "action": "select 1"}]},
+        [{"text": "evidence", "selection_score": 1.0, "incident_id": "INC1"}],
+    )
+
+    assert shaped["confidence"] >= 80
+    assert shaped["low_confidence"] is False

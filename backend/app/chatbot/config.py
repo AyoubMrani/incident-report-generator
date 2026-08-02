@@ -25,9 +25,23 @@ RETRIEVAL_IMAGE_WEIGHT = 0.45
 LEXICAL_BOOST_MAX = 0.12
 
 # ── Ollama — text ─────────────────────────────────────────────────────────────
-# llama3.2:3b measured ~2x faster than llama3:8b on M4 (46 vs 17 tok/s) with
-# equal-or-better answer quality on clean retrieval context — the better local
-# tradeoff. Override with the OLLAMA_MODEL env var if you prefer 8b.
+# Re-measured with eval/model_bench.py after the retrieval and grounding work
+# (5 incident questions, identical pipeline, only the model varied, M4/17GB):
+#
+#   model         quality   mean confidence   median latency
+#   llama3.2:3b    21/25         87.0%            28.6s
+#   llama3:8b      22/25         92.0%            75.7s
+#
+# 8b costs 2.6x the latency for one extra property check out of 25, and it is
+# not uniformly better — on "database connection pool exhausted" it scored
+# *lower* (80% vs 90%). Both models produced the same number of resolution
+# steps on four of the five questions, which says the retrieval and grounding
+# layers are doing the work here, not the model's size. On an incident desk a
+# 28s answer that gets used beats a 76s answer that gets abandoned, so 3b stays
+# the default.
+#
+# Switch without a rebuild:  OLLAMA_MODEL=llama3:8b docker compose up -d
+# Re-run the comparison:     python eval/model_bench.py
 import os as _os
 
 OLLAMA_MODEL = _os.environ.get("OLLAMA_MODEL", "llama3.2:3b")

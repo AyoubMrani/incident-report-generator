@@ -61,6 +61,10 @@ STRONG_MATCH_CONFIDENCE = 80
 # Ceiling for an answer that produced no resolution steps. Such an answer may
 # still be a useful summary, but it must not present itself as authoritative.
 CONFIDENCE_CAP_NO_STEPS = 40
+# Ceiling for an answer produced with no matching report at all (the fallback
+# path). General IT knowledge is not the same as documented estate procedure,
+# and the UI must not present the two identically.
+CONFIDENCE_CAP_NO_SOURCES = 35
 
 
 def _chat_reply(text: str, *, needs_clarification: bool = False) -> dict:
@@ -395,6 +399,15 @@ class ChatbotService:
         # this is enforced here rather than left to the prompt.
         if not has_steps and not parsed.get("no_documented_resolution"):
             parsed["confidence"] = min(parsed.get("confidence", 0), CONFIDENCE_CAP_NO_STEPS)
+            parsed["low_confidence"] = True
+
+        # No report was selected: this answer came from the model's general
+        # knowledge, not from anything the estate has actually done. It may
+        # still be useful, but it must not wear the same confidence as guidance
+        # traced to a real incident — the model rated an invented COBOL
+        # procedure 85% before this cap existed.
+        if not results:
+            parsed["confidence"] = min(parsed.get("confidence", 0), CONFIDENCE_CAP_NO_SOURCES)
             parsed["low_confidence"] = True
         parsed["is_chat"] = False
         parsed["needs_clarification"] = bool(parsed.get("insufficient"))
