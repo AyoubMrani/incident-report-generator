@@ -62,13 +62,30 @@ succeed with no inconsistency.
 
 ### Capacity
 
-Ollama serialises generation by default, so concurrent askers queue rather than
-run in parallel. Measured with `--no-cache` (4 workers, 8 requests): all
-succeeded, latency 27s-133s, 226s wall. Nothing failed, but the tail is long —
-which is why `OLLAMA_TIMEOUT` defaults to 300s rather than something near the
-~30s single-request figure. For real concurrency, raise `OLLAMA_NUM_PARALLEL`
-on the Ollama host; it costs memory per slot. The answer cache absorbs repeats
-(0.1s), so this only bites on distinct questions asked at the same moment.
+Ollama serialises generation, so concurrent askers queue. Measured with
+`--no-cache` (4 workers, 8 distinct requests): all succeeded, latency 27s-133s,
+226s wall. That is why `OLLAMA_TIMEOUT` is 300s and not something near the ~30s
+single-request figure — a tighter bound would fail queued requests spuriously.
+
+`OLLAMA_NUM_PARALLEL=4` is the obvious fix, and it was measured and rejected:
+
+| | serial | parallel=4 |
+|---|---|---|
+| wall time, 8 requests | 226s | 190s |
+| slowest request | 133s | 117s |
+| **fastest request** | **27s** | **62s** |
+| resident memory | 2.5 GB | 4.8 GB |
+
+Four slots share one M4 GPU, so they do not run genuinely in parallel — wall
+time improves 16% while every individual answer gets slower, and under
+contention one answer degraded to zero steps (correctly caught by the
+confidence cap, which reported it at 40% rather than presenting an empty
+answer as authoritative). Serial execution with the answer cache in front of it
+is the better trade on this hardware. Revisit on a machine with the headroom to
+run slots for real.
+
+The answer cache absorbs repeats (0.04s), so queueing only bites on distinct
+questions asked in the same moment.
 
 ## Choosing the generation model
 

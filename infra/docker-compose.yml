@@ -47,13 +47,19 @@ services:
       # sampling variance is a defect, not creativity.
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
       # Bounds a wedged model; without it a hung call holds a worker for ever.
-      # Sized against measured queueing, not single-request latency: Ollama
-      # serialises generation by default, so concurrent askers wait their turn.
-      # Measured with eval/load_check.py --no-cache (4 workers, 8 requests):
-      # every request succeeded, but latency ran 27s to 133s and the batch took
-      # 226s wall. A timeout near the single-request figure (~30s) would have
-      # failed the queued ones spuriously. Raise OLLAMA_NUM_PARALLEL on the
-      # Ollama host if you need real concurrency; it costs memory per slot.
+      # Sized against measured queueing, not single-request latency. Ollama
+      # serialises generation, so concurrent askers wait their turn: measured
+      # with eval/load_check.py --no-cache (4 workers, 8 distinct requests) all
+      # succeeded but latency ran 27s-133s over 226s wall. A timeout near the
+      # single-request figure (~30s) would fail queued requests spuriously.
+      #
+      # OLLAMA_NUM_PARALLEL=4 was measured as the obvious fix and rejected: on
+      # one M4 GPU the slots share the same silicon, so wall time improved only
+      # 226s -> 190s while the *fastest* request went 27s -> 62s, resident
+      # memory went 2.5GB -> 4.8GB, and one answer degraded to 0 steps under
+      # contention. Serial execution with the answer cache in front of it is
+      # the better trade here. Revisit only on hardware with headroom to run
+      # slots genuinely in parallel.
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
       # text | json — json when shipping logs to a collector.
       - LOG_FORMAT=${LOG_FORMAT:-text}
