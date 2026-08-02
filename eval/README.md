@@ -56,6 +56,20 @@ Level 1 is also a pytest gate (`backend/tests/test_corpus_retrieval.py`), so a
 regression in ingestion, chunking, scoring or the selection floor fails CI
 rather than waiting for someone to notice a bad answer by hand.
 
+Latest results: 69/69 reports retrieve themselves; 15/15 sampled reports
+produce a grounded answer (80-95%, 3-5 steps each); 8/8 concurrent requests
+succeed with no inconsistency.
+
+### Capacity
+
+Ollama serialises generation by default, so concurrent askers queue rather than
+run in parallel. Measured with `--no-cache` (4 workers, 8 requests): all
+succeeded, latency 27s-133s, 226s wall. Nothing failed, but the tail is long —
+which is why `OLLAMA_TIMEOUT` defaults to 300s rather than something near the
+~30s single-request figure. For real concurrency, raise `OLLAMA_NUM_PARALLEL`
+on the Ollama host; it costs memory per slot. The answer cache absorbs repeats
+(0.1s), so this only bites on distinct questions asked at the same moment.
+
 ## Choosing the generation model
 
 `model_bench.py` drives the whole pipeline — same retrieval, same prompt, same
@@ -86,7 +100,7 @@ rebuild.
 
 ## Two kinds of testing, and why both exist
 
-`backend/tests/` (pytest, 207 tests) swaps in a **fake** LLM provider. That is
+`backend/tests/` (pytest, 267 tests) swaps in a **fake** LLM provider. That is
 the right call for plumbing — parsing, gates, caching, grounding rules — and it
 keeps the suite fast and deterministic. But it means the suite structurally
 cannot see how `llama3.2:3b` actually behaves.
@@ -104,7 +118,7 @@ real model and asserts on properties that hold regardless of how the model
 samples — never on exact wording, which would flake every run.
 
 ```bash
-python eval/live_check.py                # all cases (~2-3 min)
+python eval/live_check.py                # all 16 cases (~5 min)
 python eval/live_check.py -k rollback    # just one
 python eval/live_check.py --json out.json
 ```
