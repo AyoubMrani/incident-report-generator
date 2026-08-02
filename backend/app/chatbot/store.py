@@ -165,6 +165,19 @@ class ChatStore:
             ).fetchall()
         return [self._row_to_message(r) for r in rows]
 
+    def get_message_payload(self, client_id: str, message_id: str) -> dict | None:
+        """The stored answer object for a message the client owns."""
+        with self._conn() as c:
+            row = c.execute(
+                "SELECT m.payload FROM messages m "
+                "JOIN conversations c ON c.id = m.conversation_id "
+                "WHERE m.id=? AND c.client_id=?",
+                (message_id, client_id),
+            ).fetchone()
+        if not row or not row["payload"]:
+            return None
+        return json.loads(row["payload"])
+
     def set_feedback(self, client_id: str, message_id: str, value: int | None) -> bool:
         """Set a thumbs rating (1 / -1 / None) on an assistant message the client
         owns. Ownership is enforced by joining back to the conversation."""

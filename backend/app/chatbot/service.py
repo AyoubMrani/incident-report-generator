@@ -15,6 +15,7 @@ here, so a request is just: run the pipeline. No global/session state.
 from __future__ import annotations
 
 from collections.abc import Iterator
+from pathlib import Path
 
 from app.shared.llm.provider import LLMProvider
 
@@ -273,6 +274,12 @@ class ChatbotService:
         # faithfully, taking it from the selected report itself.
         _recover_artifacts(parsed, results)
 
+        # Drop invented citations. Models copy the example ids out of the schema
+        # in the prompt, so a step can claim evidence from a report that was
+        # never retrieved. Only ids actually present in the selected reports may
+        # be cited.
+        _strip_invented_evidence(parsed, results)
+
         # Confidence floor. Small local models routinely under-report confidence
         # (a short query or an unfamiliar id format makes them hedge) even when
         # they were handed a report that directly matches and documents the fix.
@@ -401,6 +408,29 @@ def _recover_artifacts(parsed: dict, results: list[dict]) -> None:
     parsed["artifacts"] = merged
 
 
+def _strip_invented_evidence(parsed: dict, results: list[dict]) -> None:
+    """Remove cited incident ids that are not in the selected reports."""
+    real_ids = {
+        str(r.get("incident_id")).strip().lower()
+        for r in results
+        if r.get("incident_id")
+    }
+    for step in parsed.get("recommended_resolution") or []:
+        evidence = step.get("evidence") or []
+        step["evidence"] = [
+            e for e in evidence if str(e).strip().lower() in real_ids
+        ]
+    # Same for the similar-incidents list and the report-id summary.
+    parsed["similar_incidents"] = [
+        s for s in (parsed.get("similar_incidents") or [])
+        if str(s.get("incident", "")).strip().lower() in real_ids
+    ]
+    parsed["matched_report_ids"] = [
+        m for m in (parsed.get("matched_report_ids") or [])
+        if str(m).strip().lower() in real_ids
+    ]
+
+
 def _language_hint(step: dict) -> str:
     """Guess the artifact language a step is asking for, from its own words."""
     text = f"{step.get('title','')} {step.get('action','')}".lower()
@@ -418,10 +448,20 @@ def _source_link(hit: dict) -> dict:
     `source` looks like 'reports/INC1048301_Foo.json'. We expose the bare
     filename and the API route that returns that report's JSON, so a click opens
     the cited report inside the app (report viewer) without leaving the chat.
-    Only .json reports are openable in-app; .md/.docx hits carry a null open_url.
+    A hit on a report's markdown mirror is re-pointed at its JSON sibling, which
+    is the openable, image-bearing version; other non-JSON hits (e.g. .docx)
+    carry a null open_url.
     """
     source = hit.get("source") or ""
     filename = source.split("/")[-1] if source else ""
+
+    if filename.endswith(".md"):
+        json_name = filename[:-3] + ".json"
+        path = str(hit.get("path") or "")
+        # Only re-point when the sibling actually exists on disk.
+        if path.endswith(".md") and Path(path[:-3] + ".json").exists():
+            filename = json_name
+
     open_url = (
         f"/api/reports/content/{filename}"
         if filename.endswith(".json")

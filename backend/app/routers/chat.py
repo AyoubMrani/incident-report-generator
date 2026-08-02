@@ -20,7 +20,7 @@ from __future__ import annotations
 import json
 
 from fastapi import APIRouter, Header, HTTPException, Request
-from fastapi.responses import StreamingResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
 from app.chatbot.security import redact
@@ -344,6 +344,53 @@ def add_correction(
 def feedback_summary(request: Request) -> dict:
     # Aggregate metrics for tuning — which answers land, which don't.
     return _store(request).feedback_summary()
+
+
+@router.get("/api/messages/{message_id}/html", response_class=HTMLResponse)
+def message_html(
+    message_id: str,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> HTMLResponse:
+    """Render a stored answer as HTML, with the cited report's screenshots.
+
+    The chat panel renders the structured answer, but a documented procedure
+    often relies on screenshots that live in the source report rather than in
+    the answer. This view embeds them inline so the procedure can be read (or
+    exported) complete.
+    """
+    from app.chatbot.answer_html import render_answer_html
+
+    client_id = _client_id(x_client_id)
+    store = _store(request)
+
+    answer = store.get_message_payload(client_id, message_id)
+    if answer is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    # Pull images from the first cited report, when it is still on disk. The
+    # citation may point at the markdown mirror, which carries no images, so
+    # fall back to its JSON sibling — that is where the blocks (and screenshots)
+    # actually live.
+    report = None
+    service = request.app.state.report_service
+    for source in answer.get("retrieval") or []:
+        filename = source.get("filename")
+        if not filename:
+            continue
+        candidates = [filename]
+        if filename.endswith(".md"):
+            candidates.insert(0, filename[:-3] + ".json")
+        for candidate in candidates:
+            try:
+                report = service.get_content(candidate)
+                break
+            except Exception:  # noqa: BLE001 — missing report just means no images
+                continue
+        if report:
+            break
+
+    return HTMLResponse(render_answer_html(answer, report))
 
 
 # ── chat-to-report ────────────────────────────────────────────────────────────

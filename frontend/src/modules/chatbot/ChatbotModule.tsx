@@ -268,10 +268,11 @@ function StepBlock({ step }: { step: ResolutionStep }) {
   );
 }
 
-function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
+function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId }: {
   answer: ChatAnswer; onOpen: (filename: string) => void;
   feedback?: number | null; onRate?: (v: 1 | -1) => void;
   onCorrect?: (correction: string) => Promise<void>;
+  messageId?: string;
 }) {
   const badge = confidenceBadge(answer.confidence);
   const linksInReasoning = extractLinks(answer.raw || '');
@@ -402,9 +403,24 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect }: {
         </div>
       )}
 
-      {onRate && onCorrect && (
-        <FeedbackButtons value={feedback} onRate={onRate} onCorrect={onCorrect} />
-      )}
+      <div className="flex items-center gap-3 pt-1">
+        {onRate && onCorrect && (
+          <FeedbackButtons value={feedback} onRate={onRate} onCorrect={onCorrect} />
+        )}
+        {messageId && (
+          // Full HTML rendering of this answer, with the source report's
+          // screenshots embedded — the chat card cannot show those inline.
+          <a
+            href={`/api/messages/${messageId}/html`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline whitespace-nowrap"
+            title="Open this answer with the report's screenshots"
+          >
+            <ExternalLink className="w-3 h-3" /> View with screenshots
+          </a>
+        )}
+      </div>
     </div>
   );
 }
@@ -682,6 +698,7 @@ export default function ChatbotModule() {
                     feedback={msg.feedback}
                     onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
                     onCorrect={msg.messageId ? (c) => sendCorrection(question, c) : undefined}
+                    messageId={msg.messageId}
                   />
                 </div>
               </div>
