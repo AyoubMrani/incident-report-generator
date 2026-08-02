@@ -101,19 +101,31 @@ python eval/model_bench.py --models llama3:8b  # one model
 python eval/model_bench.py --repeat 3          # stability
 ```
 
-Latest run (5 incident questions, M4 / 17 GB), in `model_bench_results.json`:
+`model_bench.py` covers 5 chosen queries, which is thinner evidence than the
+corpus sweep everything else here is held to. The decision was therefore redone
+at corpus scale — both models over the same 15 sampled reports, same seed,
+identical pipeline (`sweep_llama3.2-3b.json`, `sweep_llama3-8b.json`):
 
-| model | quality | mean confidence | median latency |
-|---|---|---|---|
-| `llama3.2:3b` | 21/25 | 87.0% | **28.6s** |
-| `llama3:8b` | 22/25 | 92.0% | 75.7s |
+| model | reports | checks | mean conf | mean steps | median latency |
+|---|---|---|---|---|---|
+| **`llama3.2:3b`** | **15/15** | **60/60** | 88.7% | **4.0** | **28.1s** |
+| `llama3:8b` | 15/15 | 60/60 | **92.0%** | 3.4 | 40.3s |
 
-8b buys one extra check out of 25 for 2.6x the latency, and is not uniformly
-better — it scored *lower* on "database connection pool exhausted" (80% vs
-90%). Both produced the same number of steps on four of five questions, which
-says retrieval and grounding are doing the work, not model size. `3b` stays the
-default; `OLLAMA_MODEL=llama3:8b docker compose up -d` switches it with no
-rebuild.
+Correctness is a **tie** — both answer every report, both pass every check. 8b
+reports more confidence *in itself* while producing *fewer* steps (on two
+reports it returned one step where 3b returned three or four) and takes 43%
+longer. A tie in correctness with the smaller model is what it looks like when
+retrieval and grounding are doing the work rather than model size.
+
+So `3b` is not a compromise on this corpus, it is the better answer. Reproduce:
+
+```bash
+python eval/corpus_sweep.py --answers --limit 15 --model llama3:8b --json out.json
+python eval/compare_sweeps.py eval/sweep_llama3.2-3b.json out.json \
+    --labels llama3.2:3b llama3:8b
+```
+
+`OLLAMA_MODEL=llama3:8b docker compose up -d` switches it with no rebuild.
 
 ## Two kinds of testing, and why both exist
 
