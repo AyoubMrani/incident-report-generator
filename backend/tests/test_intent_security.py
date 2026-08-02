@@ -41,6 +41,30 @@ def test_classify(text, expected):
     assert classify(text) == expected
 
 
+@pytest.mark.parametrize("text", [
+    "thanks, that helped",
+    "thanks that worked",
+    "perfect, that did it",
+    "thank you, makes sense",
+    "cheers, that helps",
+])
+def test_gratitude_with_a_tail_is_not_an_incident(text):
+    """Found live: "thanks, that helped" ran a corpus search and cited an
+    unrelated report, because the smalltalk pattern required the whole message
+    to be the thanks word alone."""
+    assert classify(text, has_history=True) is Intent.SMALLTALK
+
+
+@pytest.mark.parametrize("text", [
+    "thanks, now the database is down",
+    "thanks but the rollback failed with an error",
+    "thanks, the port still shows D status",
+])
+def test_gratitude_followed_by_a_real_problem_stays_an_incident(text):
+    """The politeness prefix must not swallow the incident behind it."""
+    assert classify(text, has_history=True) is Intent.INCIDENT
+
+
 def test_image_always_incident():
     assert classify("hello", has_image=True) == Intent.INCIDENT
 

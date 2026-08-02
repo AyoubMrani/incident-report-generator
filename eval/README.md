@@ -28,6 +28,36 @@ jupyter nbconvert --to notebook --execute --inplace evaluation.ipynb
 | `ablations.py` | hyperparameter sensitivity tables |
 | `error_analysis.py` | failure breakdown by style/cause |
 | `corpus_eda.py` | descriptive stats + `figures/*.png` |
+| `ask.py` | one question -> the parsed answer, for manual testing |
+| `live_check.py` | end-to-end checks against the **real** model |
+
+## Two kinds of testing, and why both exist
+
+`backend/tests/` (pytest, 207 tests) swaps in a **fake** LLM provider. That is
+the right call for plumbing — parsing, gates, caching, grounding rules — and it
+keeps the suite fast and deterministic. But it means the suite structurally
+cannot see how `llama3.2:3b` actually behaves.
+
+Every bug that has actually hurt this project was a *model-behaviour* bug that
+only showed up when a human ran a query by hand:
+
+* a command documented in one incident bleeding into an unrelated answer
+* `SELECT ...` rendered as if it were a runnable query
+* 40% confidence on a question the corpus answers in full
+* "thanks, that helped" triggering a corpus search
+
+`live_check.py` closes that gap. It drives the running server over HTTP with the
+real model and asserts on properties that hold regardless of how the model
+samples — never on exact wording, which would flake every run.
+
+```bash
+python eval/live_check.py                # all cases (~2-3 min)
+python eval/live_check.py -k rollback    # just one
+python eval/live_check.py --json out.json
+```
+
+Exit status is 0 only if every case passes. Add a case whenever you find a bad
+answer by hand — that is how a manual finding becomes a permanent check.
 | `build_notebook.py` | `evaluation.ipynb` presenting all of the above |
 
 ## Headline result (reproduced)

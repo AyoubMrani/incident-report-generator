@@ -57,6 +57,18 @@ _SMALLTALK = re.compile(
     r"got\s*it|bye+|goodbye|see\s*ya|later|no\s*thanks?)\b[\s!.?]*$",
     re.IGNORECASE,
 )
+# Gratitude with a short tail: "thanks, that helped", "ok cool, got it — bye".
+# Without this the message falls through to INCIDENT and the assistant answers
+# a thank-you by searching the corpus and citing an unrelated report.
+# Deliberately capped in length so "thanks, now the DB is down" still routes to
+# the incident path rather than being dismissed as chatter.
+_SMALLTALK_TAIL = re.compile(
+    r"^(thanks?|thank\s*you|thx|ty|cheers|perfect|great|awesome|nice)\b"
+    r"[\s,!.–—-]*(that|this|it)?\s*"
+    r"(helped|helps|worked|works|did\s+it|was\s+it|makes\s+sense|"
+    r"is\s+(great|perfect|clear))\b[\s!.?]*$",
+    re.IGNORECASE,
+)
 _META = re.compile(
     r"(?i)\b(what\s+can\s+you\s+do|who\s+are\s+you|what\s+are\s+you|"
     r"how\s+do\s+you\s+work|what\s+is\s+this|help\s*me?\s*$|^help\b|"
@@ -167,7 +179,7 @@ def classify(text: str, has_image: bool = False, has_history: bool = False) -> I
 
     if _GREETING.match(t):
         return Intent.GREETING
-    if _SMALLTALK.match(t):
+    if _SMALLTALK.match(t) or _SMALLTALK_TAIL.match(t):
         return Intent.SMALLTALK
     if _META.search(t):
         return Intent.META
