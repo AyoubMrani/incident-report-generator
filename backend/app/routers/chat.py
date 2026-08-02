@@ -82,6 +82,12 @@ class ChatAnswer(BaseModel):
     no_documented_resolution: bool = False
     ai_suggestion: str = ""             # shown marked as AI-suggested, not documented
     refused: bool = False               # out-of-scope / injection refusal
+    # Irreversible operations found in the steps (see chatbot/hazard.py). The
+    # UI outlines those steps and warns; `hazard_ungrounded` means no report
+    # documents the procedure, so nobody has run it against this estate.
+    hazards: list[str] = []
+    has_hazard: bool = False
+    hazard_ungrounded: bool = False
 
 
 def _to_answer(parsed: dict) -> ChatAnswer:
@@ -108,6 +114,9 @@ def _to_answer(parsed: dict) -> ChatAnswer:
         no_documented_resolution=parsed.get("no_documented_resolution", False),
         ai_suggestion=parsed.get("ai_suggestion", ""),
         refused=parsed.get("refused", False),
+        hazards=parsed.get("hazards", []),
+        has_hazard=parsed.get("has_hazard", False),
+        hazard_ungrounded=parsed.get("hazard_ungrounded", False),
     )
 
 

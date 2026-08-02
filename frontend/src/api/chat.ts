@@ -41,6 +41,11 @@ export interface ResolutionStep {
   validation?: string;
   evidence?: string[];
   artifact?: { language: string; title: string; content: string } | null;
+  // Irreversible operations detected in this step (server-side, see
+  // backend/app/chatbot/hazard.py). `hazard_ungrounded` means no report
+  // documents it — the model proposed it from general knowledge.
+  hazard?: string[];
+  hazard_ungrounded?: boolean;
 }
 
 export interface SourceLink {
@@ -78,6 +83,9 @@ export interface ChatAnswer {
   investigation?: string;
   validation?: string;
   additional_notes?: string;
+  hazards?: string[];
+  has_hazard?: boolean;
+  hazard_ungrounded?: boolean;
   has_media?: boolean;                 // source report includes screenshots
   no_documented_resolution?: boolean;
   ai_suggestion?: string;              // shown marked as AI-suggested

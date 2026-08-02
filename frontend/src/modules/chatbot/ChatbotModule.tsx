@@ -278,14 +278,37 @@ function StepBlock({ step }: { step: ResolutionStep }) {
   const label = ACTION_LABEL[type] || 'Step';
   const art = step.artifact;
 
+  // An irreversible step is outlined in amber so it cannot be skimmed past.
+  const hazards = step.hazard ?? [];
+  const isHazard = hazards.length > 0;
+
   return (
-    <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+    <div
+      className={
+        isHazard
+          ? 'rounded-lg border-2 border-amber-400 bg-amber-50 p-3'
+          : 'rounded-lg border border-gray-200 bg-gray-50 p-3'
+      }
+    >
       <div className="text-sm font-medium text-gray-900">
         Step {step.step} — {step.title}
         <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
           {label}
         </span>
+        {isHazard && (
+          <span className="ml-2 rounded bg-amber-200 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-amber-900">
+            Irreversible
+          </span>
+        )}
       </div>
+      {isHazard && (
+        <div className="mt-1 text-xs text-amber-900">
+          This step {hazards.join('; ')}.
+          {step.hazard_ungrounded
+            ? ' No incident report documents it — verify against a backup and a change ticket before running it.'
+            : ' Confirm you are on the intended environment first.'}
+        </div>
+      )}
       {!isFiller(step.purpose) && (
         <div className="mt-0.5 text-xs text-gray-500">Purpose: {step.purpose}</div>
       )}

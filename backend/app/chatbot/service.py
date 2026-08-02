@@ -44,6 +44,7 @@ from .resolution import (
     parse_resolution,
     report_documents_resolution,
 )
+from .hazard import annotate_hazards
 from .retrieval import combine_retrieval_queries, search_multimodal
 from .selection import select_sources
 from .security import injection_scan, wrap_untrusted
@@ -409,6 +410,12 @@ class ChatbotService:
         if not results:
             parsed["confidence"] = min(parsed.get("confidence", 0), CONFIDENCE_CAP_NO_SOURCES)
             parsed["low_confidence"] = True
+
+        # Mark irreversible operations so the UI can warn. Not a refusal:
+        # dropping a corrupted table is the documented fix for some incidents.
+        # What must never look routine is a destructive command the model
+        # invented — hence the grounded/ungrounded distinction.
+        annotate_hazards(parsed, grounded=bool(results))
         parsed["is_chat"] = False
         parsed["needs_clarification"] = bool(parsed.get("insufficient"))
 
