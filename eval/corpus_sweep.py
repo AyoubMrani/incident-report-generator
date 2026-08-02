@@ -105,7 +105,8 @@ def sweep_retrieval(reports: list[dict], kb) -> list[dict]:
     return rows
 
 
-def sweep_answers(reports: list[dict], limit: int, seed: int) -> list[dict]:
+def sweep_answers(reports: list[dict], limit: int, seed: int,
+                  model: str = "") -> list[dict]:
     """Full pipeline on a sample, scored the way live_check scores."""
     from app.chatbot.service import ChatbotService
     from app.shared.llm.ollama_provider import OllamaProvider
@@ -114,7 +115,8 @@ def sweep_answers(reports: list[dict], limit: int, seed: int) -> list[dict]:
     random.Random(seed).shuffle(sample)
     sample = sample[:limit]
 
-    service = ChatbotService.build(str(ROOT / "reports"), OllamaProvider())
+    provider = OllamaProvider(text_model=model) if model else OllamaProvider()
+    service = ChatbotService.build(str(ROOT / "reports"), provider)
 
     rows = []
     for report in sample:
@@ -157,6 +159,9 @@ def main() -> int:
     parser.add_argument("--limit", type=int, default=12,
                         help="reports to sample in --answers mode")
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--model", default="",
+                        help="generation model to test in --answers mode "
+                             "(default: whatever OLLAMA_MODEL resolves to)")
     parser.add_argument("--min-pass", type=float, default=0.95)
     parser.add_argument("--json", dest="json_out", default="")
     args = parser.parse_args()
@@ -165,8 +170,10 @@ def main() -> int:
     print(f"corpus: {len(reports)} reports with usable titles\n")
 
     if args.answers:
-        print(f"Full-pipeline sweep on {min(args.limit, len(reports))} sampled reports:")
-        rows = sweep_answers(reports, args.limit, args.seed)
+        label = args.model or "default model"
+        print(f"Full-pipeline sweep on {min(args.limit, len(reports))} "
+              f"sampled reports ({label}):")
+        rows = sweep_answers(reports, args.limit, args.seed, args.model)
     else:
         print("Retrieval sweep over every report:")
         rows = sweep_retrieval(reports, kb)
