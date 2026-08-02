@@ -18,6 +18,7 @@ unchanged.
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import re
@@ -216,14 +217,29 @@ def _chunk(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> l
 def _get_report_title(path: str, content: str) -> str:
     filename = os.path.splitext(os.path.basename(path))[0]
     if path.endswith(".json"):
+        # Read the file, not `content`: by this point content is the extracted
+        # prose from _read_json, so json.loads() on it always fails and every
+        # report would fall through to the bare "INC…" id below — losing the
+        # human title that source selection scores entity overlap against.
         try:
-            data = json.loads(content)
-            metadata = data.get("metadata", {})
-            title = metadata.get("title") or metadata.get("incident_id")
-            if title:
-                return str(title)
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+            report = data.get("report") if isinstance(data.get("report"), dict) else data
+            metadata = (report or {}).get("metadata", {}) or {}
+            title = metadata.get("title")
+            if title and str(title).strip():
+                return str(title).strip()
         except Exception:
-            pass
+            metadata = {}
+        # No declared title. The filename usually carries a real one
+        # ("INC1048202_Yellow Duplicate Cleanup") — prefer it over a bare id,
+        # since source selection scores entity overlap against the title.
+        stem = re.sub(r"^INC\d+[_\-\s]*", "", filename, flags=re.IGNORECASE).strip()
+        if stem and not stem.lower().startswith("incident_untitled"):
+            return stem.replace("_", " ").strip()
+        declared = (metadata or {}).get("incident_id")
+        if declared and str(declared).strip():
+            return str(declared).strip()
     if path.endswith(".md"):
         for line in content.splitlines():
             if line.startswith("#"):
@@ -241,7 +257,76 @@ def _extract_incident_id_from_text(text: str | None) -> str | None:
     return match.group(0).upper() if match else None
 
 
+def _declared_incident_id(path: str) -> str | None:
+    """The id a report declares in its own metadata, if it is a report JSON.
+
+    Preferred over scanning the text: a report may *reference* other incidents
+    (an `incident_example` block links a related ticket), and a raw text scan
+    returns whichever id appears first — so a report would get cited under its
+    neighbour's number. Metadata is the authoritative self-identifier.
+    """
+    if not path.lower().endswith(".json"):
+        return None
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except Exception:  # noqa: BLE001 — fall back to the text scan
+        return None
+    report = data.get("report") if isinstance(data.get("report"), dict) else data
+    if not isinstance(report, dict):
+        return None
+    declared = (report.get("metadata") or {}).get("incident_id")
+    declared = str(declared).strip() if declared else ""
+    return declared or None
+
+
 # ── Knowledge base builder (Streamlit removed) ────────────────────────────────
+
+
+def _cache_dir() -> Path:
+    return Path(os.getenv("EMBED_CACHE_DIR", "data/embed-cache"))
+
+
+def _embedding_cache_key(documents: list[str]) -> str:
+    """Digest identifying this exact corpus under this exact embedding model."""
+    h = hashlib.sha256()
+    h.update(EMBED_MODEL_NAME.encode())
+    for doc in documents:
+        h.update(b"\0")
+        h.update(doc.encode("utf-8", "replace"))
+    return h.hexdigest()[:32]
+
+
+def _load_cached_embeddings(key: str, n_documents: int):
+    """Cached vectors for this corpus, or None when absent/stale/unreadable."""
+    path = _cache_dir() / f"{key}.npy"
+    if not path.is_file():
+        return None
+    try:
+        cached = np.load(path)
+    except Exception:  # noqa: BLE001 — a corrupt cache must never break startup
+        return None
+    # Guard against a truncated write: shape must still match the corpus.
+    if cached.ndim != 2 or cached.shape[0] != n_documents:
+        return None
+    return cached.astype("float32")
+
+
+def _store_cached_embeddings(key: str, embeddings) -> None:
+    """Persist vectors for the next boot; failures are non-fatal by design."""
+    try:
+        cache = _cache_dir()
+        cache.mkdir(parents=True, exist_ok=True)
+        # Write to a temp file then rename so a crash can't leave a half file
+        # that a later boot would read as valid.
+        tmp = cache / f".{key}.tmp.npy"
+        np.save(tmp, embeddings)
+        tmp.replace(cache / f"{key}.npy")
+        for stale in cache.glob("*.npy"):
+            if stale.name != f"{key}.npy":
+                stale.unlink(missing_ok=True)
+    except Exception:  # noqa: BLE001 — caching is an optimisation, not a contract
+        pass
 
 
 def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
@@ -273,16 +358,39 @@ def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
     n_files = 0
 
     root_label = os.path.basename(os.path.normpath(reports_dir))
-    for filename in sorted(os.listdir(reports_dir)):
+    entries = sorted(os.listdir(reports_dir))
+    # The generator writes every report twice: the structured .json and a
+    # flattened .md rendering of the same incident. Indexing both stores each
+    # incident twice, so near-identical duplicates compete for the handful of
+    # source slots the answer gets — and the .md loses the schema (block types,
+    # screenshot markers, declared incident id) that makes the .json accurate.
+    # The .json is authoritative; skip a .md that merely mirrors one.
+    json_stems = {
+        os.path.splitext(name)[0]
+        for name in entries
+        if name.lower().endswith(".json")
+    }
+
+    for filename in entries:
         ext = os.path.splitext(filename)[1].lower()
         if ext not in loaders:
+            continue
+        if ext == ".md" and os.path.splitext(filename)[0] in json_stems:
             continue
         path = os.path.join(reports_dir, filename)
         source = f"{root_label}/{filename}"
         try:
             content = loaders[ext](path)
             title = _get_report_title(path, content)
-            incident_id = _extract_incident_id_from_text(content)
+            # Priority: the report's own metadata, then the filename (reports are
+            # saved as "<INC id>_<title>.<ext>" pairs, so the .md twin of a JSON
+            # report still identifies itself correctly), and only then a text
+            # scan — which can pick up a *referenced* incident instead.
+            incident_id = (
+                _declared_incident_id(path)
+                or _extract_incident_id_from_text(filename)
+                or _extract_incident_id_from_text(content)
+            )
             for chunk_id, chunk in enumerate(_chunk(content)):
                 documents.append(chunk)
                 metadata.append(
@@ -305,10 +413,17 @@ def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
         )
 
     model = SentenceTransformer(EMBED_MODEL_NAME)
-    embeddings = (
-        model.encode(documents, convert_to_numpy=True, show_progress_bar=False)
-        .astype("float32")
-    )
+    # Encoding 200 chunks costs ~1s on every boot even though the corpus rarely
+    # changes. Cache the vectors under a digest of (model, chunk texts) so an
+    # unchanged reports/ dir reloads instantly and any edit invalidates the key.
+    cache_key = _embedding_cache_key(documents)
+    embeddings = _load_cached_embeddings(cache_key, len(documents))
+    if embeddings is None:
+        embeddings = (
+            model.encode(documents, convert_to_numpy=True, show_progress_bar=False)
+            .astype("float32")
+        )
+        _store_cached_embeddings(cache_key, embeddings)
     # Build the lexical BM25 index over the same chunks so retrieval can fuse
     # exact-term matching (INC ids, table/function names) with semantic search.
     from .bm25 import BM25Index

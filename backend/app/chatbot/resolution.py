@@ -345,6 +345,20 @@ def _is_placeholder(text: str) -> bool:
     return not stripped
 
 
+# A stub the model emits when it knows a query belongs here but not which one:
+# "SELECT ...", "UPDATE ...;". Unrunnable, and dangerous to present as a step.
+_STUB_SNIPPET = re.compile(
+    r"^\s*(?:select|update|delete|insert|alter|drop|create)\b[\s\S]{0,20}?"
+    r"(?:\.\.\.|…)[\s;]*$",
+    re.IGNORECASE,
+)
+
+
+def _is_stub_snippet(text: str) -> bool:
+    """True for a code artifact that is only a keyword plus an ellipsis."""
+    return bool(_STUB_SNIPPET.match(text or ""))
+
+
 def _parse_resolution_step(item: dict, default_step: int) -> dict | None:
     action = str(item.get("action") or "").strip()
     title = str(item.get("title") or action or "").strip()

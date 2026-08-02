@@ -21,6 +21,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from starlette.background import BackgroundTask
 
 from app.reports.html_export import render_report_html
 from app.reports.service import (
@@ -49,6 +50,7 @@ def get_service(request: Request) -> ReportService:
 @router.post("/api/reports", response_model=SaveReportResponse)
 def save_report(
     body: SaveReportRequest,
+    request: Request,
     service: ReportService = Depends(get_service),
 ) -> JSONResponse:
     try:
@@ -57,6 +59,11 @@ def save_report(
             markdown=body.markdown,
             editing_filename=body.editingFilename,
         )
+        # A saved report should be answerable immediately. Re-index in the
+        # background so the writer isn't made to wait for embedding.
+        chatbot = getattr(request.app.state, "chatbot", None)
+        if chatbot is not None:
+            return JSONResponse(result, background=BackgroundTask(chatbot.refresh))
         return JSONResponse(result)
     except DuplicateReportError as exc:
         # Matches the TS 409 body: { incident_id, message }.
@@ -152,29 +159,35 @@ def export_html(
 @router.delete("/api/delete/{filename}")
 def delete_report(
     filename: str,
+    request: Request,
     service: ReportService = Depends(get_service),
 ) -> JSONResponse:
-    return _delete(service, filename=filename)
+    return _delete(service, request, filename=filename)
 
 
 @router.delete("/api/delete")
 def delete_report_by_incident(
+    request: Request,
     incident_id: str | None = Query(default=None),
     service: ReportService = Depends(get_service),
 ) -> JSONResponse:
-    return _delete(service, incident_id=incident_id)
+    return _delete(service, request, incident_id=incident_id)
 
 
 def _delete(
     service: ReportService,
+    request: Request,
     filename: str | None = None,
     incident_id: str | None = None,
 ) -> JSONResponse:
     try:
         service.delete(filename=filename, incident_id=incident_id)
-        return JSONResponse(
-            {"success": True, "message": "Report deleted successfully"}
-        )
+        # Drop the deleted report from the index so it can no longer be cited.
+        chatbot = getattr(request.app.state, "chatbot", None)
+        body = {"success": True, "message": "Report deleted successfully"}
+        if chatbot is not None:
+            return JSONResponse(body, background=BackgroundTask(chatbot.refresh))
+        return JSONResponse(body)
     except ReportNotFoundError:
         raise HTTPException(status_code=404, detail="Report not found")
     except InvalidFilenameError as exc:

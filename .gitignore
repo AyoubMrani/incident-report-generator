@@ -17,5 +17,9 @@ frontend/dist/
 .DS_Store
 
 # Local data (reports are shared sample data; keep them tracked for now, but
-# ignore anything the running app writes at these ad-hoc paths)
+# ignore anything the running app writes at these ad-hoc paths).
+# Covers the SQLite chat store and the embedding cache, both of which are
+# regenerated on demand and are machine-local.
 /data/
+backend/data/
+report-export.html

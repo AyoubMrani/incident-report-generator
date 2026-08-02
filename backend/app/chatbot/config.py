@@ -37,3 +37,11 @@ OLLAMA_MODEL = _os.environ.get("OLLAMA_MODEL", "llama3.2:3b")
 # qwen2.5vl:3b  — lighter option, needs ~3 GB, good for low-RAM machines
 # minicpm-v      — alternative if Qwen is too heavy
 OLLAMA_VISION_MODEL = "qwen2.5vl:3b"
+
+
+# ── Answer cache ──────────────────────────────────────────────────────────────
+# Repeat questions are common in an incident desk (a shift asks the same thing
+# the previous shift did). Caching the shaped answer per prompt turns a ~15s
+# local generation into an instant reply. Keyed on the full prompt, so new
+# evidence or a new correction never serves a stale answer. 0 disables it.
+ANSWER_CACHE_SIZE = int(_os.environ.get("ANSWER_CACHE_SIZE", "128"))

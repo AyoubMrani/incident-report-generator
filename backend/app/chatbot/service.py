@@ -14,12 +14,17 @@ here, so a request is just: run the pipeline. No global/session state.
 
 from __future__ import annotations
 
+import copy
+import hashlib
+import re
+import threading
+from collections import OrderedDict
 from collections.abc import Iterator
 from pathlib import Path
 
 from app.shared.llm.provider import LLMProvider
 
-from .config import CONFIDENCE_THRESHOLD, RESOLUTION_CONTEXT_K, TOP_K
+from .config import ANSWER_CACHE_SIZE, CONFIDENCE_THRESHOLD, TOP_K
 from .ingestion import KnowledgeBase, build_knowledge_base
 from .intent import Intent, canned_reply, classify, has_incident_signal
 from .llm import understand_screenshot
@@ -32,6 +37,8 @@ from .prompts import (
     format_prompt,
 )
 from .resolution import (
+    _full_document_text,
+    _is_stub_snippet,
     extract_code_blocks,
     format_retrieval_context,
     parse_resolution,
@@ -141,12 +148,81 @@ class ChatbotService:
     def __init__(self, knowledge_base: KnowledgeBase, provider: LLMProvider):
         self.kb = knowledge_base
         self.provider = provider
+        # Set by build(); refresh() is a no-op without it (e.g. tests that inject
+        # a hand-built KB rather than indexing a directory).
+        self.reports_dir: str | Path | None = None
+        # Answer cache. Keyed on the *prompt*, not the raw question, so it
+        # already accounts for retrieved evidence, history and corrections —
+        # re-indexed reports or a new correction produce a different key and
+        # can never serve a stale answer. Bounded LRU; a lock keeps it correct
+        # under FastAPI's threadpool.
+        self._cache: "OrderedDict[str, dict]" = OrderedDict()
+        self._cache_lock = threading.Lock()
+
+    def _cache_get(self, prompt: str) -> dict | None:
+        if ANSWER_CACHE_SIZE <= 0:
+            return None
+        key = hashlib.sha256(prompt.encode("utf-8", "replace")).hexdigest()
+        with self._cache_lock:
+            hit = self._cache.get(key)
+            if hit is None:
+                return None
+            self._cache.move_to_end(key)
+            # Deep-copied on the way out: callers (and the store) mutate answers.
+            return copy.deepcopy(hit)
+
+    def _cache_put(self, prompt: str, answer: dict) -> None:
+        # Never cache a failed or ungrounded answer — it would pin a bad result
+        # for every later asker of the same question.
+        if ANSWER_CACHE_SIZE <= 0 or not answer:
+            return
+        # Only cache answers worth repeating: grounded in a report and not a
+        # low-confidence / abstention result. A weak answer stays uncached so the
+        # next asker gets a fresh attempt (and any newly indexed evidence).
+        if answer.get("low_confidence") or answer.get("no_documented_resolution"):
+            return
+        if not answer.get("matched_reports") or not answer.get("recommended_resolution"):
+            return
+        key = hashlib.sha256(prompt.encode("utf-8", "replace")).hexdigest()
+        with self._cache_lock:
+            self._cache[key] = copy.deepcopy(answer)
+            self._cache.move_to_end(key)
+            while len(self._cache) > ANSWER_CACHE_SIZE:
+                self._cache.popitem(last=False)
+
+    def invalidate_cache(self) -> None:
+        """Drop cached answers (call after the knowledge base is rebuilt)."""
+        with self._cache_lock:
+            self._cache.clear()
 
     @classmethod
     def build(cls, reports_dir, provider: LLMProvider) -> "ChatbotService":
         """Construct by indexing ``reports_dir`` once. Call this in the lifespan."""
         kb = build_knowledge_base(reports_dir)
-        return cls(kb, provider)
+        svc = cls(kb, provider)
+        svc.reports_dir = reports_dir
+        return svc
+
+    def refresh(self) -> bool:
+        """Re-index the reports directory so newly saved reports are searchable.
+
+        Without this, a report written by the generator stays invisible to the
+        chatbot until the process restarts. Re-indexing reuses the embedding
+        cache for unchanged chunks, so the cost is dominated by the handful of
+        new ones. The rebuilt KB is swapped in only on success — a failed
+        re-index leaves the previous, working index in place.
+        """
+        reports_dir = getattr(self, "reports_dir", None)
+        if reports_dir is None:
+            return False
+        try:
+            kb = build_knowledge_base(reports_dir)
+        except Exception:  # noqa: BLE001 — never break a save because of indexing
+            return False
+        self.kb = kb
+        # Cached answers were shaped against the old evidence; drop them.
+        self.invalidate_cache()
+        return True
 
     # ── shared preparation (everything up to the LLM call) ────────────────────
 
@@ -332,8 +408,13 @@ class ChatbotService:
         prep = self._prepare(query, image_b64, history, corrections)
         if "short_circuit" in prep:
             return prep["short_circuit"]
+        cached = self._cache_get(prep["prompt"])
+        if cached is not None:
+            return cached
         raw = self.provider.chat(prep["prompt"])
-        return self._shape(raw, prep["results"], prep["injection"])
+        shaped = self._shape(raw, prep["results"], prep["injection"])
+        self._cache_put(prep["prompt"], shaped)
+        return shaped
 
     # ── streaming answer ──────────────────────────────────────────────────────
 
@@ -358,13 +439,22 @@ class ChatbotService:
             yield {"type": "done", "answer": reply}
             return
 
+        cached = self._cache_get(prep["prompt"])
+        if cached is not None:
+            # Same question, same evidence: skip the model entirely. No tokens are
+            # replayed — the client renders the structured answer from `done`.
+            yield {"type": "done", "answer": cached}
+            return
+
         chunks: list[str] = []
         for piece in self.provider.chat_stream(prep["prompt"]):
             chunks.append(piece)
             yield {"type": "token", "text": piece}
 
         raw = "".join(chunks)
-        yield {"type": "done", "answer": self._shape(raw, prep["results"], prep["injection"])}
+        shaped = self._shape(raw, prep["results"], prep["injection"])
+        self._cache_put(prep["prompt"], shaped)
+        yield {"type": "done", "answer": shaped}
 
 
 def _recover_artifacts(parsed: dict, results: list[dict]) -> None:
@@ -442,6 +532,54 @@ def _strip_invented_evidence(parsed: dict, results: list[dict]) -> None:
         m for m in (parsed.get("matched_report_ids") or [])
         if str(m).strip().lower() in real_ids
     ]
+    _strip_ungrounded_artifacts(parsed, results)
+
+
+def _identifiers(text: str) -> set[str]:
+    """Code-ish identifiers in a blob: function names, tables, scripts, columns."""
+    return {
+        t.lower()
+        for t in re.findall(r"[A-Za-z_][A-Za-z0-9_.]{2,}", text or "")
+    }
+
+
+def _strip_ungrounded_artifacts(parsed: dict, results: list[dict]) -> None:
+    """Drop code artifacts whose identifiers appear in no retrieved report.
+
+    A small local model will happily carry a command it saw in another incident
+    ("python menu.py") into an unrelated answer. Running that against production
+    is precisely the harm this assistant exists to prevent, so an artifact is
+    kept only when the evidence actually contains its identifiers. Prose is left
+    alone — this guards executable content, which is what gets copy-pasted.
+    """
+    # Ground against each report's FULL text, not just the matched chunk: a
+    # legitimate script can live in a section the query didn't match.
+    parts: list[str] = []
+    for r in results:
+        parts.append(r.get("text") or "")
+        parts.append(_full_document_text(r) or "")
+    evidence = " \n".join(parts)
+    if not evidence.strip():
+        return
+    grounded_ids = _identifiers(evidence)
+
+    for step in parsed.get("recommended_resolution") or []:
+        artifact = step.get("artifact")
+        content = (artifact or {}).get("content", "") if isinstance(artifact, dict) else ""
+        if not content.strip():
+            continue
+        # "SELECT ..." is a stub, not a query: never render it as runnable.
+        if _is_stub_snippet(content):
+            step["artifact"] = None
+            continue
+        tokens = _identifiers(content)
+        # Keep the artifact when its identifiers are attested by the evidence.
+        # An artifact with no identifiers at all (pure punctuation) is dropped.
+        if tokens and tokens <= grounded_ids:
+            continue
+        step["artifact"] = None
+        if step.get("action") and content.strip() in step.get("action", ""):
+            step["action"] = ""
 
 
 def _language_hint(step: dict) -> str:
