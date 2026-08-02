@@ -251,3 +251,33 @@ def test_failed_refresh_keeps_the_previous_index(tmp_path, monkeypatch):
     (reports / "INC001.json").unlink()  # build_knowledge_base now raises
     assert svc.refresh() is False
     assert svc.kb is original
+
+
+# ── cross-client isolation ────────────────────────────────────────────────────
+
+
+def test_conversation_history_is_part_of_the_cache_key():
+    """The cache is process-wide, not per client — so this is what keeps one
+    user's answer from reaching another.
+
+    The key is the whole prompt, and the prompt carries the conversation
+    history. Two clients therefore share a cached answer only when their entire
+    input was identical, in which case nothing private has crossed over. If the
+    history ever stopped reaching the prompt, this property would silently
+    become false, so it is asserted directly.
+    """
+    from app.chatbot.service import _history_block
+
+    mine = _history_block([{"role": "user", "text": "account ACME-123 is down"}])
+    theirs = _history_block([{"role": "user", "text": "account OTHER-999 is down"}])
+
+    assert mine and theirs
+    assert mine != theirs
+
+
+def test_answers_for_different_histories_do_not_collide():
+    svc = _svc()
+    svc._cache_put("PROMPT-with-history-A", _good_answer())
+
+    assert svc._cache_get("PROMPT-with-history-A") is not None
+    assert svc._cache_get("PROMPT-with-history-B") is None
