@@ -35,6 +35,7 @@ from .resolution import (
     extract_code_blocks,
     format_retrieval_context,
     parse_resolution,
+    report_documents_resolution,
 )
 from .retrieval import combine_retrieval_queries, search_multimodal
 from .selection import select_sources
@@ -270,6 +271,15 @@ class ChatbotService:
         if parsed.get("no_documented_resolution") and parsed.get("recommended_resolution"):
             parsed["no_documented_resolution"] = False
 
+        # The model also claims "nothing documented" about reports that plainly
+        # document a fix — it does this when the query wording differs from the
+        # report's. Whether a report documents a resolution is a property of the
+        # report, not a judgement call, so check the source directly.
+        if parsed.get("no_documented_resolution") and any(
+            report_documents_resolution(r) for r in results
+        ):
+            parsed["no_documented_resolution"] = False
+
         # Restore any query/command the model referenced but did not reproduce
         # faithfully, taking it from the selected report itself.
         _recover_artifacts(parsed, results)
@@ -287,9 +297,12 @@ class ChatbotService:
         # over the model's self-assessment: if a strongly-matching report was
         # selected and the model produced grounded steps from it, the answer is
         # not low-confidence.
-        if results and parsed.get("recommended_resolution"):
+        if results:
             top_score = float(results[0].get("selection_score") or 0.0)
-            if top_score >= STRONG_MATCH_SCORE:
+            grounded = bool(parsed.get("recommended_resolution")) or any(
+                report_documents_resolution(r) for r in results
+            )
+            if top_score >= STRONG_MATCH_SCORE and grounded:
                 parsed["confidence"] = max(parsed.get("confidence", 0), STRONG_MATCH_CONFIDENCE)
 
         parsed["low_confidence"] = (

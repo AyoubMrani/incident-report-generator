@@ -136,6 +136,30 @@ _SHELL_LINE = re.compile(
 )
 
 
+_RESOLUTION_MARKERS = re.compile(
+    r"(resolution\s+steps?|steps?\s+taken|remediation|fix\s+applied|"
+    r"how\s+(it\s+was|we)\s+(fixed|resolved)|workaround|procedure)\s*:",
+    re.IGNORECASE,
+)
+
+
+def report_documents_resolution(hit: dict) -> bool:
+    """True when a report actually documents how the incident was fixed.
+
+    Used to overrule a model that claims "no documented resolution" about a
+    report whose text plainly contains one — that is a property of the source,
+    not a judgement call.
+    """
+    text = _full_document_text(hit) or str(hit.get("text") or "")
+    if not text:
+        return False
+    if _RESOLUTION_MARKERS.search(text):
+        return True
+    # A report carrying a runnable query or command documents a fix even when
+    # it lacks an explicit "Resolution Steps:" heading.
+    return bool(extract_code_blocks(hit))
+
+
 def extract_code_blocks(hit: dict) -> list[dict]:
     """Recover the code/queries a report actually documents, from its own text.
 
@@ -315,10 +339,21 @@ def _sql_text(entry) -> str:
     return str(entry).strip()
 
 
+def _is_placeholder(text: str) -> bool:
+    """True for schema filler the model echoed instead of real content ('...')."""
+    stripped = (text or "").strip().strip(".…").strip()
+    return not stripped
+
+
 def _parse_resolution_step(item: dict, default_step: int) -> dict | None:
     action = str(item.get("action") or "").strip()
     title = str(item.get("title") or action or "").strip()
     if not action and not title:
+        return None
+    # Drop schema placeholders rather than rendering "..." as an instruction.
+    if _is_placeholder(action):
+        action = ""
+    if _is_placeholder(title):
         return None
 
     evidence = item.get("evidence") or []
@@ -344,12 +379,18 @@ def _parse_resolution_step(item: dict, default_step: int) -> dict | None:
             item.get("action_type"), artifact["language"] if artifact else ""
         ),
         "title": title,
-        "purpose": str(item.get("purpose") or "").strip(),
+        "purpose": _clean_field(item.get("purpose")),
         "action": action or title,
-        "validation": str(item.get("validation") or "").strip(),
+        "validation": _clean_field(item.get("validation")),
         "evidence": evidence,
         "artifact": artifact,
     }
+
+
+def _clean_field(value) -> str:
+    """A stripped field value, blank when it is only schema filler."""
+    text = str(value or "").strip()
+    return "" if _is_placeholder(text) else text
 
 
 def _normalize_from_json(data: dict, raw: str) -> dict:
