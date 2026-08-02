@@ -66,6 +66,12 @@ services:
       - hf-cache:/data/hf-cache
       - chat-db:/data/chat          # persists conversation history across restarts
     restart: unless-stopped
+    # Steady-state usage is ~600 MB (embedding model + index + FastAPI). The
+    # ceiling is generous enough to absorb a large report or a burst of
+    # concurrent requests, while stopping a leak in this container from
+    # starving Ollama — which shares the host's memory and needs several GB
+    # resident to answer at all.
+    mem_limit: 2g
 
   # Opt-in containerized Ollama (profile: with-ollama). Off by default.
   ollama:
