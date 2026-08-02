@@ -15,8 +15,14 @@ server from several threads and asserts the properties that must survive:
 every request answered, no cross-talk between conversations, and a cache hit
 that returns the same answer as the generation it came from.
 
+Note that the default run mostly measures the *cache* under concurrency, since
+repeated queries are served from it in milliseconds. Use --no-cache to make
+every request unique so they all reach the model — that is the run that
+actually contends for generation, and the one worth reading for latency.
+
 Usage:
     python eval/load_check.py                    # 6 workers, 12 requests
+    python eval/load_check.py --no-cache         # every request hits the model
     python eval/load_check.py --workers 4 --requests 8
 """
 
@@ -51,9 +57,17 @@ def main() -> int:
     parser.add_argument("--url", default=DEFAULT_URL)
     parser.add_argument("--workers", type=int, default=6)
     parser.add_argument("--requests", type=int, default=12)
+    parser.add_argument("--no-cache", action="store_true",
+                        help="make every query unique so nothing is served from "
+                             "the answer cache — this is what actually tests "
+                             "concurrent generation")
     args = parser.parse_args()
 
     plan = [QUERIES[i % len(QUERIES)] for i in range(args.requests)]
+    if args.no_cache:
+        # A distinct suffix per request defeats the prompt-keyed cache without
+        # changing what is being asked, so every request reaches the model.
+        plan = [f"{q} (case {i})" for i, q in enumerate(plan)]
     results: list[dict] = []
     lock = threading.Lock()
 
