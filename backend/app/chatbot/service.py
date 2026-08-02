@@ -31,6 +31,7 @@ from .prompts import (
     format_prompt,
 )
 from .resolution import (
+    extract_code_blocks,
     format_retrieval_context,
     parse_resolution,
 )
@@ -41,6 +42,13 @@ from .security import injection_scan, wrap_untrusted
 # How many prior turns of a conversation to feed back into the resolution prompt
 # for follow-up context ("what SQL for that?"). Kept small to bound prompt size.
 MEMORY_TURNS = 4
+
+# A selected report scoring at or above this (retrieval score + entity overlap,
+# where overlap alone maxes at 1.0) is a direct match: its title/entities line up
+# with the query, not merely its topic.
+STRONG_MATCH_SCORE = 0.60
+# Floor applied to such an answer when it also produced grounded steps.
+STRONG_MATCH_CONFIDENCE = 80
 
 
 def _chat_reply(text: str, *, needs_clarification: bool = False) -> dict:
@@ -221,8 +229,11 @@ class ChatbotService:
                 # match (at most MAX_SELECTED), so every one of them goes into
                 # the prompt in full — the model must be able to reproduce a
                 # matching report's complete documented resolution.
+                # Each selected report is passed in FULL (its whole document,
+                # not just the chunk that matched), so a multi-step procedure —
+                # extract with SQL, run a script, verify — survives intact.
                 knowledge=format_retrieval_context(
-                    results, limit=len(results), max_chars_per_chunk=2000
+                    results, limit=len(results), max_chars_per_chunk=6000
                 ),
             )
         else:
@@ -250,11 +261,6 @@ class ChatbotService:
 
         parsed["retrieval"] = [_source_link(r) for r in results]
         parsed["matched_report_ids"] = matched
-        parsed["low_confidence"] = (
-            parsed.get("confidence", 0) / 100.0 < CONFIDENCE_THRESHOLD
-        )
-        parsed["is_chat"] = False
-        parsed["needs_clarification"] = bool(parsed.get("insufficient"))
 
         # Contradiction guard: an answer cannot both claim no documented
         # resolution exists AND present resolution steps. When the model does
@@ -262,6 +268,32 @@ class ChatbotService:
         # misleading "nothing documented" banner is dropped.
         if parsed.get("no_documented_resolution") and parsed.get("recommended_resolution"):
             parsed["no_documented_resolution"] = False
+
+        # Restore any query/command the model referenced but did not reproduce
+        # faithfully, taking it from the selected report itself.
+        _recover_artifacts(parsed, results)
+
+        # Confidence floor. Small local models routinely under-report confidence
+        # (a short query or an unfamiliar id format makes them hedge) even when
+        # they were handed a report that directly matches and documents the fix.
+        # Match quality is something we measured during selection, so trust that
+        # over the model's self-assessment: if a strongly-matching report was
+        # selected and the model produced grounded steps from it, the answer is
+        # not low-confidence.
+        if results and parsed.get("recommended_resolution"):
+            top_score = float(results[0].get("selection_score") or 0.0)
+            if top_score >= STRONG_MATCH_SCORE:
+                parsed["confidence"] = max(parsed.get("confidence", 0), STRONG_MATCH_CONFIDENCE)
+
+        parsed["low_confidence"] = (
+            parsed.get("confidence", 0) / 100.0 < CONFIDENCE_THRESHOLD
+        )
+        parsed["is_chat"] = False
+        parsed["needs_clarification"] = bool(parsed.get("insufficient"))
+
+        # A grounded answer with real steps is never an "insufficient" abstention.
+        if parsed.get("recommended_resolution"):
+            parsed["needs_clarification"] = False
 
         if injection is not None and injection.detected:
             parsed["security_note"] = injection.note
@@ -313,6 +345,71 @@ class ChatbotService:
 
         raw = "".join(chunks)
         yield {"type": "done", "answer": self._shape(raw, prep["results"], prep["injection"])}
+
+
+def _recover_artifacts(parsed: dict, results: list[dict]) -> None:
+    """Attach source code/queries the model referenced but failed to reproduce.
+
+    Small local models are unreliable at copying a long query verbatim: they
+    abbreviate it ("SELECT ...") or drop it entirely. The statement is sitting in
+    the selected report, so rather than trusting the copy, we take it from the
+    source and attach it to the step that calls for it. This keeps the answer
+    faithful without depending on the model's transcription.
+    """
+    if not results or not parsed.get("recommended_resolution"):
+        return
+
+    # Pull code/query blocks out of the top selected report.
+    blocks = extract_code_blocks(results[0])
+    if not blocks:
+        return
+
+    used: set[int] = set()
+    for step in parsed["recommended_resolution"]:
+        art = step.get("artifact")
+        content = (art or {}).get("content", "").strip() if art else ""
+        # A missing artifact, or an elided placeholder like "SELECT ...".
+        needs_recovery = (
+            art is None
+            or len(content) < 40
+            or content.rstrip().endswith(("...", "…"))
+        )
+        if not needs_recovery:
+            continue
+
+        wanted_lang = (art or {}).get("language") or _language_hint(step)
+        for i, block in enumerate(blocks):
+            if i in used:
+                continue
+            if wanted_lang and block["language"] != wanted_lang:
+                continue
+            step["artifact"] = dict(block)
+            used.add(i)
+            break
+
+    # Keep the top-level artifacts list in sync with what the steps now carry.
+    step_arts = [
+        s["artifact"] for s in parsed["recommended_resolution"] if s.get("artifact")
+    ]
+    seen: set[str] = set()
+    merged: list[dict] = []
+    for a in step_arts + list(parsed.get("artifacts") or []):
+        key = a["content"].strip()
+        if key and key not in seen:
+            seen.add(key)
+            merged.append(a)
+    parsed["artifacts"] = merged
+
+
+def _language_hint(step: dict) -> str:
+    """Guess the artifact language a step is asking for, from its own words."""
+    text = f"{step.get('title','')} {step.get('action','')}".lower()
+    action_type = (step.get("action_type") or "").upper()
+    if action_type == "SQL_QUERY" or "query" in text or "sql" in text:
+        return "sql"
+    if action_type == "CODE" or "script" in text or "python" in text or "run " in text:
+        return "python" if "python" in text else "bash"
+    return ""
 
 
 def _source_link(hit: dict) -> dict:

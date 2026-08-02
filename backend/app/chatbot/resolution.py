@@ -9,6 +9,7 @@ resolution dict now. This module is pure — dict in, dict out, no I/O, no UI.
 
 import json
 import re
+from functools import lru_cache
 
 
 
@@ -87,6 +88,102 @@ def _normalize_action_type(value, artifact_language: str = "") -> str:
     return inferred or "MANUAL_PROCEDURE"
 
 
+@lru_cache(maxsize=256)
+def _read_full_document(path: str) -> str:
+    """Re-extract a report's complete text from disk (cached).
+
+    Retrieval indexes fixed-size chunks, but answering faithfully needs the
+    whole procedure. Reading the source file again gives the full text without
+    inflating the index.
+    """
+    try:
+        from .ingestion import _read_json, _read_md
+        if path.endswith(".json"):
+            return _read_json(path)
+        if path.endswith((".md", ".txt")):
+            return _read_md(path)
+    except Exception:  # noqa: BLE001 — fall back to the chunk on any failure
+        return ""
+    return ""
+
+
+def _full_document_text(chunk: dict) -> str:
+    """Full text of the report this chunk came from, if it can be re-read."""
+    path = str(chunk.get("path") or "")
+    if not path:
+        return ""
+    # Prefer the .json source even when the .md mirror was the chunk that
+    # matched: the JSON carries the structured blocks, so image markers and
+    # per-block titles survive, whereas the markdown rendering loses them.
+    if path.endswith(".md"):
+        from_json = _read_full_document(path[:-3] + ".json")
+        if from_json:
+            return from_json
+    return _read_full_document(path)
+
+
+_SQL_START = re.compile(
+    r"\b(SELECT|INSERT\s+INTO|UPDATE|DELETE\s+FROM|CREATE|ALTER|MERGE)\b",
+    re.IGNORECASE,
+)
+# A candidate is only accepted as SQL if it also contains clause structure —
+# "with a list of Home IDs ...; " reads like a statement start but is prose.
+_SQL_STRUCTURE = re.compile(r"\b(FROM|INTO|SET|VALUES|WHERE|JOIN)\b", re.IGNORECASE)
+_SHELL_LINE = re.compile(
+    r"^\s*(?:\$\s*)?((?:sudo\s+)?(?:python[0-9.]*|bash|sh|kubectl|docker|helm|"
+    r"curl|systemctl|psql|git|cd|export|ssh|scp|tail|grep|awk|sed)\b.*)$",
+    re.IGNORECASE | re.MULTILINE,
+)
+
+
+def extract_code_blocks(hit: dict) -> list[dict]:
+    """Recover the code/queries a report actually documents, from its own text.
+
+    Returns [{language, title, content}] in document order. Used to restore
+    statements the model referenced but did not reproduce faithfully, so the
+    answer shows the source's real query/command rather than an elided stub.
+    """
+    text = _full_document_text(hit) or str(hit.get("text") or "")
+    if not text:
+        return []
+
+    blocks: list[dict] = []
+
+    # SQL: from a statement keyword to its terminating semicolon. Nested
+    # subqueries would each match, so keep only outermost statements — skip any
+    # match that starts inside a statement already captured.
+    consumed_until = -1
+    for match in _SQL_START.finditer(text):
+        start = match.start()
+        if start < consumed_until:
+            continue  # inside a statement we already took (a subquery)
+        end = text.find(";", start)
+        if end == -1:
+            continue
+        statement = text[start : end + 1].strip()
+        # Guard against a stray keyword in prose matching a far-away semicolon:
+        # require real clause structure, not just a leading keyword.
+        if 40 <= len(statement) <= 4000 and _SQL_STRUCTURE.search(statement):
+            blocks.append({"language": "sql", "title": "Query from the report",
+                           "content": statement})
+            consumed_until = end
+
+    # Shell/Python invocations, de-duplicated, in order.
+    seen: set[str] = set()
+    commands: list[str] = []
+    for match in _SHELL_LINE.finditer(text):
+        cmd = match.group(1).strip().rstrip(".")
+        if 4 <= len(cmd) <= 300 and cmd not in seen:
+            seen.add(cmd)
+            commands.append(cmd)
+    if commands:
+        lang = "python" if any(c.startswith("python") for c in commands) else "bash"
+        blocks.append({"language": lang, "title": "Commands from the report",
+                       "content": "\n".join(commands)})
+
+    return blocks
+
+
 def format_retrieval_context(
     results: list[dict], limit: int = 5, max_chars_per_chunk: int = 900
 ) -> str:
@@ -100,7 +197,11 @@ def format_retrieval_context(
     for chunk in results[:limit]:
         raw_score = chunk.get("semantic_score", chunk.get("score", 0))
         score_pct = int(float(raw_score) * 100)
-        content = str(chunk.get("text", ""))
+        # Prefer the FULL source document over the matched chunk. Retrieval
+        # matches a single ~700-char window, but a resolution procedure usually
+        # spans several (extract with SQL, then run a script, then verify);
+        # sending only the matched window truncates the answer mid-procedure.
+        content = _full_document_text(chunk) or str(chunk.get("text", ""))
         if len(content) > max_chars_per_chunk:
             content = content[:max_chars_per_chunk].rstrip() + " …"
         blocks.append(
@@ -122,12 +223,58 @@ def _extract_json_blob(raw: str) -> dict | None:
         text = fence.group(1).strip()
 
     start = text.find("{")
-    end = text.rfind("}")
-    if start == -1 or end <= start:
+    if start == -1:
         return None
-    text = text[start : end + 1]
+    end = text.rfind("}")
+    if end > start:
+        try:
+            data = json.loads(text[start : end + 1])
+            if isinstance(data, dict):
+                return data
+        except json.JSONDecodeError:
+            pass
+
+    # Salvage a truncated response. Generation can stop mid-object when the
+    # token budget runs out, which would otherwise discard an answer that was
+    # almost entirely complete. Close the open string/containers and re-parse so
+    # the steps produced before the cut-off survive.
+    return _parse_truncated_json(text[start:])
+
+
+def _parse_truncated_json(text: str) -> dict | None:
+    """Best-effort parse of a JSON object whose tail was cut off."""
+    in_string = False
+    escaped = False
+    stack: list[str] = []
+
+    for ch in text:
+        if escaped:
+            escaped = False
+            continue
+        if ch == "\\" and in_string:
+            escaped = True
+            continue
+        if ch == '"':
+            in_string = not in_string
+            continue
+        if in_string:
+            continue
+        if ch in "{[":
+            stack.append(ch)
+        elif ch in "}]" and stack:
+            stack.pop()
+
+    repaired = text
+    if in_string:
+        repaired += '"'
+    # Drop a dangling key/comma that has no value yet, e.g. '"notes": '
+    repaired = re.sub(r',\s*"[^"]*"\s*:\s*$', "", repaired.rstrip())
+    repaired = repaired.rstrip().rstrip(",")
+    for opener in reversed(stack):
+        repaired += "}" if opener == "{" else "]"
+
     try:
-        data = json.loads(text)
+        data = json.loads(repaired)
     except json.JSONDecodeError:
         return None
     return data if isinstance(data, dict) else None

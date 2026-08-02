@@ -67,13 +67,36 @@ def _read_docx(path: str) -> str:
 
 
 def _strip_html(text: str) -> str:
-    """Quill stores paragraph content as HTML; reduce it to readable text."""
-    text = re.sub(r"<[^>]+>", " ", text or "")
+    """Quill stores paragraph content as HTML; reduce it to readable text.
+
+    Inline <img> tags (screenshots pasted into a step-by-step guide, often as
+    base64 data URIs) are replaced with a positional marker rather than dropped.
+    The image bytes are useless to a text model and would swamp the chunk, but
+    the *fact* that a screenshot documents this point in the procedure matters —
+    it lets the answer acknowledge the visual instead of pretending it is absent.
+    """
+    raw = text or ""
+    # Preserve list-item boundaries that would otherwise collapse into one line.
+    raw = re.sub(r"</li\s*>", " \n", raw, flags=re.IGNORECASE)
+    raw = re.sub(r"<br\s*/?>", " \n", raw, flags=re.IGNORECASE)
+
+    # Mark images in place, numbered in document order.
+    counter = {"n": 0}
+
+    def _img_marker(_match: re.Match) -> str:
+        counter["n"] += 1
+        return f" [SCREENSHOT {counter['n']}] "
+
+    raw = re.sub(r"<img\b[^>]*>", _img_marker, raw, flags=re.IGNORECASE)
+
+    text = re.sub(r"<[^>]+>", " ", raw)
     text = (
         text.replace("&amp;", "&").replace("&lt;", "<").replace("&gt;", ">")
         .replace("&quot;", '"').replace("&#39;", "'").replace("&nbsp;", " ")
     )
-    return re.sub(r"\s+", " ", text).strip()
+    # Collapse runs of spaces/tabs but keep the line breaks we inserted.
+    text = re.sub(r"[ \t]+", " ", text)
+    return re.sub(r"\n\s*\n+", "\n", text).strip()
 
 
 def _render_block(block: dict) -> str:

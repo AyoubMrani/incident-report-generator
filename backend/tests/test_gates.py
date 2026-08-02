@@ -261,3 +261,46 @@ def test_no_documented_resolution_cannot_coexist_with_steps(client):
     )
     assert parsed["recommended_resolution"]              # steps kept
     assert parsed["no_documented_resolution"] is False   # contradiction resolved
+
+
+# ── full-report context (no truncated procedures) ─────────────────────────────
+
+
+def test_screenshots_become_positional_markers():
+    """Inline <img> tags must be marked, not silently dropped, so the answer can
+    acknowledge that a screenshot documents a step."""
+    from app.chatbot.ingestion import _strip_html
+    html = '<p>Run the query.</p><img src="data:image/png;base64,AAAA"/><p>Then open the terminal.</p><img src="data:image/png;base64,BBBB"/>'
+    out = _strip_html(html)
+    assert "[SCREENSHOT 1]" in out and "[SCREENSHOT 2]" in out
+    assert "base64" not in out          # image bytes never reach the model
+    assert "Run the query" in out and "open the terminal" in out
+
+
+def test_full_document_used_instead_of_matched_chunk(tmp_path):
+    """A procedure spanning several chunks must arrive whole."""
+    import json as _json
+    from app.chatbot.resolution import format_retrieval_context
+
+    report = {
+        "metadata": {"incident_id": "INC777", "title": "Rollback procedure",
+                     "caller": "x", "category": "c", "subcategory": "s", "date": "2026-01-01"},
+        "blocks": [
+            {"id": "h", "type": "heading", "level": 1, "content": "Rollback procedure"},
+            {"id": "p", "type": "paragraph", "title": "Steps",
+             "content": "<p>Run the SELECT query.</p><img src='data:image/png;base64,ZZ'/>"
+                        "<p>Then run python menu.py and choose option 7.</p>"},
+        ],
+    }
+    path = tmp_path / "INC777_rollback.json"
+    path.write_text(_json.dumps(report))
+
+    # The retrieved chunk holds only the FIRST half of the procedure.
+    chunk = {"title": "Rollback procedure", "incident_id": "INC777",
+             "source": "reports/INC777_rollback.json", "path": str(path),
+             "text": "Run the SELECT query.", "score": 0.9}
+
+    ctx = format_retrieval_context([chunk], limit=1, max_chars_per_chunk=6000)
+    # The tail of the procedure — absent from the chunk — must still be present.
+    assert "menu.py" in ctx and "option 7" in ctx
+    assert "[SCREENSHOT 1]" in ctx
