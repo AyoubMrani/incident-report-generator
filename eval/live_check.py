@@ -344,19 +344,39 @@ CASES: list[Case] = [
 # ── runner ────────────────────────────────────────────────────────────────────
 
 
+def server_alive(base_url: str) -> bool:
+    """Is the backend itself up? Distinguishes 'the server died' from 'the
+    model misbehaved', which read identically in a failed case otherwise."""
+    import urllib.error
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"{base_url}/api/health", timeout=3) as resp:
+            return resp.status == 200
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def run_case(base_url: str, case: Case) -> dict:
     started = time.time()
     try:
         answer = stream_chat(base_url, case.query)
     except Exception as exc:  # noqa: BLE001 — a transport failure is a failure
+        # A connection reset usually means the backend went away mid-suite, not
+        # that this case is wrong. Say which, so the run is not misread as a
+        # quality regression.
+        hint = "" if server_alive(base_url) else " (backend is not responding)"
         return {"name": case.name, "ok": False, "seconds": time.time() - started,
-                "errors": [f"request failed: {exc}"], "confidence": None}
+                "errors": [f"request failed: {exc}{hint}"], "confidence": None,
+                "infra": not server_alive(base_url)}
 
     elapsed = time.time() - started
     if not answer:
+        alive = server_alive(base_url)
+        reason = ("no answer returned; the backend is not responding"
+                  if not alive else
+                  "no answer returned (backend is up — check Ollama)")
         return {"name": case.name, "ok": False, "seconds": elapsed,
-                "errors": ["no answer returned (is the model running?)"],
-                "confidence": None}
+                "errors": [reason], "confidence": None, "infra": not alive}
 
     errors = [err for check in case.checks if (err := check(answer))]
     return {
@@ -401,7 +421,14 @@ def main() -> int:
 
     passed = sum(1 for r in results if r["ok"])
     total = len(results)
+    infra = [r for r in results if r.get("infra")]
     print(f"\n{passed}/{total} passed")
+    if infra:
+        # Without this, an environment failure looks like an answer-quality
+        # regression and sends the reader hunting for a bug that is not there.
+        print(f"{len(infra)} of the failures were infrastructure, not answers: "
+              f"the backend stopped responding "
+              f"({', '.join(r['name'] for r in infra)}). Re-run once it is back.")
 
     if args.json_out:
         with open(args.json_out, "w", encoding="utf-8") as f:
