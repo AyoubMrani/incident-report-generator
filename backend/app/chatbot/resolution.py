@@ -387,6 +387,16 @@ def _parse_resolution_step(item: dict, default_step: int) -> dict | None:
     }
 
 
+def _as_text(value) -> str:
+    """Prose for a field the model may have returned as a list or scalar."""
+    if isinstance(value, (list, tuple)):
+        parts = [str(v).strip() for v in value if str(v).strip()]
+        text = " ".join(parts)
+    else:
+        text = str(value or "").strip()
+    return "" if _is_placeholder(text) else text
+
+
 def _clean_field(value) -> str:
     """A stripped field value, blank when it is only schema filler."""
     text = str(value or "").strip()
@@ -405,11 +415,12 @@ def _normalize_from_json(data: dict, raw: str) -> dict:
     result["confidence"] = _coerce_confidence(data.get("confidence", 0))
     result["reasoning"] = str(data.get("reasoning") or "").strip()
 
-    # Report sections and gate outcomes.
-    result["root_cause"] = str(data.get("root_cause") or "").strip()
-    result["investigation"] = str(data.get("investigation") or "").strip()
-    result["validation"] = str(data.get("validation") or "").strip()
-    result["additional_notes"] = str(data.get("additional_notes") or "").strip()
+    # Report sections and gate outcomes. Models sometimes return a list where
+    # the schema asks for prose, so normalize either shape to readable text.
+    result["root_cause"] = _as_text(data.get("root_cause"))
+    result["investigation"] = _as_text(data.get("investigation"))
+    result["validation"] = _as_text(data.get("validation"))
+    result["additional_notes"] = _as_text(data.get("additional_notes"))
     result["has_media"] = bool(data.get("has_media"))
     result["refused"] = bool(data.get("refused"))
     result["no_documented_resolution"] = bool(data.get("no_documented_resolution"))

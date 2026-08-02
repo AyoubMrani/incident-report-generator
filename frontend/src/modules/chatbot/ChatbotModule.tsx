@@ -80,6 +80,47 @@ function isDestructiveSql(sql: string): boolean {
   return false;
 }
 
+// A section carrying no real information — "not documented", "not described",
+// or a restatement of nothing — is noise; hide it rather than pad the answer.
+function isFiller(text?: string | null): boolean {
+  const t = (text || '').trim();
+  if (!t) return true;
+  return /^(root cause )?not (explicitly )?(documented|described|specified|available)/i.test(t)
+    || /^(the )?reports? (do|does) not (describe|document|specify)/i.test(t)
+    || /^(no|none|n\/a|unknown)\.?$/i.test(t);
+}
+
+// The report an answer is grounded in, shown up front so it is obvious where
+// the content came from and the source is one click away.
+function SourceCard({ source, onOpen }: {
+  source: SourceLink; onOpen: (filename: string) => void;
+}) {
+  const title = source.title || source.filename || 'source report';
+  const openable = !!(source.open_url && source.filename);
+  return (
+    <button
+      onClick={() => openable && onOpen(source.filename!)}
+      disabled={!openable}
+      className={`w-full flex items-start gap-2 rounded-lg border px-3 py-2 text-left ${
+        openable
+          ? 'bg-blue-50 border-blue-200 hover:bg-blue-100 cursor-pointer'
+          : 'bg-gray-50 border-gray-200 cursor-default'
+      }`}
+      title={openable ? `Open ${title}` : 'This source has no in-app view'}
+    >
+      <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${openable ? 'text-blue-600' : 'text-gray-400'}`} />
+      <span className="min-w-0">
+        <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+          Grounded in
+        </span>
+        <span className={`block text-sm font-medium truncate ${openable ? 'text-blue-800' : 'text-gray-700'}`}>
+          {source.incident_id ? `${source.incident_id} — ` : ''}{title}
+        </span>
+      </span>
+    </button>
+  );
+}
+
 // ── source citations (open matched report in-app; dedup + clean labels) ───────
 function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (filename: string) => void }) {
   if (!retrieval.length) return null;
@@ -245,8 +286,12 @@ function StepBlock({ step }: { step: ResolutionStep }) {
           {label}
         </span>
       </div>
-      {step.purpose && <div className="mt-0.5 text-xs text-gray-500">Purpose: {step.purpose}</div>}
-      <div className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{step.action}</div>
+      {!isFiller(step.purpose) && (
+        <div className="mt-0.5 text-xs text-gray-500">Purpose: {step.purpose}</div>
+      )}
+      {!isFiller(step.action) && (
+        <div className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{step.action}</div>
+      )}
 
       {/* LOG_ANALYSIS renders its excerpt as a quote; code/config as a block. */}
       {art && type === 'LOG_ANALYSIS' && (
@@ -258,7 +303,7 @@ function StepBlock({ step }: { step: ResolutionStep }) {
         <div className="mt-2"><CodeBlock code={art.content} language={art.language} /></div>
       )}
 
-      {step.validation && (
+      {!isFiller(step.validation) && (
         <div className="mt-1 text-xs text-gray-600 italic">Validate: {step.validation}</div>
       )}
       {step.evidence && step.evidence.length > 0 && (
@@ -306,20 +351,25 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         </div>
       )}
 
+      {/* The report this answer is grounded in, up front. */}
+      {answer.retrieval.length > 0 && (
+        <SourceCard source={answer.retrieval[0]} onOpen={onOpen} />
+      )}
+
       {/* 📋 Problem Summary */}
       {answer.answer && (
         <Section icon="📋" title="Problem Summary"><RichText text={answer.answer} /></Section>
       )}
 
-      {/* 🔍 Root Cause */}
-      {answer.root_cause && (
+      {/* 🔍 Root Cause — omitted when the source documents none */}
+      {!isFiller(answer.root_cause) && (
         <Section icon="🔍" title="Root Cause">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.root_cause}</p>
         </Section>
       )}
 
-      {/* 🕵️ Investigation */}
-      {answer.investigation && (
+      {/* 🕵️ Investigation — omitted when the source describes none */}
+      {!isFiller(answer.investigation) && (
         <Section icon="🕵️" title="Investigation">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.investigation}</p>
         </Section>
@@ -376,15 +426,15 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         </Section>
       )}
 
-      {/* ✅ Validation / Verification */}
-      {answer.validation && (
+      {/* ✅ Validation / Verification — omitted when nothing was documented */}
+      {!isFiller(answer.validation) && (
         <Section icon="✅" title="Validation / Verification">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.validation}</p>
         </Section>
       )}
 
-      {/* 📝 Additional Notes */}
-      {answer.additional_notes && (
+      {/* 📝 Additional Notes — omitted when it carries no real information */}
+      {!isFiller(answer.additional_notes) && (
         <Section icon="📝" title="Additional Notes">
           <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.additional_notes}</p>
         </Section>
