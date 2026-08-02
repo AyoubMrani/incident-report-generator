@@ -226,3 +226,43 @@ def test_an_explicit_no_documented_resolution_keeps_its_own_confidence():
     )
 
     assert shaped["confidence"] == 70
+
+
+# ── selection must be able to say "nothing matches" ───────────────────────────
+
+
+def _hit(score: float, title: str, incident_id: str = "INC1") -> dict:
+    return {"score": score, "title": title, "incident_id": incident_id,
+            "text": title, "source": f"reports/{incident_id}.json",
+            "path": f"reports/{incident_id}.json"}
+
+
+def test_a_weak_best_match_is_rejected_entirely():
+    """With only a relative floor the top hit always survived, however weak.
+
+    A question the corpus does not document then came back "grounded" in
+    whatever happened to rank first — lending a real incident's authority to a
+    guess. Returning nothing is the honest outcome.
+    """
+    from app.chatbot.selection import select_sources
+
+    hits = [_hit(0.02, "Kubernetes job pods OOMKilled")]
+    assert select_sources("how do I tune a guitar", hits) == []
+
+
+def test_a_strong_match_is_still_selected():
+    """The floor must not suppress genuine matches."""
+    from app.chatbot.selection import select_sources
+
+    hits = [_hit(0.04, "Kafka consumer group lag growing without bound",
+                 "INC0012017")]
+    selected = select_sources("kafka consumer group lag growing without bound", hits)
+
+    assert len(selected) == 1
+    assert selected[0]["selection_score"] >= 0.5
+
+
+def test_selection_of_an_empty_hit_list_is_empty():
+    from app.chatbot.selection import select_sources
+
+    assert select_sources("anything", []) == []

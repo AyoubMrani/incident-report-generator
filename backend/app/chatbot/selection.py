@@ -32,6 +32,15 @@ MAX_SELECTED = 2
 # markedly weaker ones, while still allowing a genuine second source.
 RELATIVE_FLOOR = 0.85
 
+# Minimum combined score for a report to be cited at all. Below this the corpus
+# does not actually document the question, and citing the nearest thing is worse
+# than admitting it: it lends a real incident's authority to a guess. Calibrated
+# on this corpus — genuine incident questions score ~1.04, unrelated questions
+# ("tune a guitar", "COBOL batch scheduler") peak at 0.29 — so 0.50 separates
+# them with a wide margin on both sides. Re-check with eval/model_bench.py if
+# the scoring weights change.
+ABSOLUTE_FLOOR = 0.50
+
 # Weight of the lexical entity-overlap signal relative to the retrieval score.
 # Retrieval scores are RRF-based and compressed into a small range, so entity
 # overlap is what actually separates "mentions rollback" from "is about this".
@@ -107,11 +116,18 @@ def select_sources(query: str, hits: list[dict], max_selected: int = MAX_SELECTE
         best_by_report.values(), key=lambda h: h["selection_score"], reverse=True
     )
 
-    # 2. Relative floor: drop candidates far weaker than the best match, so a
-    #    single strong match is not padded with a weak second source.
+    # 2. Absolute floor: with only a relative test the best candidate always
+    #    survives, however weak — so a question the corpus knows nothing about
+    #    still came back "grounded" in whatever ranked first, and the answer
+    #    cited an unrelated incident. Measured separation on this corpus is
+    #    wide (genuine matches 1.04, off-topic questions <= 0.29), so a floor
+    #    in between rejects the latter without touching the former.
     top_score = ranked[0]["selection_score"]
-    if top_score <= 0:
-        return ranked[:max_selected]
+    if top_score < ABSOLUTE_FLOOR:
+        return []
+
+    # 3. Relative floor: drop candidates far weaker than the best match, so a
+    #    single strong match is not padded with a weak second source.
     kept = [h for h in ranked if h["selection_score"] >= RELATIVE_FLOOR * top_score]
 
     return kept[:max_selected]

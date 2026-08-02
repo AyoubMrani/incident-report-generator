@@ -37,6 +37,20 @@ services:
       - OLLAMA_HOST=http://host.docker.internal:11434
       # To use the containerized Ollama instead (with-ollama profile), swap to:
       # - OLLAMA_HOST=http://ollama:11434
+
+      # Operational knobs, surfaced here so changing them does not need a code
+      # edit and a rebuild. Each falls back to the default in chatbot/config.py.
+      # Generation model. See eval/model_bench.py for the measurement behind
+      # the default; `OLLAMA_MODEL=llama3:8b docker compose up -d` switches it.
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
+      # Near-greedy decoding: this task reproduces documented procedures, so
+      # sampling variance is a defect, not creativity.
+      - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
+      # Bounds a wedged model; without it a hung call holds a worker for ever.
+      - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
+      # text | json — json when shipping logs to a collector.
+      - LOG_FORMAT=${LOG_FORMAT:-text}
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     extra_hosts:
       # Lets host.docker.internal resolve on Linux too (already works on macOS).
       - "host.docker.internal:host-gateway"
