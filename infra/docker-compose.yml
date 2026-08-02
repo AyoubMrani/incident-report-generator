@@ -34,7 +34,7 @@ services:
       - CHAT_DB=/data/chat/chat.db     # persistent conversation history (SQLite)
       - CHATBOT_PROVIDER=ollama
       # Default: reach the host's Ollama. The ollama client reads OLLAMA_HOST.
-      - OLLAMA_HOST=http://host.docker.internal:11434
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       # To use the containerized Ollama instead (with-ollama profile), swap to:
       # - OLLAMA_HOST=http://ollama:11434
 

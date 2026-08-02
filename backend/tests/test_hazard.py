@@ -14,6 +14,8 @@ learn to click past.
 
 from __future__ import annotations
 
+import json
+
 import pytest
 
 from app.chatbot.hazard import annotate_hazards, hazards_in
@@ -122,3 +124,113 @@ def test_annotating_an_empty_answer_is_safe():
     parsed = {"recommended_resolution": []}
     annotate_hazards(parsed, grounded=True)
     assert parsed["has_hazard"] is False
+
+
+# ── the grounded path, end to end through the real pipeline ───────────────────
+#
+# Unit tests above call annotate_hazards() directly. These build a real
+# knowledge base from a report that documents a destructive fix, retrieve it,
+# and shape a model answer through _shape() — so the grounded branch is
+# exercised by the same machinery that runs in production, not by hand-passing
+# `grounded=True`. The shipped corpus documents no destructive commands, which
+# is why this fixture exists rather than a live_check case.
+
+
+def _destructive_report(directory):
+    import json as _json
+
+    (directory / "INC7001_Purge corrupt import staging table.json").write_text(
+        _json.dumps({
+            "metadata": {
+                "incident_id": "INC7001",
+                "title": "Purge corrupt import staging table",
+                "category": "Data Quality",
+                "subcategory": "Cleanup",
+            },
+            "blocks": [
+                {"id": "b1", "type": "paragraph", "title": "Root Cause",
+                 "content": "A failed overnight import left staging_import in a "
+                            "partially written state; rows cannot be repaired in "
+                            "place because the batch id column was never written."},
+                {"id": "b2", "type": "code", "title": "Fix", "items": [{
+                    "id": "c1", "type": "code", "title": "Purge and reload",
+                    "header": "Purge the staging table, then re-run the import",
+                    "language": "sql",
+                    "content": "TRUNCATE TABLE staging_import;",
+                }]},
+            ],
+        }),
+        encoding="utf-8",
+    )
+
+
+def test_a_documented_destructive_fix_is_flagged_but_not_called_ungrounded(
+        tmp_path, monkeypatch):
+    """Truncating a corrupt staging table is a real documented remediation.
+
+    It must still carry the irreversible warning — but not the "nobody has run
+    this here" escalation, which is what separates a documented procedure from
+    something the model invented.
+    """
+    monkeypatch.setenv("EMBED_CACHE_DIR", str(tmp_path / "cache"))
+    reports = tmp_path / "reports"
+    reports.mkdir()
+    _destructive_report(reports)
+
+    from app.chatbot.retrieval import search_multimodal
+    from app.chatbot.selection import select_sources
+    from app.chatbot.service import ChatbotService
+    from app.chatbot.ingestion import build_knowledge_base
+
+    kb = build_knowledge_base(reports)
+    query = "purge the corrupt import staging table"
+    hits = search_multimodal(query, None, kb.embed_model, kb.embeddings,
+                             kb.documents, kb.metadata, top_k=5, bm25=kb.bm25)
+    results = select_sources(query, hits)
+    assert results, "the fixture report should be retrievable"
+
+    svc = ChatbotService(kb, None)
+    shaped = svc._shape(json.dumps({
+        "incident_summary": "Corrupt staging table must be purged and reloaded.",
+        "confidence": 85,
+        "root_cause": "Partially written import.",
+        "recommended_resolution": [{
+            "step": 1, "action_type": "SQL_QUERY",
+            "title": "Purge the staging table",
+            "action": "Run TRUNCATE TABLE staging_import;",
+            "artifact": {"language": "sql", "title": "",
+                         "content": "TRUNCATE TABLE staging_import;"},
+        }],
+    }), results, None)
+
+    assert shaped["has_hazard"] is True
+    assert shaped["hazard_ungrounded"] is False
+    assert "empties a table" in shaped["hazards"]
+    assert "no incident report documents it" not in \
+        shaped["additional_notes"].lower()
+    # A documented fix keeps its confidence: the warning is a caution, not a
+    # downgrade, or people would learn to distrust correct guidance.
+    assert shaped["confidence"] >= 80
+
+
+def test_the_same_command_ungrounded_gets_the_stronger_warning(tmp_path, monkeypatch):
+    """Identical command, no supporting report -> escalated wording."""
+    monkeypatch.setenv("EMBED_CACHE_DIR", str(tmp_path / "cache"))
+
+    from app.chatbot.service import ChatbotService
+
+    svc = ChatbotService(object(), None)
+    shaped = svc._shape(json.dumps({
+        "incident_summary": "Purge it.",
+        "confidence": 85,
+        "recommended_resolution": [{
+            "step": 1, "action_type": "SQL_QUERY", "title": "Purge",
+            "action": "Run TRUNCATE TABLE staging_import;",
+            "artifact": {"language": "sql", "title": "",
+                         "content": "TRUNCATE TABLE staging_import;"},
+        }],
+    }), [], None)
+
+    assert shaped["has_hazard"] is True
+    assert shaped["hazard_ungrounded"] is True
+    assert "no incident report documents it" in shaped["additional_notes"].lower()
