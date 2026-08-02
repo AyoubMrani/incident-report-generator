@@ -30,6 +30,35 @@ jupyter nbconvert --to notebook --execute --inplace evaluation.ipynb
 | `corpus_eda.py` | descriptive stats + `figures/*.png` |
 | `ask.py` | one question -> the parsed answer, for manual testing |
 | `live_check.py` | end-to-end checks against the **real** model |
+| `model_bench.py` | compare generation models on quality and latency |
+
+## Choosing the generation model
+
+`model_bench.py` drives the whole pipeline — same retrieval, same prompt, same
+grounding rules — and varies only which model generates, so the comparison is
+about the model rather than the plumbing. It scores properties an answer needs
+to be useful (grounded steps, right report cited, a runnable artifact, no
+cross-incident contamination, a real root cause), never wording.
+
+```bash
+python eval/model_bench.py                     # 3b vs 8b
+python eval/model_bench.py --models llama3:8b  # one model
+python eval/model_bench.py --repeat 3          # stability
+```
+
+Latest run (5 incident questions, M4 / 17 GB), in `model_bench_results.json`:
+
+| model | quality | mean confidence | median latency |
+|---|---|---|---|
+| `llama3.2:3b` | 21/25 | 87.0% | **28.6s** |
+| `llama3:8b` | 22/25 | 92.0% | 75.7s |
+
+8b buys one extra check out of 25 for 2.6x the latency, and is not uniformly
+better — it scored *lower* on "database connection pool exhausted" (80% vs
+90%). Both produced the same number of steps on four of five questions, which
+says retrieval and grounding are doing the work, not model size. `3b` stays the
+default; `OLLAMA_MODEL=llama3:8b docker compose up -d` switches it with no
+rebuild.
 
 ## Two kinds of testing, and why both exist
 
