@@ -31,6 +31,30 @@ jupyter nbconvert --to notebook --execute --inplace evaluation.ipynb
 | `ask.py` | one question -> the parsed answer, for manual testing |
 | `live_check.py` | end-to-end checks against the **real** model |
 | `model_bench.py` | compare generation models on quality and latency |
+| `corpus_sweep.py` | check **every** report, not a hand-picked set |
+| `load_check.py` | behaviour under concurrent use |
+
+## Coverage: why three levels
+
+A suite whose cases were chosen by the person fixing the bugs can pass while
+the rest of the corpus is broken. So coverage is layered:
+
+```bash
+# 1. every report, retrieval only — seconds, no model, runs in CI
+python eval/corpus_sweep.py
+#    -> 69/69 reports retrieve themselves, scores 1.042-1.044
+
+# 2. full pipeline on a sample — ~35s per report
+python eval/corpus_sweep.py --answers --limit 15
+
+# 3. concurrent use — the answer cache, the KB swap and SQLite are all
+#    shared state a sequential suite never exercises
+python eval/load_check.py --workers 6 --requests 12
+```
+
+Level 1 is also a pytest gate (`backend/tests/test_corpus_retrieval.py`), so a
+regression in ingestion, chunking, scoring or the selection floor fails CI
+rather than waiting for someone to notice a bad answer by hand.
 
 ## Choosing the generation model
 

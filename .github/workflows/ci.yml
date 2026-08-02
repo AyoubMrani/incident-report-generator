@@ -35,10 +35,19 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
+      # The suite builds real knowledge bases (test_corpus_retrieval.py sweeps
+      # every report), so it needs the sentence-transformers weights. Cache
+      # them rather than re-downloading ~90MB on every run. No Ollama is
+      # needed: generation is stubbed everywhere in pytest.
+      - name: Cache the embedding model
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/huggingface
+          key: hf-all-MiniLM-L6-v2-v1
+
       - name: Run tests
         working-directory: backend
         env:
-          # Keep the suite hermetic: no model downloads, no Ollama.
           EMBED_CACHE_DIR: ${{ runner.temp }}/embed-cache
         run: python -m pytest -q
 
