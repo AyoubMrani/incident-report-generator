@@ -163,3 +163,66 @@ def test_a_standalone_md_report_is_still_indexed(tmp_path, monkeypatch):
 
     sources = {m["source"] for m in build_knowledge_base(reports).metadata}
     assert any(s.endswith("INC2.md") for s in sources)
+
+
+# ── confidence must reflect actionability ─────────────────────────────────────
+
+
+def _shaped(raw: dict, results: list[dict] | None = None) -> dict:
+    """Run a model payload through the real shaping step."""
+    from app.chatbot.service import ChatbotService
+
+    svc = ChatbotService(object(), None)
+    return svc._shape(json.dumps(raw), results or [], None)
+
+
+def test_an_answer_with_no_steps_is_never_high_confidence():
+    """Observed live: 80% confidence above an empty resolution list.
+
+    A reader sees the badge, not the empty list. Whatever the model claims about
+    itself, an answer that tells you nothing must not look authoritative.
+    """
+    shaped = _shaped(
+        {"incident_summary": "Users want to remove duplicates.", "confidence": 95,
+         "recommended_resolution": []},
+        [{"text": "some evidence", "selection_score": 1.0, "incident_id": "INC1"}],
+    )
+
+    assert shaped["confidence"] <= 40
+    assert shaped["low_confidence"] is True
+
+
+def test_the_strong_match_floor_requires_actual_steps():
+    """The floor exists to stop under-reporting, not to bless empty answers."""
+    shaped = _shaped(
+        {"incident_summary": "summary only", "confidence": 10,
+         "recommended_resolution": []},
+        [{"text": "evidence", "selection_score": 1.0, "incident_id": "INC1"}],
+    )
+
+    assert shaped["confidence"] < 80
+
+
+def test_a_grounded_answer_with_steps_still_gets_the_floor():
+    """The fix must not suppress the confidence floor it was built around."""
+    shaped = _shaped(
+        {"incident_summary": "s", "confidence": 30,
+         "recommended_resolution": [
+             {"step": 1, "action_type": "SQL_QUERY", "title": "Run the query",
+              "action": "select 1"}]},
+        [{"text": "evidence", "selection_score": 1.0, "incident_id": "INC1"}],
+    )
+
+    assert shaped["confidence"] >= 80
+    assert shaped["low_confidence"] is False
+
+
+def test_an_explicit_no_documented_resolution_keeps_its_own_confidence():
+    """Abstaining honestly is a valid answer and has its own signalling."""
+    shaped = _shaped(
+        {"incident_summary": "nothing documented", "confidence": 70,
+         "recommended_resolution": [], "no_documented_resolution": True},
+        [{"text": "evidence", "selection_score": 1.0, "incident_id": "INC1"}],
+    )
+
+    assert shaped["confidence"] == 70

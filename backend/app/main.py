@@ -15,6 +15,7 @@ this same app, so there is one process and one origin.
 from __future__ import annotations
 
 import os
+import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.reports.service import ReportService
+from app.shared.logging import configure_logging, get_logger
 from app.routers import chat, reports
 
 # Repo layout: backend/app/main.py -> repo root is three parents up.
@@ -45,6 +47,9 @@ DISABLE_CHATBOT = os.environ.get("DISABLE_CHATBOT") == "1"
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    configure_logging()
+    log = get_logger("app.startup")
+
     # Startup: construct services once and stash on app.state.
     app.state.report_service = ReportService(REPORTS_DIR)
 
@@ -62,18 +67,35 @@ async def lifespan(app: FastAPI):
     app.state.chatbot_error = None
     if DISABLE_CHATBOT:
         app.state.chatbot_error = "Chatbot disabled via DISABLE_CHATBOT=1."
+        log.info("chatbot disabled via DISABLE_CHATBOT=1")
     else:
+        started = time.perf_counter()
         try:
             from app.chatbot.service import ChatbotService
             from app.shared.llm.provider import get_provider
 
             provider = get_provider(CHATBOT_PROVIDER)
             app.state.chatbot = ChatbotService.build(REPORTS_DIR, provider)
+            kb = app.state.chatbot.kb
+            log.info(
+                "knowledge base indexed: %d files, %d chunks in %.1fs",
+                kb.n_files, len(kb.documents), time.perf_counter() - started,
+                extra={"event": "kb_indexed", "files": kb.n_files,
+                       "chunks": len(kb.documents),
+                       "duration_ms": round((time.perf_counter() - started) * 1000)},
+            )
+            for warning in kb.warnings:
+                log.warning("indexing warning: %s", warning)
         except Exception as exc:  # noqa: BLE001 — degrade, don't crash boot
             app.state.chatbot_error = f"{type(exc).__name__}: {exc}"
+            # exc_info: without the traceback this failure is near-undiagnosable
+            # in production — /api/health only carries the one-line summary.
+            log.error("chatbot failed to start: %s", exc, exc_info=True,
+                      extra={"event": "chatbot_start_failed"})
 
     yield
     # Shutdown: nothing to release yet.
+    log.info("shutting down", extra={"event": "shutdown"})
 
 
 app = FastAPI(title="NTT Incident Platform", lifespan=lifespan)

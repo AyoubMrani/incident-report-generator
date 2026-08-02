@@ -58,6 +58,9 @@ MEMORY_TURNS = 4
 STRONG_MATCH_SCORE = 0.60
 # Floor applied to such an answer when it also produced grounded steps.
 STRONG_MATCH_CONFIDENCE = 80
+# Ceiling for an answer that produced no resolution steps. Such an answer may
+# still be a useful summary, but it must not present itself as authoritative.
+CONFIDENCE_CAP_NO_STEPS = 40
 
 
 def _chat_reply(text: str, *, needs_clarification: bool = False) -> dict:
@@ -373,9 +376,10 @@ class ChatbotService:
         # over the model's self-assessment: if a strongly-matching report was
         # selected and the model produced grounded steps from it, the answer is
         # not low-confidence.
-        if results:
+        has_steps = bool(parsed.get("recommended_resolution"))
+        if results and has_steps:
             top_score = float(results[0].get("selection_score") or 0.0)
-            grounded = bool(parsed.get("recommended_resolution")) or any(
+            grounded = has_steps or any(
                 report_documents_resolution(r) for r in results
             )
             if top_score >= STRONG_MATCH_SCORE and grounded:
@@ -384,6 +388,14 @@ class ChatbotService:
         parsed["low_confidence"] = (
             parsed.get("confidence", 0) / 100.0 < CONFIDENCE_THRESHOLD
         )
+        # An answer with no steps is not actionable, whatever the model said
+        # about itself. Presenting "80% confident" above an empty resolution
+        # invites the reader to trust something that tells them nothing — the
+        # model intermittently returns a summary with an empty step list, so
+        # this is enforced here rather than left to the prompt.
+        if not has_steps and not parsed.get("no_documented_resolution"):
+            parsed["confidence"] = min(parsed.get("confidence", 0), CONFIDENCE_CAP_NO_STEPS)
+            parsed["low_confidence"] = True
         parsed["is_chat"] = False
         parsed["needs_clarification"] = bool(parsed.get("insufficient"))
 

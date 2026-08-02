@@ -1,0 +1,117 @@
+name: CI
+
+# Runs on every push and PR. Deliberately does NOT run eval/live_check.py:
+# that needs a real Ollama model, which is far too heavy for a hosted runner —
+# it stays a local gate (see eval/README.md).
+
+on:
+  push:
+    branches: [main, unified-platform, aarab_win]
+  pull_request:
+  workflow_dispatch:
+
+concurrency:
+  # A new push to the same branch supersedes an in-flight run.
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"     # matches Dockerfile.backend
+          cache: pip
+          cache-dependency-path: backend/requirements.txt
+
+      - name: Install dependencies
+        working-directory: backend
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Run tests
+        working-directory: backend
+        env:
+          # Keep the suite hermetic: no model downloads, no Ollama.
+          EMBED_CACHE_DIR: ${{ runner.temp }}/embed-cache
+        run: python -m pytest -q
+
+  frontend:
+    name: frontend build
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"         # matches Dockerfile.backend stage 1
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Type-check and build
+        working-directory: frontend
+        run: npm run build
+
+  docker:
+    name: image builds and serves
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build the image
+        run: docker build -f infra/Dockerfile.backend -t ntt-platform:ci .
+
+      - name: Container starts, runs unprivileged, and answers /api/health
+        run: |
+          # DISABLE_CHATBOT: the KB build needs the embedding model, which is a
+          # large download; this job verifies the image and its wiring, while
+          # the backend job covers the pipeline itself.
+          docker run -d --name ci -p 8000:8000 -e DISABLE_CHATBOT=1 ntt-platform:ci
+
+          for i in $(seq 1 60); do
+            if curl -sf -m 3 http://localhost:8000/api/health >/dev/null 2>&1; then
+              echo "healthy after ${i}s"; break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "::error::container never became healthy"; docker logs ci; exit 1
+            fi
+            sleep 1
+          done
+
+          curl -s http://localhost:8000/api/health
+
+          # The app process must not be root: this is the property the
+          # entrypoint exists to guarantee, so regressions should fail CI.
+          uid=$(docker exec ci sh -c 'grep -m1 ^Uid /proc/1/status | cut -f2')
+          echo "PID 1 uid: $uid"
+          if [ "$uid" = "0" ]; then
+            echo "::error::the application is running as root"; exit 1
+          fi
+
+      - name: Container shuts down cleanly on SIGTERM
+        run: |
+          # If PID 1 does not forward signals, `docker stop` falls through to
+          # SIGKILL after its timeout and this step takes 10s+.
+          start=$(date +%s)
+          docker stop ci >/dev/null
+          elapsed=$(( $(date +%s) - start ))
+          echo "stop took ${elapsed}s"
+          if [ "$elapsed" -ge 10 ]; then
+            echo "::error::SIGTERM was not handled; container had to be killed"; exit 1
+          fi
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker logs ci || true

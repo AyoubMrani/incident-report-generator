@@ -29,6 +29,29 @@ ENV PYTHONUNBUFFERED=1
 ENV REPORTS_DIR=/data/reports
 # Cache the sentence-transformers model on a mounted volume across restarts.
 ENV HF_HOME=/data/hf-cache
+# Embedding cache: a writable path inside the image, so a restart skips
+# re-encoding even when no volume is mounted for it.
+ENV EMBED_CACHE_DIR=/data/embed-cache
+
+# Run as a non-root user. A container that writes customer incident data should
+# not be root: a process escape or a path-traversal bug in file handling is
+# meaningfully less dangerous as an unprivileged uid. The mounted paths are
+# chowned so the app can still write the chat DB, caches and reports.
+RUN useradd --create-home --uid 10001 appuser \
+    && mkdir -p /data/reports /data/hf-cache /data/chat /data/embed-cache \
+    && chown -R appuser:appuser /data /app
+COPY infra/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
+# Note: no `USER appuser` here. Named volumes are created root-owned when they
+# are mounted, which masks the chown above — so the entrypoint starts as root
+# only long enough to hand those paths over, then execs the app as appuser.
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]
 
 EXPOSE 8000
+
+# Compose and any orchestrator can then restart on unhealthy rather than only
+# on process exit — the app can be up but unable to serve (KB failed to index).
+HEALTHCHECK --interval=30s --timeout=5s --start-period=180s --retries=3 \
+    CMD python -c "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/api/health', timeout=4).status==200 else 1)"
+
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
