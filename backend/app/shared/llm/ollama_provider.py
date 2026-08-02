@@ -26,6 +26,26 @@ log = get_logger("app.llm.ollama")
 # case, not to cut off normal work. Override with OLLAMA_TIMEOUT (seconds).
 OLLAMA_TIMEOUT = float(os.getenv("OLLAMA_TIMEOUT", "300"))
 
+# Ollama defaults to temperature 0.8, which is tuned for open-ended chat. This
+# task is the opposite: reproduce a documented procedure faithfully from the
+# retrieved report. At 0.8 the same question produced 8 grounded steps on one
+# run and a single vague DOC_REFERENCE step on the next, from identical
+# evidence — the corpus was fine, the sampling was not. Near-greedy decoding
+# makes answers reproducible, which also makes the live checks meaningful.
+# Overridable for experiments (the thesis ablations vary it deliberately).
+OLLAMA_TEMPERATURE = float(os.getenv("OLLAMA_TEMPERATURE", "0.1"))
+
+# Shared decoding options for the two text paths.
+def _text_options() -> dict:
+    return {
+        "num_predict": MAX_ANSWER_TOKENS,
+        "temperature": OLLAMA_TEMPERATURE,
+        # top_p with a low temperature would re-introduce tail sampling; keep
+        # the nucleus tight so the model stays on the evidence.
+        "top_p": 0.9,
+        "seed": int(os.getenv("OLLAMA_SEED", "0")),
+    }
+
 
 class OllamaProvider(LLMProvider):
     def __init__(
@@ -66,7 +86,7 @@ class OllamaProvider(LLMProvider):
                 messages=[{"role": "user", "content": prompt}],
                 format="json",
                 keep_alive=self._KEEP_ALIVE,
-                options={"num_predict": MAX_ANSWER_TOKENS},
+                options=_text_options(),
             )
             log.info("generation complete in %.1fs",
                      time.perf_counter() - started,
@@ -92,7 +112,7 @@ class OllamaProvider(LLMProvider):
                 stream=True,
                 format="json",
                 keep_alive=self._KEEP_ALIVE,
-                options={"num_predict": MAX_ANSWER_TOKENS},
+                options=_text_options(),
             )
             for chunk in stream:
                 piece = chunk.get("message", {}).get("content", "")
