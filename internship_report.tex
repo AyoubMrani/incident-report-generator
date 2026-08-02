@@ -57,6 +57,8 @@ Retrieval-augmented generation (RAG) grounds a language model's output in an ext
 This work designs and evaluates an incident-resolution assistant built on a hybrid retriever that fuses a dense sentence-embedding index with a sparse Okapi BM25 index using Reciprocal Rank Fusion (RRF). The system operates under a strict privacy constraint: all inference — embeddings and generation — executes on locally-hosted models, with no external API calls. The retriever is evaluated on a labeled benchmark of 272 queries in four stylistic classes over a corpus of 68 incident reports spanning nine technical domains, using Recall@$k$, Mean Reciprocal Rank, and nDCG@5.
 
 Hybrid retrieval attains Recall@5 $=$ 1.000 and MRR $=$ 0.987, against 0.768 and 0.678 for dense-only retrieval. A per-class analysis localizes the improvement: on exact-identifier queries, dense-only Recall@5 is 0.221 while the hybrid attains 1.000, confirming that the fusion supplies precisely the lexical precision the dense index lacks. Ablations show retrieval quality is invariant to chunk size over $[400, 1000]$ characters and saturates at $k \geq 3$, a result used to bound the generation context. Error analysis records a 0.0\% failure rate over the benchmark. The retrieval component is embedded in a grounded generation pipeline with intent-based abstention and adversarial-input defenses, and in an automated report-synthesis mechanism that maps a resolved dialogue onto a validated structured schema.
+
+Beyond ranking, the work addresses the gap between what a small local model is instructed to do and what it does. A source-selection stage admits the empty set, so questions the corpus does not document yield no citation rather than a spurious one; a post-conditioning stage removes artifacts unattested by the retrieved evidence, bounds self-reported confidence by the answer's actual content, and annotates irreversible operations according to whether a report documents them. Layered validation --- 269 component tests, a 69-report retrieval sweep, and a 16-case behavioral suite against the deployed model --- accompanies the retrieval benchmark. A controlled comparison against a model of 2.7$\times$ the parameter count finds identical correctness (15/15 reports, 60/60 property checks) at 43\% higher latency, supporting the central claim that under a local-inference constraint the decisive variable is context quality rather than model scale.
 \end{abstract}
 
 \newpage
@@ -65,6 +67,7 @@ Hybrid retrieval attains Recall@5 $=$ 1.000 and MRR $=$ 0.987, against 0.768 and
 
 %=============================================================================
 \section{Introduction}
+\label{sec:intro}
 %=============================================================================
 
 \subsection{Problem Setting}
@@ -88,9 +91,9 @@ This constraint is not incidental; it conditions the design. It excludes frontie
 
 \subsection{Objectives and Structure}
 
-The objectives are: (i) to design a retrieval pipeline that serves both semantic and lexical query classes under local-inference constraints; (ii) to quantify its behavior on a labeled benchmark with standard information-retrieval metrics and ablations; (iii) to embed it in a generation pipeline that abstains rather than fabricates when evidence is insufficient; and (iv) to close the documentation loop by synthesizing new structured reports from resolved dialogues.
+The objectives are: (i) to design a retrieval pipeline that serves both semantic and lexical query classes under local-inference constraints; (ii) to quantify its behavior on a labeled benchmark with standard information-retrieval metrics and ablations; (iii) to embed it in a generation pipeline that abstains rather than fabricates when evidence is insufficient, and to enforce that property by post-conditioning rather than by instruction alone; (iv) to close the documentation loop by synthesizing new structured reports from resolved dialogues; and (v) to establish, by measurement, that the resulting system's quality derives from context construction rather than from generative model scale.
 
-Section~\ref{sec:background} reviews the relevant retrieval background. Section~\ref{sec:arch} presents the system architecture. Section~\ref{sec:corpus} describes the corpus, its representation, and the evaluation protocol. Section~\ref{sec:retrieval} formalizes the retrieval method. Section~\ref{sec:eval} reports results. Sections~\ref{sec:generation}--\ref{sec:synthesis} cover grounded generation, robustness, and report synthesis. Section~\ref{sec:discussion} discusses limitations.
+Section~\ref{sec:background} reviews the relevant retrieval background. Section~\ref{sec:arch} presents the system architecture and Section~\ref{sec:pipeline} the request pipeline and corpus workflow. Section~\ref{sec:corpus} describes the corpus, its representation, and the evaluation protocol. Section~\ref{sec:retrieval} formalizes the retrieval method, including the source selection that permits abstention. Section~\ref{sec:eval} reports retrieval results. Sections~\ref{sec:generation}--\ref{sec:quality} cover grounded generation and the post-conditioning that enforces its guarantees, and Section~\ref{sec:synthesis} report synthesis. Sections~\ref{sec:efficiency}--\ref{sec:validation} report efficiency and the validation methodology, including the measured model-selection decision. Section~\ref{sec:discussion} discusses limitations.
 
 %=============================================================================
 \section{Background}
@@ -154,6 +157,43 @@ Generation is accessed through a provider interface exposing text and vision com
 \subsection{Deployment}
 
 The application is containerized with a multi-stage build in which the client is compiled and served as static assets by the backend process, yielding a single-process deployment. Persistent state comprises the report corpus, the embedding-model cache, and a SQLite database holding dialogue history.
+
+The container runs the application under an unprivileged account rather than as \texttt{root}. Because named volumes are created root-owned at mount time --- which masks ownership assigned during the image build --- an entry point assumes ownership of the mounted paths and then replaces itself with the application process under the unprivileged identity. Replacing rather than forking matters: the application becomes process~1 and therefore receives termination signals directly, so shutdown is orderly (measured at one second, exit status zero) instead of terminating by timeout, which would abandon in-flight response streams and risk a torn database write. A health probe reports readiness distinctly from liveness, allowing an orchestrator to restart a process that is running but unable to serve. Memory is bounded so that a fault in this container cannot exhaust the host it shares with the inference server.
+
+%=============================================================================
+\section{Request Pipeline and Control Flow}
+\label{sec:pipeline}
+%=============================================================================
+
+The architecture of Section~\ref{sec:arch} describes what the components are. This section describes how a request moves through them, because the ordering of stages --- not merely their presence --- is what produces the behavior evaluated in Sections~\ref{sec:eval} and~\ref{sec:quality}.
+
+\subsection{Staged Execution with Early Termination}
+
+A request is processed as an ordered sequence of stages, each of which may terminate the request and return. The design principle is that a stage which can rule out an answer should run before any stage that could fabricate one. Cheap, decisive checks therefore precede expensive, permissive ones.
+
+\begin{enumerate}
+\itemsep2pt
+\item \textbf{Intent routing.} The turn is classified as conversational, out-of-scope, under-specified, or diagnosable. Only the last proceeds; the others are answered directly, without retrieval or generation. This is the structural guarantee of Section~\ref{sec:generation}: fabrication on non-diagnosable input is impossible because no generator is invoked.
+\item \textbf{Adversarial screening.} Text is scanned for instruction-override and extraction patterns and enclosed in an untrusted-data delimiter (Section~\ref{sec:generation}).
+\item \textbf{Query construction.} The query is combined with prior dialogue turns and, where an image is supplied, with a vision-model description of it, forming the retrieval query.
+\item \textbf{Hybrid retrieval.} Dense and sparse indices are queried and fused by Reciprocal Rank Fusion (Section~\ref{sec:retrieval}).
+\item \textbf{Source selection.} Candidates are de-duplicated by source document, re-scored by entity overlap with the query, and filtered by an absolute and a relative threshold (Section~\ref{sec:selection}). An empty result here is a valid outcome and suppresses citation entirely.
+\item \textbf{Conditioning.} Selected documents are supplied \emph{in full} rather than as the matched fragment, together with any applicable stored corrections.
+\item \textbf{Generation.} The model emits a structured object under constrained JSON decoding.
+\item \textbf{Post-conditioning.} The parsed answer is reconciled against the evidence: unsupported citations and artifacts are removed, confidence is bounded by what the answer actually contains, and irreversible operations are annotated (Section~\ref{sec:quality}).
+\end{enumerate}
+
+Stages~1 and~5 are the two points at which the system declines to answer, and both precede generation. Stage~8 is the only stage that can weaken an answer after the model has produced it, and it never strengthens one --- a deliberate asymmetry, since every check it applies is a check against over-claiming.
+
+\figplaceholder{Request pipeline: intent routing and adversarial screening precede retrieval; hybrid retrieval feeds source selection, which may return the empty set; selected documents condition generation; post-conditioning reconciles the answer against the evidence before it reaches the client.}{figures/request\_pipeline.png}
+
+\subsection{Corpus Maintenance Workflow}
+
+The two modules share the corpus, so a write by the editor must become visible to the assistant. Writing a report or deleting one triggers re-indexing as a background task: the response returns immediately and the index is rebuilt without the author waiting for embedding. The rebuilt index replaces the live one only on success, so a failed re-index leaves the previous working index serving requests rather than degrading the assistant as a side effect of an editor action. Cached answers are discarded at the same moment, since they were conditioned on evidence that has changed.
+
+This closes the operational loop implied by Section~\ref{sec:synthesis}: a resolution synthesized from a dialogue is answerable within seconds of being written, with no restart, so the corpus grows during an incident rather than after it.
+
+\figplaceholder{Corpus maintenance: a report written or deleted through the editor triggers background re-indexing and cache invalidation, making it retrievable by the assistant without a restart.}{figures/corpus\_workflow.png}
 
 %=============================================================================
 \section{Corpus, Representation, and Evaluation Protocol}
@@ -265,9 +305,58 @@ Three configurations are compared under identical chunking and identical corpus:
 
 Each component produces a ranking over chunks. Documents scoring zero under BM25 are excluded from its list rather than appended arbitrarily, so that non-matching documents contribute no reciprocal-rank mass. The fused score of Eq.~\eqref{eq:rrf} is then aggregated per source report as described above, and the top $K$ reports are returned.
 
-Two parameters govern the interface with the generator. $\texttt{TOP\_K} = 5$ reports are retrieved and surfaced to the user as citations. Only the top $\texttt{RESOLUTION\_CONTEXT\_K} = 3$ are placed in the generation context; Section~\ref{sec:ablation} shows this choice is lossless with respect to retrieval coverage while materially reducing prompt length.
+$\texttt{TOP\_K} = 5$ reports are retrieved. These are candidates, not citations: what reaches the generator and the user is determined by the selection stage below, which Section~\ref{sec:ablation} shows can be restricted well below $K$ without recall loss.
 
 \figplaceholder{Retrieval architecture: a query is encoded and simultaneously matched against the dense index and the BM25 index; the two rankings are fused by RRF and aggregated per source report.}{figures/retrieval\_architecture.png}
+
+\subsection{Source Selection}
+\label{sec:selection}
+
+Ranking is not the same as relevance. RRF always returns its top-$K$ candidates, ordered, whether or not any of them answers the query --- the fusion score is a rank statistic, and a rank exists even when nothing matches. A pipeline that cites the top of that list unconditionally will attribute an answer to whichever document happened to rank first, which is worse than returning nothing: it lends a real incident's authority to a guess.
+
+A selection stage therefore intervenes between fusion and generation. Let $H$ be the fused candidates and $E(q)$ the set of content terms in query $q$ after stop-word removal. For a candidate $h$ with retrieval score $s(h)$, define
+
+\begin{equation}
+\sigma(h) \;=\; s(h) \;+\; \lambda \cdot \frac{|E(q) \cap E(h)|}{|E(q)|},
+\label{eq:selection}
+\end{equation}
+
+where $E(h)$ draws on the candidate's title and body, with title matches weighted double, and $\lambda$ scales the lexical contribution. The weighting reflects that RRF scores occupy a narrow range --- they are reciprocals of small integers --- so entity overlap, not fusion score, is what separates a document that \emph{mentions} a term from one that \emph{is about} it.
+
+Candidates are de-duplicated by source report, ranked by $\sigma$, and admitted subject to two thresholds:
+
+\begin{equation}
+\sigma(h) \;\geq\; \tau_{\text{abs}}
+\qquad\text{and}\qquad
+\sigma(h) \;\geq\; \rho \cdot \max_{h' \in H} \sigma(h'),
+\label{eq:thresholds}
+\end{equation}
+
+with at most $M$ reports retained. The relative threshold $\rho = 0.85$ prevents a single strong match from being padded with materially weaker ones. The absolute threshold $\tau_{\text{abs}} = 0.50$ is the one that permits the empty set, and it is what makes ``nothing in the corpus documents this'' an expressible outcome rather than an unreachable branch.
+
+Its value is calibrated from the separation between question classes on this corpus, which is wide and unambiguous. Every incident question drawn from the corpus scores $\sigma \approx 1.04$; questions on subjects the corpus does not cover peak at $0.29$ (Table~\ref{tab:selection}). A threshold placed between them rejects the latter with margin on both sides while leaving every genuine match untouched --- a property asserted directly by the test suite of Section~\ref{sec:validation}, so that tightening $\tau_{\text{abs}}$ later cannot silently begin refusing questions the corpus does answer.
+
+\begin{table}[H]
+\centering
+\caption{Selection scores by question class. The threshold $\tau_{\text{abs}} = 0.50$ lies in the gap.}
+\label{tab:selection}
+\begin{tabular}{llc}
+\toprule
+\textbf{Class} & \textbf{Example} & $\boldsymbol{\sigma}$ \\
+\midrule
+Documented incident & ``how to rollback lineIds'' & 1.042 \\
+Documented incident & ``kafka consumer group lag growing'' & 1.042 \\
+Documented incident & ``public API certificate expired'' & 1.042 \\
+\midrule
+Out of corpus & ``configure the mainframe COBOL scheduler'' & 0.282 \\
+Out of corpus & ``how do I tune a guitar'' & 0.288 \\
+Out of corpus & ``how do I file my income taxes'' & 0.160 \\
+Out of corpus & ``best recipe for sourdough bread'' & 0.029 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Selection caps the admitted set at $M = 2$ reports, and each is supplied to the generator \emph{in full} rather than as the matched chunk. This inverts the usual context-budget trade-off: rather than many fragments from many documents, the generator receives the complete text of the few documents that genuinely match. A documented procedure is frequently a multi-step sequence --- extract with a query, run a script, verify the result --- and a chunk boundary that severs it yields an answer that is correct about the first step and silent about the rest.
 
 %=============================================================================
 \section{Experimental Results}
@@ -419,6 +508,37 @@ User text is screened for instruction-override and prompt-extraction patterns; d
 Answers may be rated, and a negative rating admits a free-text correction. Corrections are stored and, on subsequent queries with lexical overlap to the corrected question, injected into the prompt as high-priority guidance. The mechanism is explicitly a retrieval-time intervention over an inspectable store, not parameter adaptation: no model weights are modified, and the system makes no claim to the contrary.
 
 %=============================================================================
+\section{Post-Conditioning: Reconciling Answers with Evidence}
+\label{sec:quality}
+%=============================================================================
+
+Section~\ref{sec:generation} describes what the generator is asked to do. This section describes what is enforced regardless of whether it complies. The distinction is the operative one under the local-inference constraint of Section~\ref{sec:arch}: a 3B-parameter model follows instructions imperfectly, so every property that must hold is checked after generation rather than requested before it. Each mechanism below was introduced in response to an observed failure, and each is verified by the suite of Section~\ref{sec:validation}.
+
+\subsection{Artifact Grounding}
+
+Resolution steps carry executable artifacts --- queries, commands, configuration --- and these are the part of an answer an engineer copies. Observed failure: asked how to remove duplicate customer records, the model returned \texttt{python menu.py}, a command documented in an \emph{unrelated} rollback incident, while omitting the stored procedure the correct report actually documents. Retrieval was not at fault; the correct report was selected and its procedure was present in the context. The model had carried an artifact across incidents.
+
+The system therefore extracts the identifier tokens of each artifact and requires them to be attested by the retrieved evidence, taken as the full text of the selected reports. An artifact whose identifiers are unattested is removed rather than displayed. The check is contextual rather than a fixed deny-list, which is what makes it usable: the same command \texttt{python menu.py} is retained for the rollback incident that documents it and removed from the deduplication answer that does not. Artifacts consisting of a keyword and an ellipsis --- \texttt{SELECT ...} --- are removed unconditionally, being unrunnable stubs whose presentation as runnable is itself the defect.
+
+\subsection{Confidence Calibration}
+
+A confidence score emitted by the model is a self-report, and self-reports are unreliable in both directions. Two bounds are therefore imposed from evidence the system holds independently.
+
+\emph{A floor}, because small models under-report when handed a directly matching report: if a selected report scores above the strong-match threshold and the answer contains grounded steps, confidence is raised. \emph{Two ceilings}, because the model over-reports in the two cases where over-reporting is most harmful. An answer containing no resolution steps is capped and marked low-confidence irrespective of its self-report --- the reader sees the badge, not the absent list, and an authoritative-looking empty answer is worse than an honest hedge. An answer produced with no selected report at all is capped further still: it derives from the model's general knowledge, not from anything this estate has done, and must not be presented identically to guidance traced to a real incident. Before this bound existed, an invented procedure for a subject absent from the corpus was reported at 85\% confidence; it is now reported at 30\%, with no citation.
+
+\subsection{Irreversible Operations}
+
+Some documented remediations are destructive --- truncating a corrupted staging table is a real fix --- so suppressing destructive commands would make the assistant useless. The hazard is narrower: a destructive command the model \emph{invented}, presented in the same neutral styling as one a colleague has already run in production. Observed failure: asked to drop a production table, the assistant returned \texttt{DROP TABLE production.customers;} as step one, uncited, styled like any other step.
+
+The system detects irreversible operations (unqualified \texttt{DROP}, \texttt{TRUNCATE}, \texttt{DELETE}/\texttt{UPDATE} without a predicate, recursive removal, filesystem creation, infrastructure destruction, unguarded force-push, cache flush, privilege revocation) and annotates the step and the answer. It does not refuse and does not rewrite. What it distinguishes is grounded from ungrounded: a destructive step supported by a report receives a confirmation prompt, while one supported by nothing receives an explicit statement that no report documents it and that a backup and change record should be verified first. The client renders the former as a caution and the latter as a warning.
+
+Precision was the binding design constraint, since a warning that fires on routine work is one operators learn to dismiss. The patterns distinguish a predicated \texttt{DELETE} from an unpredicated one and \texttt{--force-with-lease} from a bare \texttt{--force}; over a held-out set they flag 10 of 10 destructive commands and 0 of 10 ordinary ones.
+
+\subsection{Determinism}
+
+The generator initially ran at the inference server's default sampling temperature of $0.8$, tuned for open-ended dialogue. The task is the opposite: reproduce a documented procedure faithfully. The cost was measurable and was initially mistaken for a regression --- the same question returned eight grounded steps on one execution and a single vague step on the next, from byte-identical retrieved context. Near-greedy decoding ($T = 0.1$, fixed seed) makes repeated executions agree: three consecutive runs of the same query returned identical step counts and artifacts. Reproducibility is a quality property in its own right here, since two engineers on the same incident must not receive different procedures --- and it is a precondition for the behavioral suite of Section~\ref{sec:validation}, whose failures would otherwise be indistinguishable from resampling.
+
+%=============================================================================
 \section{Report Synthesis}
 \label{sec:synthesis}
 %=============================================================================
@@ -430,6 +550,111 @@ The synthesis maps dialogue elements onto schema fields under a strict grounding
 The synthesized report is validated against the same schema as authored reports and persisted through the same service, so it is indistinguishable downstream: it is editable in the report editor and, once written, becomes retrievable corpus. This closes the loop between the system's two modules — the assistant consumes the corpus to resolve incidents and extends it with each resolution.
 
 \figplaceholder{Report synthesis: a resolved dialogue is projected onto the (metadata, blocks) schema, validated, and persisted into the corpus, becoming retrievable for subsequent queries.}{figures/report\_synthesis.png}
+
+%=============================================================================
+\section{Efficiency}
+\label{sec:efficiency}
+%=============================================================================
+
+Local inference imposes a hardware-bound latency floor (Section~\ref{sec:arch}), so efficiency work cannot target the generation step itself. It targets everything else: the cost paid before generation, and the cost of not repeating generation that has already been performed. Optimization was directed by measurement rather than intuition --- profiling the pipeline showed retrieval, selection, and context assembly together accounting for 66\,ms, which is negligible beside a generation measured in tens of seconds, and correctly redirected attention to startup and repetition.
+
+\subsection{Caching}
+
+Two caches address two distinct repetitions.
+
+\textbf{Embeddings.} The corpus is re-encoded on every process start although it rarely changes. Chunk vectors are cached under a digest of the encoder identity and the concatenated chunk texts, so any edit to any report changes the key and invalidates the cache without an explicit versioning step. Guards cover the failure modes: a shape mismatch or an unreadable file degrades to re-encoding rather than propagating a corrupt index, and writes are atomic so an interrupted write cannot be read as valid. Container start falls from 37\,s to 7\,s.
+
+\textbf{Answers.} An incident desk repeats questions --- a shift asks what the previous shift asked. Shaped answers are cached in a bounded LRU keyed on the \emph{prompt}, not the question. This choice is what makes the cache safe rather than merely fast: the prompt already encodes the retrieved evidence, the dialogue history, and any applicable corrections, so re-indexed reports or a new correction produce a different key and a stale answer cannot be served. It also bounds cross-user exposure without per-user partitioning, since two users share an entry only when their entire input coincided. Weak answers --- low-confidence, ungrounded, or abstaining --- are deliberately not cached, so a poor result is not pinned for everyone who later asks the same question. A repeated query returns in 0.04\,s against 28\,s for generation.
+
+\subsection{Measured Behavior}
+
+Table~\ref{tab:efficiency} records the end-to-end figures. Steady-state memory is 658\,MB against a 2\,GB container bound.
+
+\begin{table}[H]
+\centering
+\caption{End-to-end latency, single user.}
+\label{tab:efficiency}
+\begin{tabular}{lrr}
+\toprule
+\textbf{Operation} & \textbf{Before} & \textbf{After} \\
+\midrule
+Container start to serving & 37\,s & 7\,s \\
+Cold start including corpus indexing & --- & 24\,s \\
+Answer, first occurrence & 28\,s & 28\,s \\
+Answer, repeated & 28\,s & 0.04\,s \\
+Retrieval, selection, context assembly & --- & 0.066\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Concurrency}
+
+Under concurrent load the inference server serialises generation: four concurrent workers issuing eight distinct queries all succeeded, with no inconsistent answers, but per-request latency ranged from 27\,s to 133\,s over 226\,s of wall time. The request timeout is sized against this queueing behavior rather than against single-request latency; a bound near the 30\,s single-request figure would fail queued requests spuriously.
+
+The apparent remedy --- raising the server's parallel-slot count --- was measured and rejected. With four slots on a single GPU the slots share one accelerator rather than running independently: wall time improved only from 226\,s to 190\,s while the \emph{fastest} request degraded from 27\,s to 62\,s and resident memory rose from 2.5\,GB to 4.8\,GB. Serial execution behind the answer cache is the better configuration on this hardware. The measurement is recorded rather than the intuition, since the intuition is wrong.
+
+That experiment also exercised the calibration of Section~\ref{sec:quality} under adverse conditions: one answer degraded to zero steps under contention, and the confidence ceiling reported it at 40\% rather than presenting an empty answer as authoritative --- the guard behaving as designed in precisely the circumstances it was written for.
+
+%=============================================================================
+\section{Validation Methodology}
+\label{sec:validation}
+%=============================================================================
+
+The retrieval benchmark of Section~\ref{sec:eval} measures ranking quality. It cannot observe generation behavior, because it does not invoke a generator. This section describes the complementary validation, whose structure follows from a single observation: \emph{every defect that materially affected this system was a generation-behavior defect, and none would have been caught by the retrieval benchmark or by unit tests over stubbed components.}
+
+The cross-incident artifact leak, the unrunnable stub, the mis-calibrated confidence, and the invented destructive command of Section~\ref{sec:quality} were all first observed by a human running a query by hand. Validation is therefore layered so that each subsequent discovery becomes an automated check rather than an anecdote.
+
+\begin{table}[H]
+\centering
+\caption{Validation layers. Only the last two invoke the deployed model.}
+\label{tab:validation}
+\begin{tabular}{p{0.24\textwidth}p{0.42\textwidth}rr}
+\toprule
+\textbf{Layer} & \textbf{Question it answers} & \textbf{Cases} & \textbf{Cost} \\
+\midrule
+Component tests & Do parsing, routing, caching, grounding, and the safety bounds behave as specified? & 269 & 44\,s \\
+Corpus sweep & Does \emph{every} report remain retrievable by a question derived from it? & 69 & 13\,s \\
+Behavioral suite & Does the deployed model satisfy the required properties end to end? & 16 & $\sim$5\,min \\
+Concurrency probe & Do the shared caches and the index swap hold under simultaneous use? & 8--12 & $\sim$4\,min \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Component Tests}
+
+The component suite substitutes a stub for the generator, which is correct for what it verifies --- parsing, intent routing, cache invalidation, grounding rules, confidence bounds, hazard detection --- and keeps the suite fast and deterministic. Its structural limitation is precisely that it cannot observe the deployed model, which is why the layers below exist.
+
+\subsection{Corpus Sweep}
+
+Hand-chosen test cases are chosen by whoever is fixing the defects, so they can pass while the remainder of the corpus regresses unnoticed. The sweep constructs, for each of the 69 indexed reports, a query derived from that report's own title, and asserts the pipeline selects that report. All 69 pass, with selection scores in $[1.042, 1.044]$ --- far above $\tau_{\text{abs}}$ (Section~\ref{sec:selection}).
+
+The sweep runs without a generator and is therefore a continuous-integration gate rather than a manual exercise. It asserts the invariants directly: that each report retrieves itself, that every genuine match clears the absolute threshold, that citation lists stay within the selection cap, that out-of-corpus questions select nothing, and that retrieval is deterministic. It would have detected the duplicate-indexing and title-extraction defects of Section~\ref{sec:corpus} on their own, without waiting for a human to notice a poor answer.
+
+\subsection{Behavioral Suite}
+
+The behavioral suite drives the deployed system over HTTP with the real model and asserts properties that hold regardless of sampling --- which report is cited, that steps are present and actionable, that no artifact is unattested or a stub, that confidence is consistent with content, that conversational and out-of-scope input is not answered with a corpus search. It never asserts exact wording, which would fail on every run for reasons unrelated to correctness. Sixteen cases span conversational routing, adversarial input, under-specified input, five documented incidents, abstention on an uncovered subject, and two safety cases; all pass.
+
+Its economics are what make it worth maintaining: adding a case is a few lines, so a defect found by hand becomes a permanent check in the time it takes to describe it.
+
+\subsection{Model Selection as a Measured Decision}
+
+The generative model is a configuration parameter, and the constraint of Section~\ref{sec:arch} shifts leverage away from model scale. Whether that shift actually holds is testable, so both candidate models were run through the identical pipeline over the same sampled reports with the same seed (Table~\ref{tab:models}).
+
+\begin{table}[H]
+\centering
+\caption{Generation models, identical pipeline and sample. Correctness is a tie.}
+\label{tab:models}
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Model} & \textbf{Reports} & \textbf{Checks} & \textbf{Mean conf.} & \textbf{Mean steps} & \textbf{Median latency} \\
+\midrule
+3B (deployed) & 15/15 & 60/60 & 88.7\% & \textbf{4.0} & \textbf{28.1\,s} \\
+8B & 15/15 & 60/60 & \textbf{92.0\%} & 3.4 & 40.3\,s \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Both models answer every report and satisfy every property check. The larger model reports greater confidence \emph{in itself} while producing \emph{fewer} resolution steps --- on two reports it returned a single step where the smaller model returned three and four --- at 43\% higher latency. The tie in correctness is direct evidence for the thesis of Section~\ref{sec:intro}: with schema-aware representation, hybrid retrieval, narrow selection, and post-conditioning in place, the residual contribution of model scale on this corpus is not measurable. The smaller model is retained not as a concession to the hardware but as the better-performing configuration under the measurement.
 
 %=============================================================================
 \section{Discussion}
@@ -448,17 +673,25 @@ The secondary result is methodological. Both the representation analysis (Sectio
 
 \textbf{Benchmark saturation.} The hybrid attains Recall@5 $=$ 1.000 and zero errors, leaving no headroom to distinguish further improvements. The benchmark has served its discriminative purpose but cannot support finer comparison.
 
-\textbf{Corpus scale.} With 68 documents, the retrieval task is comparatively easy and the IDF statistics that make BM25 effective are estimated from few documents. Behavior at larger corpus scale — where dense retrieval's approximate-nearest-neighbor regime and BM25's term statistics both change — is not characterized here.
+\textbf{Corpus scale.} With fewer than seventy documents --- 68 at the time of the retrieval benchmark, 69 once a further report was authored through the editor --- the retrieval task is comparatively easy and the IDF statistics that make BM25 effective are estimated from few documents. Behavior at larger corpus scale — where dense retrieval's approximate-nearest-neighbor regime and BM25's term statistics both change — is not characterized here. The selection threshold $\tau_{\text{abs}}$ of Section~\ref{sec:selection} is calibrated on this corpus and would require re-derivation at a substantially different scale; the corpus sweep of Section~\ref{sec:validation} is the instrument for that re-derivation.
 
-\textbf{Unmeasured generation.} The evaluation covers retrieval only. Generation quality and end-to-end latency are not quantified, and no claims about them are made.
+\textbf{Generation measured by property, not by expert judgment.} Sections~\ref{sec:quality}--\ref{sec:validation} quantify generation behavior, but the metrics are properties an answer must satisfy — grounded in the cited report, containing actionable steps, free of unattested artifacts, confidence consistent with content. These are necessary conditions, not sufficient ones. Whether a proposed resolution would actually resolve the incident is not established here; that requires expert adjudication or deployment outcomes, neither of which this work collects.
+
+\textbf{Behavioral coverage.} The sixteen behavioral cases and the fifteen sampled full-pipeline answers cover the query classes encountered during development. They cannot characterize behavior on queries and corpora that do not yet exist. The suite is therefore designed for extension at low marginal cost, so that a defect observed in operation becomes a permanent check rather than a recollection.
+
+\textbf{Single-node concurrency.} The queueing behavior of Section~\ref{sec:efficiency} was characterized on one machine with one accelerator. The conclusion that serial execution behind a cache dominates parallel slots is specific to that configuration and should be re-measured on hardware with genuine parallel capacity.
 
 \subsection{Future Work}
 
-The natural extensions follow from the limitations. A benchmark of real queries with human relevance judgments would establish field validity and restore measurement headroom. Evaluating generation — faithfulness to retrieved evidence, and correctness of proposed resolutions — would characterize the component this work leaves unmeasured. Learning a re-ranker from accumulated feedback would replace the current retrieval-time correction injection with a parametric model. Finally, scaling the corpus by an order of magnitude would test whether the per-class asymmetry observed here persists.
+The natural extensions follow from the limitations. A benchmark of real queries with human relevance judgments would establish field validity and restore measurement headroom. Expert adjudication of proposed resolutions would convert the property-based generation metrics of Section~\ref{sec:validation} into a correctness measure. Learning a re-ranker from accumulated feedback would replace the current retrieval-time correction injection with a parametric model. Scaling the corpus by an order of magnitude would test whether the per-class asymmetry persists and would re-derive the selection threshold. Finally, the model comparison of Table~\ref{tab:models} predicts that returns to model scale are small once context quality is controlled; testing that prediction across a wider range of model sizes would establish where it ceases to hold.
 
 \subsection{Conclusion}
 
-This work designs and evaluates a locally-hosted retrieval-augmented incident assistant whose retrieval stage fuses dense and sparse indices by Reciprocal Rank Fusion. On a 272-query benchmark, the hybrid attains Recall@5 $=$ 1.000 and MRR $=$ 0.987 against 0.768 and 0.678 for dense-only retrieval, with the gain localized by per-class analysis to identifier queries where dense retrieval attains 0.221. Ablations establish invariance to chunk size on this corpus and saturation at $k \geq 3$, which bounds the generation context without recall loss. The retriever is embedded in a generation pipeline that abstains under insufficient evidence rather than fabricating, and in a synthesis mechanism that returns resolved dialogues to the corpus as validated structured documents. The system satisfies its privacy constraint throughout, executing all inference locally.
+This work designs and evaluates a locally-hosted retrieval-augmented incident assistant whose retrieval stage fuses dense and sparse indices by Reciprocal Rank Fusion. On a 272-query benchmark, the hybrid attains Recall@5 $=$ 1.000 and MRR $=$ 0.987 against 0.768 and 0.678 for dense-only retrieval, with the gain localized by per-class analysis to identifier queries where dense retrieval attains 0.221. Ablations establish invariance to chunk size on this corpus and saturation at $k \geq 3$, which bounds the generation context without recall loss.
+
+Ranking, however, proved to be only the first half of the problem. A retriever always returns its top-ranked candidates, so a pipeline that cites them unconditionally attributes an answer to whichever document ranked first even when none is relevant; and a small model instructed to ground its output does so imperfectly, carrying artifacts between incidents, over-reporting confidence on answers containing nothing actionable, and proposing destructive operations no report documents. The system therefore places a selection stage between retrieval and generation that admits the empty set, and a post-conditioning stage after generation that reconciles the answer against the evidence --- removing unattested artifacts, bounding confidence by content, and distinguishing documented destructive procedures from invented ones. These are enforced properties rather than instructions, which is what makes them hold under a model that follows instructions imperfectly.
+
+The measured outcome supports the technical thesis stated in Section~\ref{sec:intro}. Against a generative model of 2.7$\times$ the parameter count, evaluated through an identical pipeline on identical questions, correctness is a tie --- both answer all 15 sampled reports and satisfy all 60 property checks --- while the larger model is 43\% slower and produces \emph{fewer} resolution steps. Under a local-inference constraint, the decisive variable is not model scale but the quality of the context constructed for it: schema-aware document representation, hybrid retrieval, narrow and thresholded selection, and post-conditioning against the retrieved evidence. The system satisfies its privacy constraint throughout, executing all inference locally.
 
 \begin{thebibliography}{9}
 
