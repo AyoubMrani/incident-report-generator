@@ -35,6 +35,11 @@ FRONTEND_DIST = REPO_ROOT / "frontend" / "dist"
 # SQLite file for persistent chat conversations (survives restarts).
 CHAT_DB = Path(os.environ.get("CHAT_DB", REPO_ROOT / "data" / "chat.db"))
 
+# Which chat store to build: "postgres" (the platform default) or "sqlite".
+# Kept switchable so the migration is reversible without a code change, and so
+# the test suite and a bare `uvicorn` run work with nothing else running.
+CHAT_BACKEND = os.environ.get("CHAT_BACKEND", "postgres").strip().lower()
+
 # Which LLM provider the chatbot uses. Swappable per the architecture decision;
 # defaults to self-hosted Ollama for the local setup.
 CHATBOT_PROVIDER = os.environ.get("CHATBOT_PROVIDER", "ollama")
@@ -53,11 +58,43 @@ async def lifespan(app: FastAPI):
     # Startup: construct services once and stash on app.state.
     app.state.report_service = ReportService(REPORTS_DIR)
 
-    # Persistent chat store (SQLite). Independent of the chatbot pipeline, so
+    # Persistent chat store. Independent of the chatbot pipeline, so
     # conversation history stays browsable even if the LLM/KB fails to load.
-    from app.chatbot.store import ChatStore
+    #
+    # Postgres is the default. If it cannot be reached at boot the app falls
+    # back to the SQLite file rather than refusing to start: the same "degrade,
+    # don't crash" rule the chatbot follows below. The fallback is logged at
+    # ERROR because running on it unknowingly means new chats land somewhere
+    # the rest of the platform will not look for them.
+    app.state.db = None
+    app.state.chat_backend = CHAT_BACKEND
+    if CHAT_BACKEND == "postgres":
+        from app.db.chat_repository import ChatRepository
+        from app.db.session import Database
 
-    app.state.chat_store = ChatStore(CHAT_DB)
+        database = Database()
+        if database.ping():
+            app.state.db = database
+            app.state.chat_store = ChatRepository(database)
+            log.info("chat store: postgres", extra={"event": "chat_store_ready",
+                                                    "backend": "postgres"})
+        else:
+            database.dispose()
+            app.state.chat_backend = "sqlite-fallback"
+            from app.chatbot.store import ChatStore
+
+            app.state.chat_store = ChatStore(CHAT_DB)
+            log.error(
+                "postgres unreachable; falling back to SQLite at %s. New chats "
+                "will NOT be visible to the platform database.", CHAT_DB,
+                extra={"event": "chat_store_fallback"},
+            )
+    else:
+        from app.chatbot.store import ChatStore
+
+        app.state.chat_store = ChatStore(CHAT_DB)
+        log.info("chat store: sqlite (%s)", CHAT_DB,
+                 extra={"event": "chat_store_ready", "backend": "sqlite"})
 
     # Build the chatbot once (embedding model + KB index live for the process
     # lifetime — this is where the old @st.cache_resource singletons moved to).
@@ -94,7 +131,11 @@ async def lifespan(app: FastAPI):
                       extra={"event": "chatbot_start_failed"})
 
     yield
-    # Shutdown: nothing to release yet.
+
+    # Shutdown: return pooled connections. Without this, a reload loop leaks a
+    # pool per generation and Postgres eventually refuses new clients.
+    if app.state.db is not None:
+        app.state.db.dispose()
     log.info("shutting down", extra={"event": "shutdown"})
 
 
@@ -117,10 +158,19 @@ app.include_router(chat.router)
 
 @app.get("/api/health")
 def health() -> dict:
+    """Liveness plus the two dependencies that degrade independently.
+
+    `database_ready` is probed per call rather than cached from boot: Postgres
+    can go away while the process stays up, and a health check that reports its
+    startup state would keep saying "ok" through the outage.
+    """
+    db = getattr(app.state, "db", None)
     return {
         "status": "ok",
         "chatbot_ready": app.state.chatbot is not None,
         "chatbot_error": app.state.chatbot_error,
+        "chat_backend": getattr(app.state, "chat_backend", "unknown"),
+        "database_ready": db.ping() if db is not None else None,
     }
 
 

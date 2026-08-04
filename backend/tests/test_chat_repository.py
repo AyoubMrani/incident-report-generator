@@ -34,6 +34,10 @@ TEST_DB_URL = os.environ.get(
     "TEST_DATABASE_URL", "postgresql+psycopg://ntt:ntt@localhost:5433/ntt"
 )
 
+# This module drives the repository directly rather than through the app, so it
+# opts out of the SQLite isolation default in conftest and uses real Postgres.
+pytestmark = pytest.mark.postgres
+
 
 @pytest.fixture(scope="module")
 def pg_database():
