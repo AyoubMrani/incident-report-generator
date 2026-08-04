@@ -25,6 +25,15 @@
     escapeinside={(*@}{@*)}
 }
 
+% A rendered figure: \diagram{caption}{file}{width fraction}. Sources are
+% hand-authored SVGs in figures/, converted to PDF so they stay vector.
+\newcommand{\diagram}[3]{%
+  \begin{figure}[H]
+  \centering
+  \includegraphics[width=#3\textwidth]{#2}
+  \caption{#1}
+  \end{figure}}
+
 % Placeholder for figures to be inserted manually.
 \newcommand{\figplaceholder}[2]{%
   \begin{figure}[H]
@@ -142,7 +151,7 @@ The system is a single application exposing two functional modules over a shared
 
 The implementation is a modular monolith: a FastAPI backend with separated internal packages (retrieval and generation; report persistence; a shared schema and model-provider abstraction) and a React single-page client. A distributed decomposition is unwarranted — the modules share a corpus, target a single host, and have no independent scaling requirement — and would introduce network and operational overhead without benefit.
 
-\figplaceholder{System architecture: the web client (assistant and report-editor modules) over a FastAPI backend hosting the RAG pipeline, the report service, and the model-provider abstraction, against locally-hosted models and the shared report corpus.}{figures/architecture\_overview.png}
+\diagram{System architecture: the web client (assistant and report-editor modules) over a FastAPI backend hosting the RAG pipeline, the report service, and the model-provider abstraction, against locally-hosted models and the shared report corpus.}{figures/architecture_overview}{1.0}
 
 \subsection{Structured Report Schema as a Shared Contract}
 
@@ -185,7 +194,7 @@ A request is processed as an ordered sequence of stages, each of which may termi
 
 Stages~1 and~5 are the two points at which the system declines to answer, and both precede generation. Stage~8 is the only stage that can weaken an answer after the model has produced it, and it never strengthens one --- a deliberate asymmetry, since every check it applies is a check against over-claiming.
 
-\figplaceholder{Request pipeline: intent routing and adversarial screening precede retrieval; hybrid retrieval feeds source selection, which may return the empty set; selected documents condition generation; post-conditioning reconciles the answer against the evidence before it reaches the client.}{figures/request\_pipeline.png}
+\diagram{Request pipeline: intent routing and adversarial screening precede retrieval; hybrid retrieval feeds source selection, which may return the empty set; selected documents condition generation; post-conditioning reconciles the answer against the evidence before it reaches the client.}{figures/request_pipeline}{0.92}
 
 \subsection{Corpus Maintenance Workflow}
 
@@ -193,7 +202,7 @@ The two modules share the corpus, so a write by the editor must become visible t
 
 This closes the operational loop implied by Section~\ref{sec:synthesis}: a resolution synthesized from a dialogue is answerable within seconds of being written, with no restart, so the corpus grows during an incident rather than after it.
 
-\figplaceholder{Corpus maintenance: a report written or deleted through the editor triggers background re-indexing and cache invalidation, making it retrievable by the assistant without a restart.}{figures/corpus\_workflow.png}
+\diagram{Corpus maintenance: a report written or deleted through the editor triggers background re-indexing and cache invalidation, making it retrievable by the assistant without a restart.}{figures/corpus_workflow}{1.0}
 
 %=============================================================================
 \section{Corpus, Representation, and Evaluation Protocol}
@@ -265,6 +274,8 @@ A naive projection serializes the document tree verbatim, emitting structural to
 
 The system therefore defines $\pi$ \emph{schema-aware}: it dispatches on block type and emits only the semantic payload of each — heading text, symptom and root-cause prose with markup stripped, resolution list items, code content, table cells — while discarding identifiers, type tags, and binary data. Metadata is emitted as a leading header so that identifiers and category remain lexically searchable. This projection is a precondition for the retrieval results of Section~\ref{sec:eval}: no amount of ranking refinement compensates for an uninformative representation.
 
+\diagram{Document representation. The naive projection emits structural keys and base64 payloads, so the encoder embeds JSON syntax; the schema-aware projection $\pi$ dispatches on block type and emits only incident content, replacing an inline screenshot with a positional marker.}{figures/ingestion_projection}{1.0}
+
 \subsection{Chunking and Indexing}
 
 Projected documents are segmented into overlapping character windows (700 characters, 120-character overlap) to bound the encoder's input and to localize matching. Each chunk is encoded by $\phi$ into $\mathbb{R}^{384}$ and simultaneously tokenized into the BM25 index. Retrieval operates over chunks; results are aggregated to the report level by taking each source document's maximum-scoring chunk, so a report is ranked by its single best-matching passage.
@@ -307,7 +318,7 @@ Each component produces a ranking over chunks. Documents scoring zero under BM25
 
 $\texttt{TOP\_K} = 5$ reports are retrieved. These are candidates, not citations: what reaches the generator and the user is determined by the selection stage below, which Section~\ref{sec:ablation} shows can be restricted well below $K$ without recall loss.
 
-\figplaceholder{Retrieval architecture: a query is encoded and simultaneously matched against the dense index and the BM25 index; the two rankings are fused by RRF and aggregated per source report.}{figures/retrieval\_architecture.png}
+\diagram{Retrieval architecture: a query is encoded and simultaneously matched against the dense index and the BM25 index; the two rankings are fused by RRF and aggregated per source report.}{figures/retrieval_architecture}{1.0}
 
 \subsection{Source Selection}
 \label{sec:selection}
@@ -355,6 +366,8 @@ Out of corpus & ``best recipe for sourdough bread'' & 0.029 \\
 \bottomrule
 \end{tabular}
 \end{table}
+
+\diagram{Source selection. Every documented incident question scores $\sigma \approx 1.042$; questions outside the corpus peak at $0.288$. The absolute threshold is placed in the resulting gap, so a question the corpus does not answer yields no citation at all.}{figures/selection_threshold}{0.98}
 
 Selection caps the admitted set at $M = 2$ reports, and each is supplied to the generator \emph{in full} rather than as the matched chunk. This inverts the usual context-budget trade-off: rather than many fragments from many documents, the generator receives the complete text of the few documents that genuinely match. A documented procedure is frequently a multi-step sequence --- extract with a query, run a script, verify the result --- and a chunk boundary that severs it yields an answer that is correct about the first step and silent about the rest.
 
@@ -497,7 +510,7 @@ First, before retrieval, an intent classifier routes each turn. Inputs that are 
 
 Second, the generation prompt permits the model to declare insufficient evidence and lower its confidence rather than emit a fixed number of steps, and forbids citing identifiers absent from the retrieved set. The system also distinguishes a model backend failure from a low-confidence answer: an unreachable model raises an explicit error rather than returning a well-formed but empty result, which would otherwise be indistinguishable from a genuine negative diagnosis.
 
-\figplaceholder{Intent routing and abstention: conversational, under-specified, and diagnosable inputs are separated before retrieval, with only diagnosable inputs entering the RAG pipeline.}{figures/intent\_routing.png}
+\diagram{Intent routing and abstention. Three of the four outcomes are answered without invoking a generator at all, so fabrication on those paths is a property of the control flow rather than an instruction in the prompt.}{figures/intent_routing}{1.0}
 
 \subsection{Adversarial Input}
 
@@ -538,6 +551,8 @@ Precision was the binding design constraint, since a warning that fires on routi
 
 The generator initially ran at the inference server's default sampling temperature of $0.8$, tuned for open-ended dialogue. The task is the opposite: reproduce a documented procedure faithfully. The cost was measurable and was initially mistaken for a regression --- the same question returned eight grounded steps on one execution and a single vague step on the next, from byte-identical retrieved context. Near-greedy decoding ($T = 0.1$, fixed seed) makes repeated executions agree: three consecutive runs of the same query returned identical step counts and artifacts. Reproducibility is a quality property in its own right here, since two engineers on the same incident must not receive different procedures --- and it is a precondition for the behavioral suite of Section~\ref{sec:validation}, whose failures would otherwise be indistinguishable from resampling.
 
+\diagram{Post-conditioning. Each check compares the answer against the retrieved evidence and may only remove content or lower confidence; none can add a claim the evidence does not support. The right-hand notes record the observed failure each check was introduced for.}{figures/post_conditioning}{1.0}
+
 %=============================================================================
 \section{Report Synthesis}
 \label{sec:synthesis}
@@ -549,7 +564,7 @@ The synthesis maps dialogue elements onto schema fields under a strict grounding
 
 The synthesized report is validated against the same schema as authored reports and persisted through the same service, so it is indistinguishable downstream: it is editable in the report editor and, once written, becomes retrievable corpus. This closes the loop between the system's two modules — the assistant consumes the corpus to resolve incidents and extends it with each resolution.
 
-\figplaceholder{Report synthesis: a resolved dialogue is projected onto the (metadata, blocks) schema, validated, and persisted into the corpus, becoming retrievable for subsequent queries.}{figures/report\_synthesis.png}
+\diagram{Report synthesis. Each schema field is drawn from a specific dialogue element; fields the dialogue does not determine are left empty rather than inferred, so every populated value stays traceable.}{figures/report_synthesis}{1.0}
 
 %=============================================================================
 \section{Efficiency}
@@ -589,6 +604,8 @@ Retrieval, selection, context assembly & --- & 0.066\,s \\
 
 \subsection{Concurrency}
 
+\diagram{The two caches. The answer cache is keyed on the full prompt, so re-indexing or a new correction yields a different key and a stale answer is unreachable; the embedding cache is keyed on a digest of the corpus text, so any edit invalidates it without an explicit versioning step.}{figures/caching_layers}{1.0}
+
 Under concurrent load the inference server serialises generation: four concurrent workers issuing eight distinct queries all succeeded, with no inconsistent answers, but per-request latency ranged from 27\,s to 133\,s over 226\,s of wall time. The request timeout is sized against this queueing behavior rather than against single-request latency; a bound near the 30\,s single-request figure would fail queued requests spuriously.
 
 The apparent remedy --- raising the server's parallel-slot count --- was measured and rejected. With four slots on a single GPU the slots share one accelerator rather than running independently: wall time improved only from 226\,s to 190\,s while the \emph{fastest} request degraded from 27\,s to 62\,s and resident memory rose from 2.5\,GB to 4.8\,GB. Serial execution behind the answer cache is the better configuration on this hardware. The measurement is recorded rather than the intuition, since the intuition is wrong.
@@ -621,6 +638,8 @@ Concurrency probe & Do the shared caches and the index swap hold under simultane
 \end{table}
 
 \subsection{Component Tests}
+
+\diagram{Validation layers. The upper two are fast, deterministic and run in continuous integration, but stub the generator and therefore cannot observe model behavior; the lower two invoke the deployed model and run locally. Every defect that materially affected this system lay below the dividing line.}{figures/validation_layers}{1.0}
 
 The component suite substitutes a stub for the generator, which is correct for what it verifies --- parsing, intent routing, cache invalidation, grounding rules, confidence bounds, hazard detection --- and keeps the suite fast and deterministic. Its structural limitation is precisely that it cannot observe the deployed model, which is why the layers below exist.
 

@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 400" width="760" height="400"
+     font-family="Helvetica, Arial, sans-serif" fill="#111" stroke="#111">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111" stroke="none"/>
+    </marker>
+  </defs>
+
+  <!-- query -->
+  <rect x="290" y="18" width="180" height="34" rx="5" fill="#f2f2f2" stroke="#111" stroke-width="1.3"/>
+  <text x="380" y="40" font-size="12" text-anchor="middle" stroke="none" font-weight="bold">incident query q</text>
+
+  <path d="M 340 52 L 200 52 L 200 84" fill="none" stroke-width="1.2" marker-end="url(#a)"/>
+  <path d="M 420 52 L 560 52 L 560 84" fill="none" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- dense branch -->
+  <rect x="60" y="84" width="280" height="92" rx="6" fill="#fafafa" stroke="#111" stroke-width="1.3"/>
+  <text x="200" y="105" font-size="12" text-anchor="middle" stroke="none" font-weight="bold">Dense index</text>
+  <text x="200" y="124" font-size="10.5" text-anchor="middle" stroke="none">all-MiniLM-L6-v2 · 384-d · cosine</text>
+  <text x="200" y="145" font-size="10.5" text-anchor="middle" stroke="none" font-style="italic">catches paraphrase</text>
+  <text x="200" y="164" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">blind to identifiers — 0.221</text>
+
+  <!-- sparse branch -->
+  <rect x="420" y="84" width="280" height="92" rx="6" fill="#fafafa" stroke="#111" stroke-width="1.3"/>
+  <text x="560" y="105" font-size="12" text-anchor="middle" stroke="none" font-weight="bold">Sparse index</text>
+  <text x="560" y="124" font-size="10.5" text-anchor="middle" stroke="none">Okapi BM25 · k₁ = 1.5 · b = 0.75</text>
+  <text x="560" y="145" font-size="10.5" text-anchor="middle" stroke="none" font-style="italic">catches exact tokens</text>
+  <text x="560" y="164" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">blind to synonymy</text>
+
+  <!-- ranked lists -->
+  <text x="200" y="199" font-size="10.5" text-anchor="middle" stroke="none">ranked list A</text>
+  <text x="560" y="199" font-size="10.5" text-anchor="middle" stroke="none">ranked list B</text>
+  <line x1="200" y1="176" x2="200" y2="216" stroke-width="1.2" marker-end="url(#a)"/>
+  <line x1="560" y1="176" x2="560" y2="216" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <path d="M 200 216 L 200 240 L 340 240" fill="none" stroke-width="1.2"/>
+  <path d="M 560 216 L 560 240 L 420 240" fill="none" stroke-width="1.2"/>
+  <line x1="380" y1="240" x2="380" y2="262" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- fusion -->
+  <rect x="230" y="262" width="300" height="66" rx="6" fill="#eef4fb" stroke="#1a5fb4" stroke-width="1.6"/>
+  <text x="380" y="283" font-size="12" text-anchor="middle" stroke="none" font-weight="bold" fill="#1a5fb4">Reciprocal Rank Fusion</text>
+  <text x="380" y="305" font-size="12.5" text-anchor="middle" stroke="none" font-style="italic">score(d) = Σ 1 / (60 + rank(d))</text>
+  <text x="380" y="321" font-size="10" text-anchor="middle" stroke="none">rank position only — no score normalisation needed</text>
+
+  <line x1="380" y1="328" x2="380" y2="352" stroke-width="1.2" marker-end="url(#a)"/>
+  <rect x="250" y="352" width="260" height="32" rx="5" fill="#f2f2f2" stroke="#111" stroke-width="1.3"/>
+  <text x="380" y="373" font-size="11.5" text-anchor="middle" stroke="none">top-K candidates, aggregated per report</text>
+
+  <!-- the payoff annotation -->
+  <rect x="600" y="262" width="152" height="66" rx="5" fill="#fff" stroke="#1a5fb4" stroke-width="1.2"
+        stroke-dasharray="4 3"/>
+  <text x="676" y="281" font-size="10.5" text-anchor="middle" stroke="none" fill="#1a5fb4" font-weight="bold">identifier queries</text>
+  <text x="676" y="300" font-size="11" text-anchor="middle" stroke="none">dense 0.221</text>
+  <text x="676" y="318" font-size="11" text-anchor="middle" stroke="none" font-weight="bold">hybrid 1.000</text>
+  <line x1="530" y1="295" x2="596" y2="295" stroke="#1a5fb4" stroke-width="1.1" stroke-dasharray="4 3"/>
+</svg>

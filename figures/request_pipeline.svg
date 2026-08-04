@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 780 560" width="780" height="560"
+     font-family="Helvetica, Arial, sans-serif" fill="#111" stroke="#111">
+  <defs>
+    <marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#111" stroke="none"/>
+    </marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#a51d2d" stroke="none"/>
+    </marker>
+  </defs>
+
+  <text x="300" y="22" font-size="11" text-anchor="middle" stroke="none" font-weight="bold">MAIN PATH</text>
+  <text x="672" y="22" font-size="11" text-anchor="middle" stroke="none" font-weight="bold" fill="#a51d2d">EARLY RETURN</text>
+
+  <!-- stage helper geometry: x=140..460, height 44, gap 20 -->
+  <!-- 1 intent -->
+  <rect x="140" y="36" width="320" height="44" rx="5" fill="#fafafa" stroke="#111" stroke-width="1.2"/>
+  <text x="152" y="55" font-size="11.5" stroke="none" font-weight="bold">1 · Intent routing</text>
+  <text x="152" y="71" font-size="10.5" stroke="none">conversational? out of scope? too vague?</text>
+  <line x1="460" y1="58" x2="556" y2="58" stroke="#a51d2d" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="560" y="38" width="210" height="40" rx="5" fill="#fdeeee" stroke="#a51d2d" stroke-width="1.2"/>
+  <text x="665" y="55" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">chat reply / decline /</text>
+  <text x="665" y="70" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">ask for specifics</text>
+  <text x="508" y="52" font-size="9.5" text-anchor="middle" stroke="none" fill="#a51d2d">no model</text>
+
+  <line x1="300" y1="80" x2="300" y2="100" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 2 security -->
+  <rect x="140" y="100" width="320" height="44" rx="5" fill="#fafafa" stroke="#111" stroke-width="1.2"/>
+  <text x="152" y="119" font-size="11.5" stroke="none" font-weight="bold">2 · Adversarial screening</text>
+  <text x="152" y="135" font-size="10.5" stroke="none">wrap untrusted text · redact secrets</text>
+  <line x1="300" y1="144" x2="300" y2="164" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 3 query -->
+  <rect x="140" y="164" width="320" height="44" rx="5" fill="#fafafa" stroke="#111" stroke-width="1.2"/>
+  <text x="152" y="183" font-size="11.5" stroke="none" font-weight="bold">3 · Query construction</text>
+  <text x="152" y="199" font-size="10.5" stroke="none">+ recent turns · + screenshot description</text>
+  <line x1="300" y1="208" x2="300" y2="228" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 4 retrieval -->
+  <rect x="140" y="228" width="320" height="44" rx="5" fill="#fafafa" stroke="#111" stroke-width="1.2"/>
+  <text x="152" y="247" font-size="11.5" stroke="none" font-weight="bold">4 · Hybrid retrieval</text>
+  <text x="152" y="263" font-size="10.5" stroke="none">dense + BM25, fused by RRF → top 5</text>
+  <line x1="300" y1="272" x2="300" y2="292" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 5 selection - the second exit -->
+  <rect x="140" y="292" width="320" height="52" rx="5" fill="#eef4fb" stroke="#1a5fb4" stroke-width="1.6"/>
+  <text x="152" y="311" font-size="11.5" stroke="none" font-weight="bold" fill="#1a5fb4">5 · Source selection</text>
+  <text x="152" y="327" font-size="10.5" stroke="none">entity re-score · thresholds · keep ≤ 2</text>
+  <text x="152" y="341" font-size="10" stroke="none" font-style="italic">the empty set is a valid outcome</text>
+  <line x1="460" y1="318" x2="556" y2="318" stroke="#a51d2d" stroke-width="1.3" marker-end="url(#ar)"/>
+  <rect x="560" y="298" width="210" height="40" rx="5" fill="#fdeeee" stroke="#a51d2d" stroke-width="1.2"/>
+  <text x="665" y="315" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">answer with no citation,</text>
+  <text x="665" y="330" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d">confidence capped ≤ 35%</text>
+  <text x="508" y="312" font-size="9.5" text-anchor="middle" stroke="none" fill="#a51d2d">∅</text>
+
+  <line x1="300" y1="344" x2="300" y2="364" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 6 conditioning -->
+  <rect x="140" y="364" width="320" height="44" rx="5" fill="#fafafa" stroke="#111" stroke-width="1.2"/>
+  <text x="152" y="383" font-size="11.5" stroke="none" font-weight="bold">6 · Conditioning</text>
+  <text x="152" y="399" font-size="10.5" stroke="none">selected reports in FULL · + corrections</text>
+  <line x1="300" y1="408" x2="300" y2="428" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 7 generation -->
+  <rect x="140" y="428" width="320" height="44" rx="5" fill="#f2f2f2" stroke="#111" stroke-width="1.4"/>
+  <text x="152" y="447" font-size="11.5" stroke="none" font-weight="bold">7 · Generation</text>
+  <text x="152" y="463" font-size="10.5" stroke="none">constrained JSON · T = 0.1 · fixed seed</text>
+  <line x1="300" y1="472" x2="300" y2="492" stroke-width="1.2" marker-end="url(#a)"/>
+
+  <!-- 8 post-conditioning -->
+  <rect x="140" y="492" width="320" height="48" rx="5" fill="#eef4fb" stroke="#1a5fb4" stroke-width="1.6"/>
+  <text x="152" y="511" font-size="11.5" stroke="none" font-weight="bold" fill="#1a5fb4">8 · Post-conditioning</text>
+  <text x="152" y="527" font-size="10.5" stroke="none">strip ungrounded · bound confidence · flag hazards</text>
+
+  <!-- annotation bracket: everything above generation -->
+  <path d="M 128 36 L 118 36 L 118 344 L 128 344" fill="none" stroke="#a51d2d" stroke-width="1.2"/>
+  <text x="112" y="190" font-size="10.5" text-anchor="middle" stroke="none" fill="#a51d2d"
+        transform="rotate(-90 112 190)">both exits precede the model</text>
+
+  <path d="M 472 492 L 486 492 L 486 540 L 472 540" fill="none" stroke="#1a5fb4" stroke-width="1.2"/>
+  <text x="500" y="519" font-size="10.5" stroke="none" fill="#1a5fb4">only weakens, never strengthens</text>
+</svg>
