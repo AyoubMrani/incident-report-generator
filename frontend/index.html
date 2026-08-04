@@ -4,6 +4,22 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>NTT Incident Platform</title>
+    <script>
+      // Apply the theme before first paint. Running this in React instead
+      // would render the light theme for one frame and flash on every load.
+      (function () {
+        try {
+          var stored = localStorage.getItem('ntt.theme');
+          var dark =
+            stored === 'dark' ||
+            ((stored === 'system' || !stored) &&
+              window.matchMedia('(prefers-color-scheme: dark)').matches);
+          if (dark) document.documentElement.classList.add('dark');
+        } catch (e) {
+          /* private mode: fall back to light */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

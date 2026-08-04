@@ -2,6 +2,8 @@
 // In dev, Vite proxies /api to the FastAPI backend; in production FastAPI serves
 // this SPA, so the relative /api path works in both.
 
+import { authFetch } from '../auth/oidc';
+
 // ── stable per-browser client id (identity until real auth exists) ────────────
 const CLIENT_KEY = 'ntt.clientId';
 export function getClientId(): string {
@@ -21,7 +23,22 @@ export const setActiveConversationId = (id: string | null) =>
   id ? localStorage.setItem(ACTIVE_KEY, id) : localStorage.removeItem(ACTIVE_KEY);
 
 function headers(): HeadersInit {
+  // X-Client-Id is still sent so the app works with AUTH_DISABLED=1 (local dev
+  // and the test suite). With auth on, the backend ignores it in favour of the
+  // verified token subject — it cannot be used to act as another user.
   return { 'Content-Type': 'application/json', 'X-Client-Id': getClientId() };
+}
+
+/**
+ * `fetch` for our API: attaches the bearer token when signed in, and retries
+ * once after a refresh on 401.
+ *
+ * Every call below goes through this rather than raw `fetch`, so authentication
+ * is one seam instead of a decision repeated at twenty call sites — the same
+ * reason the backend declares auth at the router.
+ */
+async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+  return authFetch(input, { ...init, headers: { ...headers(), ...(init.headers ?? {}) } });
 }
 
 // ── types ─────────────────────────────────────────────────────────────────────
@@ -134,7 +151,7 @@ export async function sendChat(
   query: string,
   opts: { imageB64?: string | null; conversationId?: string | null; links?: string[] } = {},
 ): Promise<ChatResponse> {
-  const res = await fetch('/api/chat', {
+  const res = await apiFetch('/api/chat', {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({
@@ -165,7 +182,7 @@ export async function streamChat(
   opts: { imageB64?: string | null; conversationId?: string | null; links?: string[] } = {},
   h: StreamHandlers = {},
 ): Promise<void> {
-  const res = await fetch('/api/chat/stream', {
+  const res = await apiFetch('/api/chat/stream', {
     method: 'POST',
     headers: headers(),
     body: JSON.stringify({
@@ -204,46 +221,104 @@ export async function streamChat(
 }
 
 export async function listConversations(): Promise<Conversation[]> {
-  return json(await fetch('/api/conversations', { headers: headers() }));
+  return json(await apiFetch('/api/conversations'));
 }
 
 export async function listMessages(conversationId: string): Promise<StoredMessage[]> {
-  return json(await fetch(`/api/conversations/${conversationId}/messages`, { headers: headers() }));
+  return json(await apiFetch(`/api/conversations/${conversationId}/messages`));
 }
 
 export async function renameConversation(id: string, title: string): Promise<void> {
-  await json(await fetch(`/api/conversations/${id}`, {
-    method: 'PATCH', headers: headers(), body: JSON.stringify({ title }),
+  await json(await apiFetch(`/api/conversations/${id}`, {
+    method: 'PATCH', body: JSON.stringify({ title }),
   }));
 }
 
 export async function deleteConversation(id: string): Promise<void> {
-  await json(await fetch(`/api/conversations/${id}`, { method: 'DELETE', headers: headers() }));
+  await json(await apiFetch(`/api/conversations/${id}`, { method: 'DELETE' }));
 }
 
 // Thumbs feedback on an assistant message (1 up, -1 down, null clears).
 export async function sendFeedback(messageId: string, value: 1 | -1 | null): Promise<void> {
-  await json(await fetch(`/api/messages/${messageId}/feedback`, {
-    method: 'POST', headers: headers(), body: JSON.stringify({ value }),
+  await json(await apiFetch(`/api/messages/${messageId}/feedback`, {
+    method: 'POST', body: JSON.stringify({ value }),
   }));
 }
 
 // Submit a human correction so future similar questions use it.
 export async function sendCorrection(question: string, correction: string): Promise<void> {
-  await json(await fetch('/api/corrections', {
-    method: 'POST', headers: headers(), body: JSON.stringify({ question, correction }),
+  await json(await apiFetch('/api/corrections', {
+    method: 'POST', body: JSON.stringify({ question, correction }),
   }));
 }
 
 // Turn a diagnosed conversation into a saved incident report.
 export interface GeneratedReport { success: boolean; jsonFilename: string; report: any }
 export async function generateReport(conversationId: string): Promise<GeneratedReport> {
-  return json(await fetch(`/api/conversations/${conversationId}/report`, {
-    method: 'POST', headers: headers(),
+  return json(await apiFetch(`/api/conversations/${conversationId}/report`, {
+    method: 'POST',
   }));
 }
 
 // Fetch a cited report's JSON (for opening in-app).
 export async function fetchReport(openUrl: string): Promise<any> {
-  return json(await fetch(openUrl, { headers: headers() }));
+  return json(await apiFetch(openUrl));
+}
+
+// ── search ────────────────────────────────────────────────────────────────────
+
+// A conversation that matched, with the best snippet from it. `matched_by`
+// reports which arm found it — useful for explaining a result that shares no
+// words with the query (it was the semantic arm).
+export interface ConversationHit {
+  conversation_id: string;
+  title: string;
+  snippet: string;          // contains <mark> tags from ts_headline
+  matched_by: 'keyword' | 'semantic' | 'both';
+  score: number;
+  hit_count: number;
+  best_message_id: string;
+  created_at: number;
+}
+
+export interface MessageHit {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string;
+  role: string;
+  text: string;
+  snippet: string;
+  created_at: number;
+  score: number;
+  matched_by: 'keyword' | 'semantic' | 'both';
+}
+
+export interface SearchResponse<T> {
+  query: string;
+  results: T[];
+  grouped: boolean;
+  available: boolean;       // false when the backend has no search index
+}
+
+// Grouped: one entry per conversation, for the sidebar.
+export async function searchConversations(
+  q: string,
+  limit = 20,
+): Promise<SearchResponse<ConversationHit>> {
+  const params = new URLSearchParams({ q, limit: String(limit), group: 'true' });
+  return json(await apiFetch(`/api/search?${params}`));
+}
+
+// Flat: individual message hits, for a full-page result list.
+export async function searchMessages(
+  q: string,
+  opts: { limit?: number; conversationId?: string } = {},
+): Promise<SearchResponse<MessageHit>> {
+  const params = new URLSearchParams({
+    q,
+    limit: String(opts.limit ?? 20),
+    group: 'false',
+  });
+  if (opts.conversationId) params.set('conversation_id', opts.conversationId);
+  return json(await apiFetch(`/api/search?${params}`));
 }

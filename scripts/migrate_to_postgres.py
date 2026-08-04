@@ -325,18 +325,120 @@ def verify(sqlite_path: Path, db: Database) -> bool:
     return bool(ok)
 
 
+def link_legacy(db: Database, legacy_subject: str, owner_subject: str) -> dict:
+    """Hand a legacy client id's history to an authenticated user.
+
+    Kept as an explicit, operator-run step rather than something the app infers.
+    A browser UUID identifies a *browser*, not a person: guessing that whoever
+    logs in next owns it would hand one person another person's conversations,
+    which is precisely the failure the whole auth phase exists to prevent.
+
+    Re-pointing the rows (rather than copying) means the history moves once and
+    the legacy row is left empty, so running it twice is harmless.
+    """
+    with db.session() as s:
+        legacy = s.execute(
+            select(User).where(User.subject == legacy_subject)
+        ).scalar_one_or_none()
+        if legacy is None:
+            raise SystemExit(f"no user with subject {legacy_subject!r}")
+
+        owner = s.execute(
+            select(User).where(User.subject == owner_subject)
+        ).scalar_one_or_none()
+        if owner is None:
+            # The target has never signed in, so no row exists yet. Create it
+            # with the subject their token will carry, and the first login
+            # attaches to it.
+            owner_id = uuid.uuid5(uuid.NAMESPACE_URL, f"oidc:{owner_subject}").hex
+            s.execute(
+                pg_insert(User)
+                .values(
+                    id=owner_id,
+                    subject=owner_subject,
+                    provider="keycloak",
+                    username=owner_subject[:255],
+                    roles=[],
+                    created_at=time.time(),
+                    last_seen_at=time.time(),
+                )
+                .on_conflict_do_nothing(index_elements=["provider", "subject"])
+            )
+            s.flush()
+            owner = s.execute(
+                select(User).where(User.subject == owner_subject)
+            ).scalar_one()
+
+        moved_conv = s.execute(
+            Conversation.__table__.update()
+            .where(Conversation.user_id == legacy.id)
+            .values(user_id=owner.id)
+        ).rowcount
+        moved_corr = s.execute(
+            Correction.__table__.update()
+            .where(Correction.user_id == legacy.id)
+            .values(user_id=owner.id)
+        ).rowcount
+
+    return {"conversations": moved_conv, "corrections": moved_corr}
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--sqlite", type=Path, default=DEFAULT_SQLITE)
     ap.add_argument("--database-url", default=None)
     ap.add_argument("--dry-run", action="store_true", help="report, change nothing")
     ap.add_argument("--verify", action="store_true", help="compare counts only")
+    ap.add_argument(
+        "--link-legacy",
+        nargs=2,
+        metavar=("LEGACY_CLIENT_ID", "OIDC_SUBJECT"),
+        help=(
+            "give a legacy client id's conversations to an authenticated user. "
+            "Deliberately manual: a browser UUID identifies a browser, not a "
+            "person, so guessing the owner could hand over someone else's chats."
+        ),
+    )
+    ap.add_argument(
+        "--list-users",
+        action="store_true",
+        help="show identities and how many conversations each owns",
+    )
     args = ap.parse_args()
 
     db = Database(args.database_url) if args.database_url else Database()
     if not db.ping():
         print(f"cannot reach Postgres at {db.url}", file=sys.stderr)
         return 2
+
+    if args.list_users:
+        with db.session() as s:
+            rows = s.execute(
+                select(
+                    User.provider,
+                    User.subject,
+                    User.username,
+                    func.count(Conversation.id).label("n"),
+                )
+                .outerjoin(Conversation, Conversation.user_id == User.id)
+                .group_by(User.id)
+                .order_by(func.count(Conversation.id).desc())
+            ).all()
+        print(f"{'provider':<10}{'conversations':>14}  subject")
+        for r in rows:
+            print(f"{r.provider:<10}{r.n:>14}  {r.subject}")
+        return 0
+
+    if args.link_legacy:
+        legacy_subject, owner_subject = args.link_legacy
+        moved = link_legacy(db, legacy_subject, owner_subject)
+        print(
+            f"moved {moved['conversations']} conversation(s) and "
+            f"{moved['corrections']} correction(s)\n"
+            f"  from {legacy_subject}\n"
+            f"    to {owner_subject}"
+        )
+        return 0
 
     if args.verify:
         return 0 if verify(args.sqlite, db) else 1

@@ -1,5 +1,55 @@
 @import "tailwindcss";
 
+/* ── Dark mode ───────────────────────────────────────────────────────────────
+   Tailwind v4 has no tailwind.config.js, so the dark variant is declared here.
+   It is driven by a class on <html> rather than prefers-color-scheme alone, so
+   an explicit user choice can override the OS setting. */
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Design tokens ───────────────────────────────────────────────────────────
+   Semantic names, not raw colours: components reference --color-surface rather
+   than a specific slate shade, so the two themes below are the only place a
+   palette decision lives. This is the CSS-first equivalent of the `theme`
+   block a v3 config would have carried. */
+@theme {
+  --color-canvas: oklch(98.4% 0.003 247.9);
+  --color-surface: oklch(100% 0 0);
+  --color-surface-muted: oklch(96.8% 0.007 247.9);
+  --color-border-subtle: oklch(92.9% 0.013 255.5);
+  --color-content: oklch(20.8% 0.042 265.8);
+  --color-content-muted: oklch(55.4% 0.041 257.4);
+  --color-accent: oklch(54.6% 0.215 262.9);
+  --color-accent-content: oklch(100% 0 0);
+
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+}
+
+.dark {
+  --color-canvas: oklch(20.8% 0.042 265.8);
+  --color-surface: oklch(27.9% 0.041 260.0);
+  --color-surface-muted: oklch(37.2% 0.044 257.3);
+  --color-border-subtle: oklch(37.2% 0.044 257.3);
+  --color-content: oklch(96.8% 0.007 247.9);
+  --color-content-muted: oklch(70.4% 0.04 256.8);
+  --color-accent: oklch(62.3% 0.214 259.8);
+  --color-accent-content: oklch(100% 0 0);
+}
+
+/* Search snippets arrive as HTML with <mark> tags from Postgres ts_headline.
+   Styled here because the markup is generated server-side and cannot carry
+   utility classes. */
+mark {
+  background-color: oklch(90.5% 0.182 98.1 / 0.55);
+  color: inherit;
+  border-radius: 0.125rem;
+  padding: 0 0.125rem;
+}
+.dark mark {
+  background-color: oklch(76.9% 0.188 70.1 / 0.35);
+  color: oklch(96.8% 0.007 247.9);
+}
+
 /* Quill Editor Customization */
 .quill-editor {
   background-color: white;
