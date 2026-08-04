@@ -19,7 +19,7 @@ Endpoint parity with server.ts:
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
@@ -106,7 +106,7 @@ def get_report_content(
 def download_report(
     filename: str,
     service: ReportService = Depends(get_service),
-) -> FileResponse:
+) -> Response:
     return _download(filename, service)
 
 
@@ -114,18 +114,39 @@ def download_report(
 def download_report_query(
     filename: str = Query(...),
     service: ReportService = Depends(get_service),
-) -> FileResponse:
+) -> Response:
     return _download(filename, service)
 
 
-def _download(filename: str, service: ReportService) -> FileResponse:
+# Content types by extension. Reports are only ever .json or .md; anything else
+# downloads as a generic attachment rather than being guessed at.
+_CONTENT_TYPES = {
+    ".json": "application/json",
+    ".md": "text/markdown; charset=utf-8",
+}
+
+
+def _download(filename: str, service: ReportService) -> Response:
+    """Stream a report's bytes.
+
+    Reads through the service rather than handing a path to FileResponse: the
+    bytes may live in object storage, where there is no local path. The
+    Content-Disposition header keeps the browser's "save as" behaviour that
+    FileResponse(filename=...) provided.
+    """
     try:
-        path = service.resolve_path(filename)
-        return FileResponse(path, filename=filename)
+        data = service.read_bytes(filename)
     except ReportNotFoundError:
         raise HTTPException(status_code=404, detail="Report file not found")
     except InvalidFilenameError:
         raise HTTPException(status_code=400, detail="Invalid filename")
+
+    suffix = filename[filename.rfind(".") :] if "." in filename else ""
+    return Response(
+        content=data,
+        media_type=_CONTENT_TYPES.get(suffix, "application/octet-stream"),
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 # ── HTML export ───────────────────────────────────────────────────────────────

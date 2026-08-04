@@ -236,14 +236,23 @@ class Report(Base):
     )
 
     __table_args__ = (
-        # incident_id is the user-facing natural key and must stay unique among
-        # live rows. Partial, so a soft-deleted report does not block reusing it.
+        # **One row per stored object, not per incident.** The real corpus has
+        # 8 incident ids that appear in two files each (an original and a
+        # revision), so a unique constraint on incident_id would silently drop
+        # one file from every such pair. Uniqueness belongs on object_key, which
+        # is genuinely one-to-one with a blob.
+        #
+        # Partial on deleted_at IS NULL so re-saving a soft-deleted report
+        # revives it rather than colliding with the tombstone.
         Index(
-            "uq_reports_incident_live",
-            "incident_id",
+            "uq_reports_object_key_live",
+            "object_key",
             unique=True,
             postgresql_where=(deleted_at.is_(None)),
         ),
+        # Not unique: duplicate incident ids are expected, and this is the index
+        # that answers "show me every version of INC0383926".
+        Index("idx_reports_incident", "incident_id"),
         Index("idx_reports_updated", "updated_at"),
         Index("idx_reports_search", "search_vector", postgresql_using="gin"),
     )

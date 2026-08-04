@@ -173,6 +173,20 @@ class ReportService:
             raise ReportNotFoundError(filename)
         return path
 
+    def read_bytes(self, filename: str) -> bytes:
+        """Raw bytes for a download.
+
+        Exists so the router has one code path for both services: object
+        storage has no local path to hand to FileResponse, and branching in the
+        handler on which service is configured would put storage knowledge back
+        in the HTTP layer.
+        """
+        return self.resolve_path(filename).read_bytes()
+
+    def download_url(self, filename: str, expires_in: int = 3600) -> str | None:
+        """No direct URL for local files; the caller streams the bytes."""
+        return None
+
     # ── delete ────────────────────────────────────────────────────────────────
 
     def delete(
