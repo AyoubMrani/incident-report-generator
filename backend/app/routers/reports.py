@@ -23,6 +23,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from starlette.background import BackgroundTask
 
+from app.auth.dependencies import current_user, require_analyst
 from app.reports.html_export import render_report_html
 from app.reports.service import (
     DuplicateReportError,
@@ -36,7 +37,17 @@ from app.shared.schema import (
     SaveReportResponse,
 )
 
-router = APIRouter(tags=["reports"])
+# Authentication is applied at the *router*, not per endpoint.
+#
+# Before this phase the whole reports surface was unauthenticated: an audit of
+# every route found `DELETE /api/delete/{filename}` returning 200 with no token,
+# so anyone who could reach the port could destroy incident records. Declaring
+# the dependency here means a future endpoint is protected by default and has to
+# opt *out* deliberately, rather than being exposed by omission.
+#
+# Reads require any authenticated user; writes are narrowed to analyst/admin on
+# the individual routes below, since viewer is a read-only role.
+router = APIRouter(tags=["reports"], dependencies=[Depends(current_user)])
 
 
 def get_service(request: Request) -> ReportService:
@@ -47,7 +58,12 @@ def get_service(request: Request) -> ReportService:
 # ── save / update ─────────────────────────────────────────────────────────────
 
 
-@router.post("/api/reports", response_model=SaveReportResponse)
+@router.post(
+    "/api/reports",
+    response_model=SaveReportResponse,
+    # Creating and editing reports is a writer action; viewer is read-only.
+    dependencies=[Depends(require_analyst)],
+)
 def save_report(
     body: SaveReportRequest,
     request: Request,
@@ -177,7 +193,7 @@ def export_html(
 # ── delete ────────────────────────────────────────────────────────────────────
 
 
-@router.delete("/api/delete/{filename}")
+@router.delete("/api/delete/{filename}", dependencies=[Depends(require_analyst)])
 def delete_report(
     filename: str,
     request: Request,
@@ -186,7 +202,7 @@ def delete_report(
     return _delete(service, request, filename=filename)
 
 
-@router.delete("/api/delete")
+@router.delete("/api/delete", dependencies=[Depends(require_analyst)])
 def delete_report_by_incident(
     request: Request,
     incident_id: str | None = Query(default=None),

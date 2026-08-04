@@ -19,11 +19,13 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
+from app.auth.dependencies import AuthContext
+from app.auth.dependencies import current_user as _current_user
 from app.reports.service import ReportService
 from app.shared.logging import configure_logging, get_logger
 from app.routers import chat, reports
@@ -58,6 +60,36 @@ DISABLE_CHATBOT = os.environ.get("DISABLE_CHATBOT") == "1"
 async def lifespan(app: FastAPI):
     configure_logging()
     log = get_logger("app.startup")
+
+    # ── authentication ────────────────────────────────────────────────────────
+    # Checked first and allowed to raise: refusing to boot is the correct
+    # response to "auth is off in production", and it must happen before any
+    # request can be served.
+    from app.auth.dependencies import assert_auth_config_sane, auth_disabled
+    from app.auth.oidc import OIDCValidator
+
+    assert_auth_config_sane()
+
+    if auth_disabled():
+        app.state.oidc = None
+        log.warning(
+            "AUTH_DISABLED=1 — identity comes from the X-Client-Id header and "
+            "is NOT verified. Local development only.",
+            extra={"event": "auth_disabled"},
+        )
+    else:
+        app.state.oidc = OIDCValidator()
+        # Non-fatal: Keycloak may still be starting. Tokens fail closed (401)
+        # until it answers, which is the safe direction to degrade.
+        if app.state.oidc.ready():
+            log.info("auth: OIDC via %s", app.state.oidc.issuer,
+                     extra={"event": "auth_ready"})
+        else:
+            log.error(
+                "OIDC issuer %s is not reachable; requests will fail with 401 "
+                "until it is", app.state.oidc.issuer,
+                extra={"event": "auth_issuer_unreachable"},
+            )
 
     # ── database ──────────────────────────────────────────────────────────────
     # Built first and shared: the chat store and the report catalog are two
@@ -212,6 +244,47 @@ def health() -> dict:
         "chat_backend": getattr(app.state, "chat_backend", "unknown"),
         "storage_backend": getattr(app.state, "storage_backend", "unknown"),
         "database_ready": db.ping() if db is not None else None,
+        "auth_enabled": getattr(app.state, "oidc", None) is not None,
+    }
+
+
+@app.get("/api/auth/config")
+def auth_config() -> dict:
+    """What the browser needs to start a login.
+
+    Public by design — these are the values baked into any OIDC client — and it
+    keeps the frontend from hardcoding a realm URL that differs per environment.
+    """
+    from app.auth.dependencies import auth_disabled
+
+    oidc = getattr(app.state, "oidc", None)
+    if oidc is None or auth_disabled():
+        return {"enabled": False}
+    return {
+        "enabled": True,
+        # The browser must use the externally reachable issuer, not the
+        # container-internal one the backend validates against.
+        "issuer": oidc.public_issuer or oidc.issuer,
+        "client_id": oidc.audience,
+    }
+
+
+@app.get("/api/me")
+def me(user: "AuthContext" = Depends(_current_user)) -> dict:
+    """The signed-in user and what they may do.
+
+    The frontend drives role-aware UI from this rather than decoding the token
+    itself, so permission rules live in one place — the backend.
+    """
+    return {
+        "id": user.id,
+        "username": user.username,
+        "email": user.email,
+        "display_name": user.display_name,
+        "roles": list(user.roles),
+        "authenticated": user.authenticated,
+        "is_admin": user.is_admin,
+        "can_write": user.can_write,
     }
 
 

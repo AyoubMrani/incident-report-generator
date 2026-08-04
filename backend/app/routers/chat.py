@@ -6,9 +6,11 @@ Two concerns:
   2. Persistent conversations — CRUD over the SQLite ChatStore so history
      survives restarts and syncs across a client's tabs.
 
-Identity is the `X-Client-Id` header (a UUID the browser generates and keeps in
-localStorage). Auth-free for now; when real accounts land, this header becomes
-the authenticated user id and the store queries are unchanged.
+Identity comes from the verified OIDC subject in the bearer token (see
+`app/auth`). With `AUTH_DISABLED=1` it falls back to the old `X-Client-Id`
+header, which is how the test suite and a Keycloak-less dev run work. Either
+way it reaches the store as one opaque id, so the store queries are unchanged —
+which is exactly what the pre-auth design predicted.
 
 Returns 503 for the pipeline when the chatbot didn't initialise; conversation
 CRUD still works (it only needs the store), so history is browsable even if
@@ -19,14 +21,26 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
+from app.auth.dependencies import (
+    AuthContext,
+    auth_disabled,
+    current_user,
+    require_admin,
+)
 from app.chatbot.security import redact
 from app.shared.llm.provider import LLMUnavailable
 
-router = APIRouter(tags=["chat"])
+# Auth declared at the router so it runs *before* request-body validation.
+# Without it an unauthenticated POST with a malformed body answered 422, which
+# both leaks that the endpoint exists and reports the wrong problem: the caller
+# is not authorised, and the shape of their body is none of their business yet.
+# Handlers still resolve identity through `_client_id`, so this is defence in
+# depth rather than a second source of truth.
+router = APIRouter(tags=["chat"], dependencies=[Depends(current_user)])
 
 # Input caps (defense-in-depth): reject oversized text / images before the LLM.
 MAX_QUERY_CHARS = 8000
@@ -147,7 +161,23 @@ class Message(BaseModel):
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 
-def _client_id(x_client_id: str | None) -> str:
+def _client_id(x_client_id: str | None, request: Request | None = None) -> str:
+    """Resolve the caller's stable identifier.
+
+    Kept as one function rather than converting 23 call sites to a FastAPI
+    dependency: every handler already funnels identity through here, so this is
+    the single place where "who is asking" is decided.
+
+    With auth enabled the answer is the verified OIDC subject and the header is
+    ignored — a client that keeps sending X-Client-Id cannot use it to act as
+    someone else. With AUTH_DISABLED=1 the old header behaviour is preserved
+    exactly, including this error message, which is what lets the existing
+    tests run unchanged.
+    """
+    if not auth_disabled() and request is not None:
+        authorization = request.headers.get("authorization")
+        return current_user(request, authorization, x_client_id).id
+
     if not x_client_id or not x_client_id.strip():
         raise HTTPException(status_code=400, detail="X-Client-Id header is required")
     return x_client_id.strip()
@@ -215,7 +245,7 @@ def chat(
     request: Request,
     x_client_id: str | None = Header(default=None),
 ) -> ChatResponse:
-    client_id = _client_id(x_client_id)
+    client_id = _client_id(x_client_id, request)
     store = _store(request)
     service = _validate_and_service(body, request)
 
@@ -258,7 +288,7 @@ def chat_stream(
     request: Request,
     x_client_id: str | None = Header(default=None),
 ) -> StreamingResponse:
-    client_id = _client_id(x_client_id)
+    client_id = _client_id(x_client_id, request)
     store = _store(request)
     service = _validate_and_service(body, request)
 
@@ -319,7 +349,7 @@ def set_feedback(
 ) -> dict:
     if body.value not in (1, -1, None):
         raise HTTPException(status_code=400, detail="value must be 1, -1, or null")
-    ok = _store(request).set_feedback(_client_id(x_client_id), message_id, body.value)
+    ok = _store(request).set_feedback(_client_id(x_client_id, request), message_id, body.value)
     if not ok:
         raise HTTPException(status_code=404, detail="Message not found")
     return {"success": True}
@@ -344,14 +374,22 @@ def add_correction(
     if not body.question.strip() or not body.correction.strip():
         raise HTTPException(status_code=400, detail="question and correction are required")
     saved = _store(request).add_correction(
-        _client_id(x_client_id), body.question, body.correction
+        _client_id(x_client_id, request), body.question, body.correction
     )
     return {"success": True, "id": saved["id"]}
 
 
 @router.get("/api/feedback/summary")
-def feedback_summary(request: Request) -> dict:
-    # Aggregate metrics for tuning — which answers land, which don't.
+def feedback_summary(
+    request: Request,
+    user: AuthContext = Depends(require_admin),
+) -> dict:
+    """Aggregate metrics for tuning — which answers land, which don't.
+
+    Admin-only. It reports across *all* users, so an ordinary account reading it
+    would learn about activity that is not theirs; it was unauthenticated
+    before this phase, which a route test caught.
+    """
     return _store(request).feedback_summary()
 
 
@@ -370,7 +408,7 @@ def message_html(
     """
     from app.chatbot.answer_html import render_answer_html
 
-    client_id = _client_id(x_client_id)
+    client_id = _client_id(x_client_id, request)
     store = _store(request)
 
     answer = store.get_message_payload(client_id, message_id)
@@ -424,7 +462,7 @@ def generate_report(
     )
     from app.reports.service import DuplicateReportError
 
-    client_id = _client_id(x_client_id)
+    client_id = _client_id(x_client_id, request)
     store = _store(request)
     if not store.get_conversation(client_id, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -451,7 +489,7 @@ def generate_report(
 def list_conversations(
     request: Request, x_client_id: str | None = Header(default=None)
 ) -> list[Conversation]:
-    return _store(request).list_conversations(_client_id(x_client_id))
+    return _store(request).list_conversations(_client_id(x_client_id, request))
 
 
 class RenameRequest(BaseModel):
@@ -464,7 +502,7 @@ def list_messages(
     request: Request,
     x_client_id: str | None = Header(default=None),
 ) -> list[Message]:
-    client_id = _client_id(x_client_id)
+    client_id = _client_id(x_client_id, request)
     store = _store(request)
     if not store.get_conversation(client_id, conversation_id):
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -479,7 +517,7 @@ def rename_conversation(
     x_client_id: str | None = Header(default=None),
 ) -> dict:
     ok = _store(request).rename_conversation(
-        _client_id(x_client_id), conversation_id, body.title.strip() or "Untitled"
+        _client_id(x_client_id, request), conversation_id, body.title.strip() or "Untitled"
     )
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
@@ -492,7 +530,7 @@ def delete_conversation(
     request: Request,
     x_client_id: str | None = Header(default=None),
 ) -> dict:
-    ok = _store(request).delete_conversation(_client_id(x_client_id), conversation_id)
+    ok = _store(request).delete_conversation(_client_id(x_client_id, request), conversation_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}

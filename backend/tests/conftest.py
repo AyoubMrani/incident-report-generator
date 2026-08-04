@@ -36,11 +36,37 @@ def _isolated_chat_backend(request, monkeypatch):
     monkeypatch.setenv("CHAT_BACKEND", "sqlite")
 
 
+@pytest.fixture(autouse=True)
+def _default_auth_disabled(request, monkeypatch):
+    """Default every test to the unauthenticated (X-Client-Id) identity path.
+
+    The suite predates authentication and asserts on responses, not on tokens;
+    it passed only because AUTH_DISABLED happened to be absent from the
+    environment. Once auth is declared at the router it applies from import
+    time, so those tests started getting 401s — which is the routers behaving
+    correctly, not a test that needs rewriting.
+
+    Making it explicit here keeps the existing tests testing what they were
+    written to test. Coverage of the authenticated path lives in
+    `test_auth.py` and `test_auth_routes.py`, which opt out via the `auth`
+    marker.
+    """
+    if request.node.get_closest_marker("auth"):
+        return
+    monkeypatch.setenv("AUTH_DISABLED", "1")
+    monkeypatch.setenv("APP_ENV", "development")
+
+
 def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line(
         "markers",
         "postgres: test requires the real Postgres backend (not the SQLite "
         "isolation default applied by conftest)",
+    )
+    config.addinivalue_line(
+        "markers",
+        "auth: test drives the real authentication path (opts out of the "
+        "AUTH_DISABLED default applied by conftest)",
     )
 
 
