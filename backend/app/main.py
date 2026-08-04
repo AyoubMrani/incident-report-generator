@@ -147,10 +147,16 @@ async def lifespan(app: FastAPI):
     # running on it unknowingly means new chats land somewhere the rest of the
     # platform will not look for them.
     app.state.chat_backend = CHAT_BACKEND
+    app.state.chat_search = None
     if CHAT_BACKEND == "postgres" and app.state.db is not None:
         from app.db.chat_repository import ChatRepository
+        from app.db.search import ChatSearch
 
         app.state.chat_store = ChatRepository(app.state.db)
+        # Built without an embedder for now; the chatbot's model is attached
+        # below once it has loaded, so search never loads a second copy of it.
+        # Until then search runs keyword-only, which is the honest degradation.
+        app.state.chat_search = ChatSearch(app.state.db)
         log.info("chat store: postgres",
                  extra={"event": "chat_store_ready", "backend": "postgres"})
     else:
@@ -195,6 +201,14 @@ async def lifespan(app: FastAPI):
             )
             for warning in kb.warnings:
                 log.warning("indexing warning: %s", warning)
+
+            # Share the embedding model with chat search rather than loading a
+            # second copy: it is ~90 MB resident and the machine also has to
+            # hold Ollama's weights.
+            if app.state.chat_search is not None:
+                app.state.chat_search.embedder = kb.embed_model
+                log.info("chat search: hybrid (keyword + semantic)",
+                         extra={"event": "search_ready", "mode": "hybrid"})
         except Exception as exc:  # noqa: BLE001 — degrade, don't crash boot
             app.state.chatbot_error = f"{type(exc).__name__}: {exc}"
             # exc_info: without the traceback this failure is near-undiagnosable

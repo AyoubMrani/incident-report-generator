@@ -68,6 +68,10 @@ def pytest_configure(config: pytest.Config) -> None:
         "auth: test drives the real authentication path (opts out of the "
         "AUTH_DISABLED default applied by conftest)",
     )
+    config.addinivalue_line(
+        "markers",
+        "slow: test loads the embedding model; skipped when it is not cached",
+    )
 
 
 @pytest.fixture(scope="session")

@@ -21,7 +21,7 @@ from __future__ import annotations
 
 import json
 
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException, Query, Request
 from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 
@@ -480,6 +480,56 @@ def generate_report(
         raise HTTPException(status_code=409, detail=str(exc))
     # Return the saved filename + the report so the UI can open it in the viewer.
     return {"success": True, "report": report.model_dump(), **result}
+
+
+# ── search ────────────────────────────────────────────────────────────────────
+
+
+def _search(request: Request):
+    """The ChatSearch built in the lifespan, or None on the SQLite backend."""
+    return getattr(request.app.state, "chat_search", None)
+
+
+@router.get("/api/search")
+def search_chats(
+    request: Request,
+    q: str = Query(default="", max_length=500),
+    limit: int = Query(default=20, ge=1, le=100),
+    group: bool = Query(
+        default=True,
+        description="Collapse message hits to their conversations (sidebar view)",
+    ),
+    conversation_id: str | None = Query(default=None),
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    """Hybrid search across the caller's own chat history.
+
+    Keyword (tsvector/GIN) and semantic (pgvector) rankings fused with the same
+    RRF the knowledge-base retrieval uses — see `app/shared/fusion.py`. Scoped
+    to the caller: there is no cross-user search path.
+
+    Returns an empty result rather than 501 when the store has no search
+    backend, so the UI can show "no matches" instead of an error the user
+    cannot act on.
+    """
+    client_id = _client_id(x_client_id, request)
+    query = (q or "").strip()
+    searcher = _search(request)
+
+    if not query or searcher is None:
+        return {"query": query, "results": [], "grouped": group,
+                "available": searcher is not None}
+
+    if group:
+        results = searcher.search_conversations(client_id, query, limit=limit)
+    else:
+        results = [
+            hit.as_dict()
+            for hit in searcher.search(
+                client_id, query, limit=limit, conversation_id=conversation_id
+            )
+        ]
+    return {"query": query, "results": results, "grouped": group, "available": True}
 
 
 # ── conversation CRUD ─────────────────────────────────────────────────────────

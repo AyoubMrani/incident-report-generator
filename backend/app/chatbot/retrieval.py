@@ -2,6 +2,8 @@ import re
 
 import numpy as np
 
+from app.shared.fusion import RRF_K, order_by_score, rrf_fuse
+
 from .config import (
     LEXICAL_BOOST_MAX,
     RETRIEVAL_IMAGE_WEIGHT,
@@ -117,9 +119,10 @@ def _fuse_query_scores(
     return np.zeros(len(embeddings), dtype="float32")
 
 
-# Reciprocal Rank Fusion constant. 60 is the standard value from the RRF paper;
-# larger k = flatter contribution from rank position.
-_RRF_K = 60
+# Reciprocal Rank Fusion constant, re-exported for the tests that pin it.
+# The arithmetic lives in shared/fusion.py so the chat-history search fuses
+# with the same code rather than a copy that could drift from this one.
+_RRF_K = RRF_K
 
 
 def _rrf_fuse(
@@ -132,20 +135,15 @@ def _rrf_fuse(
     scale calibration between cosine similarity and BM25 (their magnitudes are
     unrelated), which makes the fusion robust and parameter-light. Returns a
     per-document fused score (index -> score).
+
+    The vector side ranks every document; the lexical side carries only what
+    BM25 actually matched (zero scores were dropped upstream), and RRF handles
+    the length mismatch by construction — an absent id just contributes nothing.
     """
-    fused: dict[int, float] = {}
-
-    # Vector ranking: order all docs by semantic score descending.
-    vec_order = sorted(range(len(semantic_scores)),
-                       key=lambda i: float(semantic_scores[i]), reverse=True)
-    for rank, idx in enumerate(vec_order):
-        fused[idx] = fused.get(idx, 0.0) + 1.0 / (_RRF_K + rank)
-
-    # Lexical ranking (only docs BM25 actually matched — zeros were dropped).
-    for rank, idx in enumerate(bm25_ranking or []):
-        fused[idx] = fused.get(idx, 0.0) + 1.0 / (_RRF_K + rank)
-
-    return fused
+    return rrf_fuse(
+        order_by_score(float(s) for s in semantic_scores),
+        list(bm25_ranking or []),
+    )
 
 
 def _best_chunk_per_source(
