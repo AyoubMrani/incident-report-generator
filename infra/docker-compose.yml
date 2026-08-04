@@ -22,17 +22,151 @@
 # same data on disk (the integration seam). Later: swap for a SharePoint adapter.
 
 services:
+  # ── Data layer ──────────────────────────────────────────────────────────────
+  # Postgres carries identity, chat and search in one schema. The pgvector image
+  # is stock Postgres 16 with the extension preinstalled, so `CREATE EXTENSION
+  # vector` succeeds without building anything.
+  postgres:
+    image: pgvector/pgvector:pg16
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-ntt}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ntt}
+      - POSTGRES_DB=${POSTGRES_DB:-ntt}
+    ports:
+      # Exposed so migration scripts and psql can run from the host. Defaults to
+      # 5433, not 5432: a developer machine usually already has a Postgres on the
+      # standard port, and a port clash at `up` is a confusing first experience.
+      - "${POSTGRES_PORT:-5433}:5432"
+    volumes:
+      - pg-data:/var/lib/postgresql/data
+      # Creates the separate Keycloak database on first init. Keycloak owning
+      # its own database keeps its schema churn away from application tables.
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      # -U/-d pinned: without them pg_isready checks the wrong role and reports
+      # healthy while the app's database is still being created.
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ntt} -d ${POSTGRES_DB:-ntt}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # Object storage for report blobs. S3-compatible, so boto3 talks to it exactly
+  # as it would to AWS — only the endpoint URL differs.
+  minio:
+    image: minio/minio:latest
+    command: server /data --console-address ":9001"
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+    ports:
+      - "${MINIO_PORT:-9000}:9000"      # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"  # web console
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+    restart: unless-stopped
+
+  # One-shot: create the bucket and turn on versioning before the backend runs.
+  # Versioning must be enabled on an empty bucket — retrofitting it later leaves
+  # every existing object at "null" version, which breaks point-in-time reads.
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - REPORTS_BUCKET=${REPORTS_BUCKET:-ntt-reports}
+    entrypoint: >
+      /bin/sh -c "
+      mc alias set local http://minio:9000 $$MINIO_ROOT_USER $$MINIO_ROOT_PASSWORD &&
+      mc mb --ignore-existing local/$$REPORTS_BUCKET &&
+      mc version enable local/$$REPORTS_BUCKET &&
+      echo 'minio bucket ready: '$$REPORTS_BUCKET
+      "
+    restart: "no"
+
+  # ── Identity ────────────────────────────────────────────────────────────────
+  # Keycloak in dev mode: HTTP, no hostname strictness. Correct for a local-only
+  # stack; a deployed one needs start --optimized with TLS and a real hostname.
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    command: ["start-dev", "--import-realm"]
+    environment:
+      - KC_BOOTSTRAP_ADMIN_USERNAME=${KEYCLOAK_ADMIN:-admin}
+      - KC_BOOTSTRAP_ADMIN_PASSWORD=${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      - KC_DB=postgres
+      - KC_DB_URL=jdbc:postgresql://postgres:5432/keycloak
+      - KC_DB_USERNAME=${POSTGRES_USER:-ntt}
+      - KC_DB_PASSWORD=${POSTGRES_PASSWORD:-ntt}
+      - KC_HEALTH_ENABLED=true
+      - KC_HTTP_ENABLED=true
+    ports:
+      - "${KEYCLOAK_PORT:-8080}:8080"
+    volumes:
+      # Realm, roles, client and seed users as code: a teammate gets the same
+      # identity setup from `up`, with no console clicking to reproduce.
+      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      # The image has no curl/wget; Keycloak 26 exposes health on the management
+      # port 9000 and ships a JRE, so this opens a socket with java itself.
+      test:
+        - CMD-SHELL
+        - >-
+          exec 3<>/dev/tcp/127.0.0.1/9000 &&
+          echo -e 'GET /health/ready HTTP/1.1\nHost: localhost\nConnection: close\n\n' >&3 &&
+          grep -q '200 OK' <&3
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    restart: unless-stopped
+
   backend:
     build:
       context: ..
       dockerfile: infra/Dockerfile.backend
     ports:
       - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
     environment:
       - REPORTS_DIR=/data/reports
       - HF_HOME=/data/hf-cache
-      - CHAT_DB=/data/chat/chat.db     # persistent conversation history (SQLite)
+      - CHAT_DB=/data/chat/chat.db     # legacy SQLite; read only by the migration
       - CHATBOT_PROVIDER=ollama
+
+      # ── Data layer ──────────────────────────────────────────────────────────
+      - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-ntt}:${POSTGRES_PASSWORD:-ntt}@postgres:5432/${POSTGRES_DB:-ntt}
+      - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
+      - MINIO_ENDPOINT=http://minio:9000
+      - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
+      - REPORTS_BUCKET=${REPORTS_BUCKET:-ntt-reports}
+
+      # ── Auth ────────────────────────────────────────────────────────────────
+      # AUTH_DISABLED=1 falls back to the X-Client-Id header, which is how the
+      # test suite and a bare `uvicorn` run work without Keycloak running.
+      - AUTH_DISABLED=${AUTH_DISABLED:-0}
+      - OIDC_ISSUER=${OIDC_ISSUER:-http://keycloak:8080/realms/ntt}
+      # Browsers get redirected to the host-visible URL, which is not the
+      # container-internal one above; tokens are validated against both.
+      - OIDC_PUBLIC_ISSUER=${OIDC_PUBLIC_ISSUER:-http://localhost:8080/realms/ntt}
+      - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-ntt-platform}
       # Default: reach the host's Ollama. The ollama client reads OLLAMA_HOST.
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       # To use the containerized Ollama instead (with-ollama profile), swap to:
@@ -91,5 +225,7 @@ services:
 
 volumes:
   hf-cache:       # persists the sentence-transformers embedding model
-  chat-db:        # persists chat conversation history (SQLite)
+  chat-db:        # legacy SQLite history, kept until the migration is verified
   ollama-models:  # persists pulled Ollama models (with-ollama profile)
+  pg-data:        # Postgres: users, conversations, messages, report catalog
+  minio-data:     # MinIO: report blobs (versioned)
