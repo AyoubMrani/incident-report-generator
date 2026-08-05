@@ -146,6 +146,9 @@ class Conversation(BaseModel):
     title: str
     created_at: float
     updated_at: float
+    # Absent on the SQLite store, which has no such column — defaulted rather
+    # than required so both backends satisfy this model.
+    pinned: bool = False
 
 
 class Message(BaseModel):
@@ -546,6 +549,10 @@ class RenameRequest(BaseModel):
     title: str
 
 
+class PinRequest(BaseModel):
+    pinned: bool
+
+
 @router.get("/api/conversations/{conversation_id}/messages", response_model=list[Message])
 def list_messages(
     conversation_id: str,
@@ -572,6 +579,32 @@ def rename_conversation(
     if not ok:
         raise HTTPException(status_code=404, detail="Conversation not found")
     return {"success": True}
+
+
+@router.post("/api/conversations/{conversation_id}/pin")
+def pin_conversation(
+    conversation_id: str,
+    body: PinRequest,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    """Pin a conversation to the top of the sidebar.
+
+    Returns 501 rather than a silent success on a store without pinning (the
+    SQLite fallback), so the UI can hide the control instead of offering one
+    that does nothing.
+    """
+    store = _store(request)
+    if not hasattr(store, "set_pinned"):
+        raise HTTPException(
+            status_code=501, detail="Pinning requires the Postgres chat store"
+        )
+    ok = store.set_pinned(
+        _client_id(x_client_id, request), conversation_id, body.pinned
+    )
+    if not ok:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    return {"success": True, "pinned": body.pinned}
 
 
 @router.delete("/api/conversations/{conversation_id}")

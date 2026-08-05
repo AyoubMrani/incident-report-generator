@@ -121,6 +121,7 @@ export interface Conversation {
   title: string;
   created_at: number;
   updated_at: number;
+  pinned?: boolean;
 }
 
 export interface StoredMessage {
@@ -231,6 +232,35 @@ export async function listMessages(conversationId: string): Promise<StoredMessag
 export async function renameConversation(id: string, title: string): Promise<void> {
   await json(await apiFetch(`/api/conversations/${id}`, {
     method: 'PATCH', body: JSON.stringify({ title }),
+  }));
+}
+
+// Pin a conversation to the top of the sidebar. Returns false when the backend
+// has no pinning support (the SQLite fallback answers 501), so the caller can
+// hide the control instead of surfacing an error the user cannot act on.
+export async function pinConversation(id: string, pinned: boolean): Promise<boolean> {
+  const res = await apiFetch(`/api/conversations/${id}/pin`, {
+    method: 'POST', body: JSON.stringify({ pinned }),
+  });
+  if (res.status === 501) return false;
+  await json(res);
+  return true;
+}
+
+// ── profile ───────────────────────────────────────────────────────────────────
+
+export interface Profile {
+  display_name: string;
+  avatar_url: string;
+}
+
+export async function getProfile(): Promise<Profile> {
+  return json(await apiFetch('/api/profile'));
+}
+
+export async function updateProfile(patch: Partial<Profile>): Promise<Profile> {
+  return json(await apiFetch('/api/profile', {
+    method: 'PATCH', body: JSON.stringify(patch),
   }));
 }
 

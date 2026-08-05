@@ -73,6 +73,11 @@ class User(Base):
     username: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     email: Mapped[str] = mapped_column(String(255), nullable=False, default="")
     display_name: Mapped[str] = mapped_column(String(255), nullable=False, default="")
+    # Profile picture as a data URI. Stored inline rather than in MinIO because
+    # avatars are small, always fetched with the user record, and a separate
+    # object would mean a second round trip on every page load. Size is capped
+    # at the API boundary — see routers/profile.py.
+    avatar_url: Mapped[str] = mapped_column(Text, nullable=False, default="")
     # Roles are authoritative in the token; this mirror is for admin listing and
     # for offline queries ("who are the analysts?") when no token is present.
     roles: Mapped[list[str]] = mapped_column(JSONB, nullable=False, default=list)

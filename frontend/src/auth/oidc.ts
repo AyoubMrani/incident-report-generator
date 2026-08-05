@@ -29,6 +29,7 @@ export interface UserInfo {
   username: string;
   email: string;
   display_name: string;
+  avatar_url?: string;
   roles: string[];
   authenticated: boolean;
   is_admin: boolean;

@@ -32,6 +32,8 @@ import {
 
 interface AuthState {
   user: UserInfo | null;
+  /** Replace the cached user after a profile edit. */
+  setUser: (user: UserInfo) => void;
   loading: boolean;
   error: string | null;
   authEnabled: boolean;
@@ -109,6 +111,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<AuthState>(
     () => ({
       user,
+      setUser,
       loading,
       error,
       authEnabled,
@@ -117,7 +120,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       canWrite: user?.can_write ?? false,
       isAdmin: user?.is_admin ?? false,
     }),
-    [user, loading, error, authEnabled, login, logout],
+    [user, setUser, loading, error, authEnabled, login, logout],
   );
 
   return <AuthCtx.Provider value={value}>{children}</AuthCtx.Provider>;

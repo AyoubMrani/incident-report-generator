@@ -1,13 +1,12 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
   Send, AlertTriangle, Loader2, Database, ImagePlus, X,
-  Plus, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
-  ThumbsUp, ThumbsDown, Sparkles, Copy, History, ChevronDown,
+  ExternalLink, Link2, FileText, ShieldAlert,
+  ThumbsUp, ThumbsDown, Sparkles, Copy,
 } from 'lucide-react';
 import {
-  streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
-  generateReport, getActiveConversationId, setActiveConversationId,
-  ChatAnswer, SourceLink, Conversation, StoredMessage, ResolutionStep,
+  streamChat, listMessages, sendFeedback, sendCorrection, generateReport,
+  ChatAnswer, SourceLink, StoredMessage, ResolutionStep,
 } from '../../api/chat';
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
@@ -571,16 +570,28 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
   );
 }
 
-export default function ChatbotModule() {
-  const [conversations, setConversations] = useState<Conversation[]>([]);
-  const [activeId, setActiveId] = useState<string | null>(getActiveConversationId());
+interface ChatbotModuleProps {
+  /** Conversation the sidebar has selected, or null for a fresh one. */
+  activeId: string | null;
+  onSelectConversation: (id: string | null) => void;
+  /** Ask the sidebar to reload its list (a turn may have created or retitled one). */
+  onConversationsChanged: () => void;
+}
+
+export default function ChatbotModule({
+  activeId,
+  onSelectConversation,
+  onConversationsChanged,
+}: ChatbotModuleProps) {
+  // Conversation list and selection now live in App, because the sidebar
+  // renders the list while this module renders the transcript — two consumers
+  // of one piece of state, so it belongs to their common parent.
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState('');
   const [image, setImage] = useState<{ b64: string; name: string } | null>(null);
   const [loading, setLoading] = useState(false);
   const [openReport, setOpenReport] = useState<string | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const toast = useToast();
@@ -603,16 +614,11 @@ export default function ChatbotModule() {
     }
   }
 
-  // Load the conversation list + restore the active thread on mount.
-  useEffect(() => { refreshConversations(); }, []);
+  // Replay the selected thread whenever the sidebar changes it.
   useEffect(() => { if (activeId) restoreMessages(activeId); else setMessages([]); }, [activeId]);
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, loading]);
-
-  async function refreshConversations() {
-    try { setConversations(await listConversations()); } catch { /* store may be empty */ }
-  }
 
   async function restoreMessages(id: string) {
     try {
@@ -620,20 +626,11 @@ export default function ChatbotModule() {
       setMessages(stored.map(fromStored).filter(Boolean) as Message[]);
     } catch {
       // Conversation vanished (deleted elsewhere) — reset to a clean slate.
-      setActiveId(null); setActiveConversationId(null);
+      onSelectConversation(null);
     }
   }
 
-  function selectConversation(id: string | null) {
-    setActiveId(id);
-    setActiveConversationId(id);
-  }
-
-  async function removeConversation(id: string) {
-    await deleteConversation(id);
-    if (id === activeId) selectConversation(null);
-    refreshConversations();
-  }
+  const refreshConversations = onConversationsChanged;
 
   function onPickImage(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -680,7 +677,7 @@ export default function ChatbotModule() {
     try {
       await streamChat(query, { imageB64: sentImage?.b64 ?? null, conversationId: activeId, links }, {
         onMeta: (cid) => {
-          if (!activeId) { setActiveId(cid); setActiveConversationId(cid); }
+          if (!activeId) { onSelectConversation(cid); refreshConversations(); }
         },
         // Greeting/smalltalk arrives whole; incident answers stream as tokens.
         onChat: (text) => putStreaming({ role: 'chat', text }),
@@ -712,84 +709,32 @@ export default function ChatbotModule() {
   };
 
   const hasMessages = messages.length > 0;
+  // Derived from the transcript rather than the (now lifted) conversation list:
+  // the first user turn is what the server titles a conversation from anyway.
+  const firstUser = messages.find((m) => m.role === 'user') as UserMessage | undefined;
+  const activeTitle = !activeId
+    ? 'New conversation'
+    : (firstUser?.text?.trim().slice(0, 80) || 'Conversation');
 
   return (
-    // One column, no second rail. The app shell already owns a sidebar;
-    // a history rail beside it consumed ~480px before any content and left
-    // both looking empty. Conversation history now lives in a header
-    // dropdown, so the transcript gets the full width.
+    // One column. The sidebar owns navigation, history and "New chat"; this
+    // header carries only what is specific to the open conversation.
     <div className="flex h-full flex-col">
-      {/* ── Header: history + per-conversation actions ───────────────────── */}
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
-        <div className="relative">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
+        <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-slate-700 dark:text-slate-200">
+          {activeTitle}
+        </h1>
+        {activeId && messages.some((m) => m.role === 'assistant') && (
           <button
-            onClick={() => setHistoryOpen((v) => !v)}
-            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
-            aria-expanded={historyOpen}
+            onClick={generateReportFromChat}
+            disabled={reportBusy}
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
+            title="Create an incident report from this conversation"
           >
-            <History className="w-4 h-4 text-slate-400" />
-            <span className="max-w-[280px] truncate">
-              {conversations.find((c) => c.id === activeId)?.title ?? 'New conversation'}
-            </span>
-            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            <FileText className="w-4 h-4" />
+            {reportBusy ? 'Generating…' : 'Save as report'}
           </button>
-
-          {historyOpen && (
-            <>
-              {/* Click-away catcher, so the menu closes like a native one. */}
-              <div className="fixed inset-0 z-10" onClick={() => setHistoryOpen(false)} />
-              <div className="absolute left-0 top-full z-20 mt-1 max-h-[60vh] w-80 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
-                {conversations.length === 0 ? (
-                  <p className="px-3 py-6 text-center text-xs text-slate-400">
-                    No conversations yet.
-                  </p>
-                ) : (
-                  conversations.map((c) => (
-                    <div
-                      key={c.id}
-                      onClick={() => { selectConversation(c.id); setHistoryOpen(false); }}
-                      className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-[13px] transition ${
-                        c.id === activeId
-                          ? 'bg-slate-100 font-medium text-slate-900 dark:bg-slate-800 dark:text-slate-100'
-                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/60'
-                      }`}
-                    >
-                      <span className="flex-1 truncate">{c.title}</span>
-                      <button
-                        onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
-                        className="shrink-0 text-slate-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
-                        title="Delete conversation"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="ml-auto flex items-center gap-1">
-          {activeId && messages.some((m) => m.role === 'assistant') && (
-            <button
-              onClick={generateReportFromChat}
-              disabled={reportBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
-              title="Create an incident report from this conversation"
-            >
-              <FileText className="w-4 h-4" />
-              {reportBusy ? 'Generating…' : 'Save as report'}
-            </button>
-          )}
-          <button
-            onClick={() => selectConversation(null)}
-            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-white transition hover:brightness-110"
-            style={{ background: NTT_BLUE }}
-          >
-            <Plus className="w-4 h-4" /> New chat
-          </button>
-        </div>
+        )}
       </header>
 
       {/* ── Transcript + composer ────────────────────────────────────────── */}

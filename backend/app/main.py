@@ -28,7 +28,7 @@ from app.auth.dependencies import AuthContext
 from app.auth.dependencies import current_user as _current_user
 from app.reports.service import ReportService
 from app.shared.logging import configure_logging, get_logger
-from app.routers import chat, reports
+from app.routers import chat, profile, reports
 
 # Repo layout: backend/app/main.py -> repo root is three parents up.
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -261,6 +261,7 @@ if _cors_origins:
 
 app.include_router(reports.router)
 app.include_router(chat.router)
+app.include_router(profile.router)
 
 
 @app.get("/api/health")
@@ -311,11 +312,35 @@ def me(user: "AuthContext" = Depends(_current_user)) -> dict:
     The frontend drives role-aware UI from this rather than decoding the token
     itself, so permission rules live in one place — the backend.
     """
+    # Stored profile overrides the token's claims: a display name or avatar the
+    # user set here is theirs to change, and Keycloak does not know about it.
+    display_name, avatar_url = user.display_name, ""
+    db = getattr(app.state, "db", None)
+    if db is not None:
+        try:
+            from sqlalchemy import select
+
+            from app.db.models import User as UserRow
+
+            with db.session() as s:
+                row = s.execute(
+                    select(UserRow.display_name, UserRow.avatar_url).where(
+                        UserRow.subject == user.id
+                    )
+                ).one_or_none()
+            if row:
+                display_name = row.display_name or display_name
+                avatar_url = row.avatar_url or ""
+        except Exception:
+            # Identity still works without a profile; this is decoration.
+            pass
+
     return {
         "id": user.id,
         "username": user.username,
         "email": user.email,
-        "display_name": user.display_name,
+        "display_name": display_name,
+        "avatar_url": avatar_url,
         "roles": list(user.roles),
         "authenticated": user.authenticated,
         "is_admin": user.is_admin,
