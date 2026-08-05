@@ -9,12 +9,14 @@
 //   * a fade-out rather than an unmount, so the app appears to arrive rather
 //     than replace it.
 //
-// The arcs draw themselves with stroke-dashoffset, which the compositor
-// animates without layout work — smooth even while the main thread is busy
-// parsing the bundle.
+// The mark is the real icon asset (see Brand.tsx) inside an animated ring —
+// a pulse and a spinning arc around it — rather than being redrawn as SVG
+// paths. An earlier version hand-traced the mark and got the shape wrong
+// (concentric rings instead of the circle-and-teardrop); using the actual
+// asset here removes that failure mode entirely.
 
 import React, { useEffect, useState } from 'react';
-import { NTT_BLUE } from './Brand';
+import { NTT_BLUE, NttLogo, NttMark } from './Brand';
 
 const MIN_VISIBLE_MS = 900;
 
@@ -54,36 +56,34 @@ export default function BootScreen({ done }: { done: boolean }) {
         style={{ background: NTT_BLUE }}
       />
 
-      {/* Same geometry as NttMark, animated. Each ring counter-rotates while
-          its dash pattern draws in, so the mark assembles rather than merely
-          appearing. */}
-      <svg width="96" height="96" viewBox="0 0 48 48" fill="none" className="relative">
-        <circle
-          cx="24" cy="24" r="20"
-          stroke={NTT_BLUE} strokeWidth="3.5" strokeLinecap="round"
-          pathLength="100" strokeDasharray="78 22"
-          className="ntt-arc-outer"
-        />
-        <circle
-          cx="24" cy="24" r="11.5"
-          stroke={NTT_BLUE} strokeWidth="3.5" strokeLinecap="round"
-          pathLength="100" strokeDasharray="62 38" opacity="0.7"
-          className="ntt-arc-inner"
-        />
-        <circle cx="24" cy="24" r="3.4" fill={NTT_BLUE} className="ntt-core" />
-      </svg>
+      {/* The real icon, pulsing, with a spinning arc orbiting it — motion
+          supplied by the container since the asset itself is a static PNG. */}
+      <div className="relative flex h-24 w-24 items-center justify-center">
+        <svg
+          viewBox="0 0 48 48"
+          fill="none"
+          className="ntt-arc-outer absolute inset-0 h-full w-full"
+        >
+          <circle
+            cx="24" cy="24" r="21"
+            stroke={NTT_BLUE} strokeWidth="2" strokeLinecap="round"
+            pathLength="100" strokeDasharray="30 70" opacity="0.55"
+          />
+        </svg>
+        <div className="ntt-core">
+          <NttMark size={56} />
+        </div>
+      </div>
 
       <div className="relative mt-7 text-center">
-        <div className="text-[15px] font-semibold tracking-[0.2em] text-slate-800 dark:text-slate-100">
-          <span style={{ color: NTT_BLUE }}>NTT</span> DATA
-        </div>
-        <div className="mt-1.5 text-xs tracking-wide text-slate-400 dark:text-slate-500">
+        <NttLogo height={18} />
+        <div className="mt-2 text-xs tracking-wide text-app-muted">
           Incident Platform
         </div>
       </div>
 
       {/* Indeterminate bar: honest about not knowing how long this takes. */}
-      <div className="relative mt-8 h-[3px] w-40 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800">
+      <div className="bg-app-hover relative mt-8 h-[3px] w-40 overflow-hidden rounded-full">
         <div className="ntt-progress h-full w-1/3 rounded-full" style={{ background: NTT_BLUE }} />
       </div>
     </div>

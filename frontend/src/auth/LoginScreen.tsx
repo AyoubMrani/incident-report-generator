@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { AlertCircle, ArrowRight, Database, Lock, Search } from 'lucide-react';
-import { NTT_BLUE, NttMark } from '../ui/Brand';
+import { NTT_BLUE, NttLogo } from '../ui/Brand';
 
 interface Props {
   onLogin: () => void;
@@ -52,11 +52,8 @@ export default function LoginScreen({ onLogin, error }: Props) {
           style={{ background: NTT_BLUE }}
         />
 
-        <div className="relative flex items-center gap-3">
-          <NttMark size={34} />
-          <span className="text-[15px] font-semibold tracking-tight text-app">
-            <span style={{ color: NTT_BLUE }}>NTT</span> DATA
-          </span>
+        <div className="relative">
+          <NttLogo height={22} />
         </div>
 
         <div className="relative max-w-md">
@@ -101,11 +98,8 @@ export default function LoginScreen({ onLogin, error }: Props) {
       <div className="flex flex-1 items-center justify-center px-6 py-12">
         <div className="w-full max-w-[360px]">
           {/* Brand repeats here only where the left panel is hidden. */}
-          <div className="mb-10 flex items-center gap-2.5 lg:hidden">
-            <NttMark size={30} />
-            <span className="text-sm font-semibold tracking-tight text-app">
-              <span style={{ color: NTT_BLUE }}>NTT</span> DATA
-            </span>
+          <div className="mb-10 lg:hidden">
+            <NttLogo height={20} />
           </div>
 
           <h2 className="text-[26px] font-semibold tracking-tight text-slate-900 dark:text-slate-50">
