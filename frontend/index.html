@@ -3,7 +3,15 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>NTT Incident Platform</title>
+    <title>NTT DATA · Incident Platform</title>
+    <meta name="description" content="Incident assistant and report generator, grounded in your own incident reports." />
+    <meta name="theme-color" content="#0072C6" />
+    <!-- Favicon inlined as a data URI: no extra request, and nothing to 404
+         when the app is served from a subpath or offline. -->
+    <link
+      rel="icon"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='20' fill='none' stroke='%230072C6' stroke-width='4' stroke-linecap='round' pathLength='100' stroke-dasharray='78 22' stroke-dashoffset='14'/%3E%3Ccircle cx='24' cy='24' r='11.5' fill='none' stroke='%230072C6' stroke-width='4' stroke-linecap='round' pathLength='100' stroke-dasharray='62 38' stroke-dashoffset='64' opacity='.7'/%3E%3Ccircle cx='24' cy='24' r='3.6' fill='%230072C6'/%3E%3C/svg%3E"
+    />
     <script>
       // Apply the theme before first paint. Running this in React instead
       // would render the light theme for one frame and flash on every load.
@@ -22,6 +30,12 @@
     </script>
   </head>
   <body>
+    <!-- Painted before the bundle parses, so the first frame is already the
+         right colour. Without this the boot screen flashes white in dark mode. -->
+    <style>
+      html { background: #ffffff; }
+      html.dark { background: #0a0f1a; }
+    </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

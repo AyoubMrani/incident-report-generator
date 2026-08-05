@@ -7,6 +7,7 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { LogOut, Moon, Sun, ShieldCheck, Eye, PenLine } from 'lucide-react';
 import type { UserInfo } from '../auth/oidc';
+import { NTT_BLUE } from './Brand';
 
 interface Props {
   user: UserInfo;
@@ -14,6 +15,8 @@ interface Props {
   isDark: boolean;
   onToggleTheme: () => void;
   authEnabled: boolean;
+  /** Sidebar is collapsed — show the avatar only. */
+  collapsed?: boolean;
 }
 
 function primaryRole(user: UserInfo): { label: string; icon: React.ReactNode } {
@@ -37,6 +40,7 @@ export default function UserMenu({
   isDark,
   onToggleTheme,
   authEnabled,
+  collapsed = false,
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -63,20 +67,28 @@ export default function UserMenu({
         onClick={() => setOpen((v) => !v)}
         aria-haspopup="menu"
         aria-expanded={open}
-        className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800"
+        title={collapsed ? `${user.display_name || user.username} — ${role.label}` : undefined}
+        className={`flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left transition hover:bg-slate-100 dark:hover:bg-slate-800 ${
+          collapsed ? 'justify-center px-0' : ''
+        }`}
       >
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-slate-900 text-xs font-semibold text-white dark:bg-slate-100 dark:text-slate-900">
+        <span
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold text-white"
+          style={{ background: NTT_BLUE }}
+        >
           {initials(user)}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className="block truncate text-sm font-medium text-slate-900 dark:text-slate-100">
-            {user.display_name || user.username}
+        {!collapsed && (
+          <span className="min-w-0 flex-1">
+            <span className="block truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">
+              {user.display_name || user.username}
+            </span>
+            <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+              {role.icon}
+              {role.label}
+            </span>
           </span>
-          <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
-            {role.icon}
-            {role.label}
-          </span>
-        </span>
+        )}
       </button>
 
       {open && (

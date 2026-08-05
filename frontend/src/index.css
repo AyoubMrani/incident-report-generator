@@ -36,6 +36,55 @@
   --color-accent-content: oklch(100% 0 0);
 }
 
+/* ── Boot screen ─────────────────────────────────────────────────────────────
+   The arcs draw themselves via stroke-dashoffset and the core pulses. Both are
+   compositor-friendly properties, so the animation stays smooth even while the
+   main thread is busy parsing the bundle — which is exactly when this is on
+   screen. */
+@keyframes ntt-spin     { to   { transform: rotate(360deg); } }
+@keyframes ntt-spin-rev { to   { transform: rotate(-360deg); } }
+@keyframes ntt-pulse    { 0%, 100% { opacity: 1; transform: scale(1); }
+                          50%      { opacity: 0.5; transform: scale(0.8); } }
+@keyframes ntt-slide    { 0%   { transform: translateX(-110%); }
+                          100% { transform: translateX(410%); } }
+/* The rings fade up as they start turning, so the mark assembles rather than
+   snapping into place on the first frame. */
+@keyframes ntt-appear   { from { opacity: 0; transform: scale(0.85) rotate(-40deg); }
+                          to   { opacity: 1; transform: scale(1) rotate(0); } }
+
+.ntt-arc-outer {
+  transform-origin: center;
+  animation:
+    ntt-appear 0.7s cubic-bezier(0.16, 1, 0.3, 1) both,
+    ntt-spin 6s linear 0.7s infinite;
+}
+.ntt-arc-inner {
+  transform-origin: center;
+  animation:
+    ntt-appear 0.7s cubic-bezier(0.16, 1, 0.3, 1) 0.12s both,
+    ntt-spin-rev 4.5s linear 0.82s infinite;
+}
+.ntt-core     { transform-origin: center; animation: ntt-pulse 1.8s ease-in-out infinite; }
+.ntt-progress { animation: ntt-slide 1.4s ease-in-out infinite; }
+
+/* Respect the OS setting: motion here is decorative, so it is the first thing
+   to drop for anyone who asked for less of it. */
+@media (prefers-reduced-motion: reduce) {
+  .ntt-arc-outer, .ntt-arc-inner, .ntt-core, .ntt-progress {
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Message entrance — subtle, and skipped under reduced motion. */
+@keyframes ntt-rise {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: none; }
+}
+.ntt-rise { animation: ntt-rise 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+@media (prefers-reduced-motion: reduce) { .ntt-rise { animation: none; } }
+
 /* Search snippets arrive as HTML with <mark> tags from Postgres ts_headline.
    Styled here because the markup is generated server-side and cannot carry
    utility classes. */

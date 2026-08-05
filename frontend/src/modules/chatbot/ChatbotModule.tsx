@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Send, AlertTriangle, Loader2, Database, ImagePlus, X,
   Plus, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
-  ThumbsUp, ThumbsDown, Sparkles,
+  ThumbsUp, ThumbsDown, Sparkles, Copy, History, ChevronDown,
 } from 'lucide-react';
 import {
   streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
@@ -11,6 +11,8 @@ import {
 } from '../../api/chat';
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
+import { useCopy, useToast } from '../../ui/Toast';
+import { NTT_BLUE, NttMark } from '../../ui/Brand';
 
 // Empty-state prompts. Phrased as real incident symptoms rather than "Tell me
 // about X", so clicking one produces a question the retrieval can actually
@@ -88,6 +90,46 @@ function isDestructiveSql(sql: string): boolean {
   // UPDATE without a WHERE clause = full-table write.
   if (/\bUPDATE\b/.test(s) && !/\bWHERE\b/.test(s)) return true;
   return false;
+}
+
+// Flatten a structured answer into plain text for the clipboard.
+//
+// Reproduces the on-screen order, so what is pasted into a ticket matches what
+// was read. Empty and filler sections are dropped for the same reason they are
+// not rendered.
+function answerToText(a: ChatAnswer): string {
+  const parts: string[] = [];
+  const add = (title: string, body?: string | null) => {
+    if (body && !isFiller(body)) parts.push(`${title}\n${body.trim()}`);
+  };
+
+  parts.push(`${a.incident_type} (${a.confidence}% confidence)`);
+  add('Problem Summary', a.answer);
+  add('Root Cause', a.root_cause);
+  add('Investigation', a.investigation);
+
+  if (a.steps?.length) {
+    const steps = a.steps
+      .map((s, i) => {
+        const lines = [`${i + 1}. ${s.title}`, s.action?.trim()].filter(Boolean);
+        if (s.artifact?.content) lines.push(`\n${s.artifact.content.trim()}`);
+        if (s.validation) lines.push(`Validate: ${s.validation}`);
+        return lines.join('\n');
+      })
+      .join('\n\n');
+    parts.push(`Resolution Steps\n${steps}`);
+  }
+
+  add('Validation', a.validation);
+  add('Additional Notes', a.additional_notes);
+
+  const sources = (a.retrieval || [])
+    .map((s) => s.incident_id || s.title || s.filename)
+    .filter(Boolean);
+  if (sources.length) {
+    parts.push(`Sources\n${Array.from(new Set(sources)).join(', ')}`);
+  }
+  return parts.join('\n\n');
 }
 
 // A section carrying no real information — "not documented", "not described",
@@ -355,6 +397,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
   onCorrect?: (correction: string) => Promise<void>;
   messageId?: string;
 }) {
+  const copy = useCopy();
   const badge = confidenceBadge(answer.confidence);
   const linksInReasoning = extractLinks(answer.raw || '');
   // Steps render their own artifact; only show the rest in a trailing block.
@@ -499,7 +542,14 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         </div>
       )}
 
-      <div className="flex items-center gap-3 pt-1">
+      <div className="flex items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+        <button
+          onClick={() => copy(answerToText(answer), 'Answer copied')}
+          className="inline-flex items-center gap-1 text-[11px] text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+          title="Copy this answer as text"
+        >
+          <Copy className="w-3 h-3" /> Copy
+        </button>
         {onRate && onCorrect && (
           <FeedbackButtons value={feedback} onRate={onRate} onCorrect={onCorrect} />
         )}
@@ -510,10 +560,10 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
             href={`/api/messages/${messageId}/html`}
             target="_blank"
             rel="noopener noreferrer"
-            className="inline-flex items-center gap-1 text-[11px] text-blue-600 hover:underline whitespace-nowrap"
+            className="ml-auto inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
             title="Open this answer with the report's screenshots"
           >
-            <ExternalLink className="w-3 h-3" /> View with screenshots
+            <ExternalLink className="w-3 h-3" /> Open with screenshots
           </a>
         )}
       </div>
@@ -530,8 +580,10 @@ export default function ChatbotModule() {
   const [loading, setLoading] = useState(false);
   const [openReport, setOpenReport] = useState<string | null>(null);
   const [reportBusy, setReportBusy] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const toast = useToast();
 
   // Turn the current diagnosed conversation into a saved report, then open it.
   async function generateReportFromChat() {
@@ -539,8 +591,12 @@ export default function ChatbotModule() {
     setReportBusy(true);
     try {
       const res = await generateReport(activeId);
+      toast.success('Report saved — opening it now.');
       setOpenReport(res.jsonFilename);          // open it in the in-app viewer
     } catch (err) {
+      // Toast *and* an inline error: the toast acknowledges the click, the
+      // transcript entry survives after it fades.
+      toast.error((err as Error).message);
       setMessages((m) => [...m, { role: 'error', text: (err as Error).message }]);
     } finally {
       setReportBusy(false);
@@ -658,88 +714,113 @@ export default function ChatbotModule() {
   const hasMessages = messages.length > 0;
 
   return (
-    // Full-bleed: App gives this module the bare <main>, so it owns the
-    // viewport height and its own padding — that is what lets the transcript
-    // scroll underneath a composer pinned to the bottom.
-    <div className="flex h-screen">
-      {/* ── History rail ─────────────────────────────────────────────────── */}
-      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-slate-200/80 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
-        <div className="p-3">
+    // One column, no second rail. The app shell already owns a sidebar;
+    // a history rail beside it consumed ~480px before any content and left
+    // both looking empty. Conversation history now lives in a header
+    // dropdown, so the transcript gets the full width.
+    <div className="flex h-full flex-col">
+      {/* ── Header: history + per-conversation actions ───────────────────── */}
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-4 dark:border-slate-800">
+        <div className="relative">
+          <button
+            onClick={() => setHistoryOpen((v) => !v)}
+            className="flex items-center gap-2 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-700 transition hover:bg-slate-100 dark:text-slate-200 dark:hover:bg-slate-800"
+            aria-expanded={historyOpen}
+          >
+            <History className="w-4 h-4 text-slate-400" />
+            <span className="max-w-[280px] truncate">
+              {conversations.find((c) => c.id === activeId)?.title ?? 'New conversation'}
+            </span>
+            <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+          </button>
+
+          {historyOpen && (
+            <>
+              {/* Click-away catcher, so the menu closes like a native one. */}
+              <div className="fixed inset-0 z-10" onClick={() => setHistoryOpen(false)} />
+              <div className="absolute left-0 top-full z-20 mt-1 max-h-[60vh] w-80 overflow-y-auto rounded-xl border border-slate-200 bg-white p-1.5 shadow-xl dark:border-slate-700 dark:bg-slate-900">
+                {conversations.length === 0 ? (
+                  <p className="px-3 py-6 text-center text-xs text-slate-400">
+                    No conversations yet.
+                  </p>
+                ) : (
+                  conversations.map((c) => (
+                    <div
+                      key={c.id}
+                      onClick={() => { selectConversation(c.id); setHistoryOpen(false); }}
+                      className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-[13px] transition ${
+                        c.id === activeId
+                          ? 'bg-slate-100 font-medium text-slate-900 dark:bg-slate-800 dark:text-slate-100'
+                          : 'text-slate-600 hover:bg-slate-50 dark:text-slate-400 dark:hover:bg-slate-800/60'
+                      }`}
+                    >
+                      <span className="flex-1 truncate">{c.title}</span>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
+                        className="shrink-0 text-slate-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
+                        title="Delete conversation"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="ml-auto flex items-center gap-1">
+          {activeId && messages.some((m) => m.role === 'assistant') && (
+            <button
+              onClick={generateReportFromChat}
+              disabled={reportBusy}
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
+              title="Create an incident report from this conversation"
+            >
+              <FileText className="w-4 h-4" />
+              {reportBusy ? 'Generating…' : 'Save as report'}
+            </button>
+          )}
           <button
             onClick={() => selectConversation(null)}
-            className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750"
+            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium text-white transition hover:brightness-110"
+            style={{ background: NTT_BLUE }}
           >
             <Plus className="w-4 h-4" /> New chat
           </button>
         </div>
-
-        <div className="flex-1 overflow-y-auto px-2 pb-3">
-          {conversations.length === 0 ? (
-            <p className="px-3 py-6 text-xs text-slate-400">No conversations yet.</p>
-          ) : (
-            <>
-              <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-slate-400">
-                Recent
-              </p>
-              {conversations.map((c) => (
-                <div
-                  key={c.id}
-                  onClick={() => selectConversation(c.id)}
-                  className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
-                    c.id === activeId
-                      ? 'bg-slate-200/70 text-slate-900 dark:bg-slate-800 dark:text-slate-100'
-                      : 'text-slate-600 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:bg-slate-800/60'
-                  }`}
-                >
-                  <span className="flex-1 truncate">{c.title}</span>
-                  <button
-                    onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
-                    className="shrink-0 text-slate-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
-                    title="Delete conversation"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              ))}
-            </>
-          )}
-        </div>
-      </aside>
+      </header>
 
       {/* ── Transcript + composer ────────────────────────────────────────── */}
-      <div className="relative flex min-w-0 flex-1 flex-col">
-        {activeId && messages.some((m) => m.role === 'assistant') && (
-          <div className="flex justify-end border-b border-slate-200/70 px-4 py-2 dark:border-slate-800">
-            <button
-              onClick={generateReportFromChat}
-              disabled={reportBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
-              title="Create an incident report from this conversation"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              {reportBusy ? 'Generating…' : 'Generate report'}
-            </button>
-          </div>
-        )}
+      <div className="relative flex min-h-0 flex-1 flex-col">
 
         <div ref={scrollRef} className="flex-1 overflow-y-auto">
           {!hasMessages ? (
-            // Empty state centred in the column, not floating at the top.
             <div className="flex h-full items-center justify-center px-4">
-              <div className="w-full max-w-2xl text-center">
-                <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
+              <div className="w-full max-w-2xl">
+                <div className="mb-7 flex justify-center">
+                  <NttMark size={44} />
+                </div>
+                <h1 className="text-center text-[27px] font-semibold tracking-tight text-slate-900 dark:text-slate-50">
                   What incident are you looking at?
                 </h1>
-                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                <p className="mt-2.5 text-center text-[15px] text-slate-500 dark:text-slate-400">
                   Describe the symptoms, paste an error, or attach a screenshot.
                 </p>
-                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                <div className="mt-8 grid gap-2 sm:grid-cols-2">
                   {SUGGESTIONS.map((s) => (
                     <button
                       key={s}
                       onClick={() => setInput(s)}
-                      className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                      className="group rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-[13px] leading-relaxed text-slate-600 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300 dark:hover:border-slate-600"
                     >
+                      <span
+                        className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider opacity-60 transition group-hover:opacity-100"
+                        style={{ color: NTT_BLUE }}
+                      >
+                        Try
+                      </span>
                       {s}
                     </button>
                   ))}
@@ -755,7 +836,7 @@ export default function ChatbotModule() {
                 // chat log squeezed into a box.
                 if (msg.role === 'user') {
                   return (
-                    <div key={i} className="mb-6 flex justify-end">
+                    <div key={i} className="ntt-rise mb-6 flex justify-end">
                       <div className="max-w-[80%] rounded-2xl bg-slate-100 px-4 py-2.5 text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                         {msg.hasImage && (
                           <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
@@ -818,7 +899,7 @@ export default function ChatbotModule() {
                   | UserMessage | undefined;
                 const question = prevUser?.text || msg.answer.answer || '';
                 return (
-                  <div key={i} className="mb-8">
+                  <div key={i} className="ntt-rise mb-8">
                     <AssistantCard
                       answer={msg.answer}
                       onOpen={setOpenReport}
@@ -841,25 +922,25 @@ export default function ChatbotModule() {
         </div>
 
         {/* Composer: pinned, on a fading backdrop so text scrolls out under it. */}
-        <div className="shrink-0 bg-gradient-to-t from-white via-white to-transparent px-4 pb-4 pt-2 dark:from-slate-950 dark:via-slate-950">
+        <div className="shrink-0 bg-gradient-to-t from-white via-white to-transparent px-4 pb-4 pt-2 dark:from-[#0a0f1a] dark:via-[#0a0f1a]">
           <div className="mx-auto w-full max-w-3xl">
             {image && (
               <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <ImagePlus className="w-3.5 h-3.5" /> {image.name}
-                <button onClick={() => setImage(null)} className="text-slate-400 hover:text-red-500">
+                <button onClick={() => setImage(null)} className="text-slate-400 transition hover:text-red-500">
                   <X className="w-3.5 h-3.5" />
                 </button>
               </div>
             )}
 
-            <div className="flex items-end gap-2 rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-slate-300 focus-within:shadow-md dark:border-slate-700 dark:bg-slate-800">
+            <div className="flex items-end gap-1.5 rounded-[26px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm transition focus-within:border-slate-300 focus-within:shadow-md dark:border-slate-700 dark:bg-slate-800/80">
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
               <button
                 onClick={() => fileRef.current?.click()}
-                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700 dark:hover:text-slate-300"
                 title="Attach a screenshot"
               >
-                <ImagePlus className="w-5 h-5" />
+                <ImagePlus className="w-[18px] h-[18px]" />
               </button>
               <textarea
                 value={input}
@@ -867,20 +948,26 @@ export default function ChatbotModule() {
                 onKeyDown={onKeyDown}
                 rows={1}
                 placeholder="Ask about an incident…"
-                className="max-h-48 flex-1 resize-none bg-transparent py-2 text-[15px] text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+                className="max-h-48 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
               />
               <button
                 onClick={submit}
                 disabled={loading || (!input.trim() && !image)}
-                className="rounded-full bg-slate-900 p-2 text-white transition hover:bg-slate-700 disabled:opacity-30 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                className="rounded-full p-2 text-white transition enabled:hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-25"
+                style={{ background: NTT_BLUE }}
                 aria-label="Send"
               >
-                <Send className="w-4 h-4" />
+                {loading ? (
+                  <Loader2 className="w-[18px] h-[18px] animate-spin" />
+                ) : (
+                  <Send className="w-[18px] h-[18px]" />
+                )}
               </button>
             </div>
 
-            <p className="mt-2 text-center text-[11px] text-slate-400">
-              Answers are grounded in your incident reports — verify before acting.
+            <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
+              Grounded in your incident reports · <kbd className="font-sans">Enter</kbd> to send ·{' '}
+              <kbd className="font-sans">Shift+Enter</kbd> for a new line
             </p>
           </div>
         </div>
