@@ -18,7 +18,8 @@ WORKDIR /app
 COPY backend/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir -r requirements.txt
 
-# App code.
+# App code, including alembic/ and alembic.ini — the entrypoint runs
+# `alembic upgrade head` before starting, so the migration chain must ship.
 COPY backend/ ./backend/
 
 COPY --from=frontend /frontend/dist ./frontend/dist

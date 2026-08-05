@@ -144,6 +144,12 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
+      # Not waited on: the backend fetches JWKS lazily and fails tokens closed
+      # (401) until Keycloak answers, so blocking startup on it would trade a
+      # brief window of failed logins for a much longer one of no service at
+      # all — Keycloak takes ~30s to become ready.
+      keycloak:
+        condition: service_started
     environment:
       - REPORTS_DIR=/data/reports
       - HF_HOME=/data/hf-cache
@@ -161,12 +167,17 @@ services:
       # ── Auth ────────────────────────────────────────────────────────────────
       # AUTH_DISABLED=1 falls back to the X-Client-Id header, which is how the
       # test suite and a bare `uvicorn` run work without Keycloak running.
+      # Refused at boot when APP_ENV is production or staging.
+      - APP_ENV=${APP_ENV:-development}
       - AUTH_DISABLED=${AUTH_DISABLED:-0}
       - OIDC_ISSUER=${OIDC_ISSUER:-http://keycloak:8080/realms/ntt}
       # Browsers get redirected to the host-visible URL, which is not the
       # container-internal one above; tokens are validated against both.
       - OIDC_PUBLIC_ISSUER=${OIDC_PUBLIC_ISSUER:-http://localhost:8080/realms/ntt}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-ntt-platform}
+      - OIDC_VERIFY_AUDIENCE=${OIDC_VERIFY_AUDIENCE:-0}
+      # Empty is correct while this app serves its own SPA from one origin.
+      - CORS_ORIGINS=${CORS_ORIGINS:-}
       # Default: reach the host's Ollama. The ollama client reads OLLAMA_HOST.
       - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       # To use the containerized Ollama instead (with-ollama profile), swap to:

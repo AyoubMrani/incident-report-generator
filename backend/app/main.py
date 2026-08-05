@@ -227,16 +227,37 @@ async def lifespan(app: FastAPI):
 
 app = FastAPI(title="NTT Incident Platform", lifespan=lifespan)
 
-# Dev-only CORS: the Vite dev server runs on a different origin than the API.
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=[
-        "http://localhost:5173",
-        "http://127.0.0.1:5173",
-    ],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS.
+#
+# In production this app serves its own SPA from the same origin, so no
+# cross-origin access is needed at all and the default list is empty. The Vite
+# dev server (a different origin) is added only when APP_ENV is a development
+# one — a hardcoded localhost allowance would otherwise ship to every
+# deployment, and `allow_credentials` with a permissive origin list is the
+# classic way to make an API readable by any page a user visits.
+#
+# CORS_ORIGINS (comma-separated) covers the real deployment case where the SPA
+# is hosted separately.
+_DEV_ORIGINS = ["http://localhost:5173", "http://127.0.0.1:5173"]
+_APP_ENV = os.environ.get("APP_ENV", "development").strip().lower()
+
+_cors_origins = [
+    origin.strip()
+    for origin in os.environ.get("CORS_ORIGINS", "").split(",")
+    if origin.strip()
+]
+if not _cors_origins and _APP_ENV in ("development", "dev", "local", "test"):
+    _cors_origins = _DEV_ORIGINS
+
+if _cors_origins:
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_origins,
+        allow_credentials=True,
+        # Narrowed from "*": these are the methods the API actually exposes.
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Client-Id"],
+    )
 
 app.include_router(reports.router)
 app.include_router(chat.router)

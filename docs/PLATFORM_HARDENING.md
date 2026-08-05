@@ -1,7 +1,42 @@
-# Platform Hardening — Plan
+# Platform Hardening
 
 Branch: `platform-hardening` (off `main` @ `4dada6f`).
 `main` holds the presented version and is not touched by this work.
+
+**Status: all five phases complete.** 414 backend tests pass with Postgres,
+MinIO and Keycloak running (0 skipped); the frontend builds. See
+[What shipped](#what-shipped) for the per-phase result and the bugs the real
+data exposed.
+
+## Quick start
+
+```bash
+cp infra/.env.example infra/.env          # defaults work as-is for local use
+docker compose -f infra/docker-compose.yml up --build
+
+# One-time, to bring existing data across:
+export DATABASE_URL=postgresql+psycopg://ntt:ntt@localhost:5433/ntt
+python scripts/migrate_to_postgres.py           # chat history  -> Postgres
+python scripts/migrate_reports_to_minio.py      # report blobs  -> MinIO
+
+# Pre-auth history belongs to a browser id, not a person. Attach it to an
+# account deliberately (see the note under Phase 3):
+python scripts/migrate_to_postgres.py --list-users
+python scripts/migrate_to_postgres.py --link-legacy <client-id> <oidc-subject>
+```
+
+Sign in at http://localhost:8000 with `analyst` / `analyst`
+(also `admin` / `admin`, `viewer` / `viewer` — seeded by the realm import).
+
+| Service | URL | Notes |
+|---|---|---|
+| App | http://localhost:8000 | FastAPI serves the built SPA |
+| Keycloak | http://localhost:8080 | admin console: `admin` / `admin` |
+| MinIO console | http://localhost:9001 | `minioadmin` / `minioadmin` |
+| Postgres | `localhost:5433` | 5433, not 5432 — see below |
+
+Running the backend alone, without Keycloak: `AUTH_DISABLED=1`. That flag is
+refused at boot when `APP_ENV` is `production` or `staging`.
 
 **Deployment stance:** local only. Everything runs via
 `docker compose -f infra/docker-compose.yml up`. No cloud, no public hosting.
@@ -107,56 +142,168 @@ losing it. One-shot, idempotent, reversible:
 Rollback: the old SQLite file and `reports/` directory stay on disk until the
 new path is verified.
 
-## Work order
+## What shipped
 
-Sequenced so nothing is blocked and each step leaves the app runnable.
+All five phases, in order, each leaving the app runnable and the suite green.
 
-### Phase 1 — Data foundation
-1. Add Postgres + MinIO to `docker-compose.yml`; health checks; named volumes.
-2. SQLAlchemy models + Alembic migrations (`users`, `conversations`,
-   `messages`, `corrections`, `reports`).
-3. Port `ChatStore` to a Postgres-backed repository behind the **same method
-   signatures**, so routers and the 63 existing tests are unaffected.
-4. Run `migrate_to_postgres.py`; verify counts match.
+### Phase 1 — Postgres foundation
+
+`users`, `conversations`, `messages`, `corrections`, `reports`, under Alembic.
+`ChatRepository` keeps the SQLite store's exact method signatures, so the swap
+was one line in `main.py` and no router or existing test changed.
+
+Two schema choices worth knowing: `messages.search_vector` is a **generated
+column**, not trigger-maintained, so a bulk insert cannot leave the index out
+of sync with the text; and Postgres is mapped to host port **5433**, because a
+developer machine usually already has one on 5432.
+
+*Bug the real data found.* The obvious port of `relevant_corrections` uses
+`websearch_to_tsquery`, which **ANDs** its terms — so asking "dns cache
+clearing steps" silently stopped matching a stored correction for "how do I
+clear the DNS cache?" because "steps" was absent. The SQLite version scored
+token overlap, so the faithful port is OR plus `ts_rank`: recall from the OR,
+precision from the ranking. The parity test that caught it runs against both
+stores.
 
 ### Phase 2 — Object storage
-5. `app/shared/storage/` with an interface + `MinioStorage` implementation
-   (mirrors the `app/shared/llm/` provider pattern already in the codebase).
-6. Point `reports/service.py` at the storage interface; keep a filesystem
-   implementation so tests can run without MinIO.
-7. Bucket versioning + lifecycle policy; presigned URLs for downloads.
-8. Run `migrate_reports_to_minio.py`.
+
+Blobs in MinIO (versioned), metadata in a Postgres catalog. Listing is one
+indexed query instead of a directory scan plus a JSON parse per file. The
+filesystem backend remains a first-class implementation — it is what the test
+suite runs on, and the rollback path.
+
+*Two bugs the real corpus found, both silently lossy:*
+
+- Key validation started as `[A-Za-z0-9._/-]` and **rejected 80 of the 93
+  report files**, because the real naming convention is `INC0012001_VPN clients
+  unable to establish tunnel.json` — spaces and all, which S3 permits. The rule
+  now enforces what actually matters (no absolute paths, no `..`, no control
+  characters) and stays permissive otherwise.
+- The catalog made `incident_id` unique among live rows. **Eight incident ids
+  appear in two files each**, so that constraint would have dropped one file
+  from every pair. Uniqueness moved to `object_key`, which is genuinely
+  one-to-one with a blob.
+
+`reconcile()` validates metadata rather than the whole report: 16 reports have
+a malformed code block, and requiring a full `IncidentReport` would have made
+them invisible in the UI even though the filesystem service listed them fine.
 
 ### Phase 3 — Authentication
-9. Keycloak container, realm + roles + clients as an importable realm JSON
-   (so a teammate gets the same setup with one `up`).
-10. `app/auth/` — JWT validation dependency, role guards, `current_user`.
-11. Replace `X-Client-Id` with `user_id` from the token across all routes.
-    Keep the header path behind a `AUTH_DISABLED=1` dev escape so tests and
-    local iteration don't need a running Keycloak.
-12. Frontend: OIDC login flow, token refresh, authenticated fetch wrapper.
 
-### Phase 4 — Search
-13. `tsvector` generated column on `messages` + GIN index; trigger to maintain.
-14. `pgvector` column for message embeddings; reuse the existing embedding
-    model already loaded for retrieval.
-15. Hybrid search endpoint fusing FTS + vector with **RRF — reusing the exact
-    fusion logic already written in `app/chatbot/bm25.py`**. The AI layer and
-    the data layer become the same system.
-16. Search UI: sidebar search box, ranked results with highlighted snippets,
-    jump-to-message.
+Keycloak issues RS256 tokens; the backend verifies them against the published
+JWKS. No shared secret exists to leak, and a token cannot be forged by editing
+its payload — there is a test that tries. The realm (roles, PKCE client, three
+seed users) is committed as `infra/keycloak/realm-export.json`.
 
-### Phase 5 — UI/UX
-17. shadcn/ui + Radix on the existing Tailwind v4 setup (note: v4 needs the
-    CSS-first config path, not `tailwind.config.js`).
-18. **Core chat polish:** copy / regenerate / edit-and-resend, stop-generation,
-    streaming cursor, auto-scroll with scroll-to-bottom pill, markdown tables,
-    empty-state suggestion chips.
-19. **Shell & navigation:** collapsible sidebar, conversations grouped by
-    Today / Yesterday / Last 7 days, pinned chats, inline rename & delete,
-    Cmd+K command palette, dark mode.
-20. **Auth & profile surfaces:** login page, user menu + avatar, role-aware UI
-    (admin-only metrics dashboard), per-user settings for model/temperature.
+Auth is declared **at the router**, not per endpoint.
+
+*What the audit found.* Probing every route without a token exposed **ten
+unauthenticated endpoints** — the entire reports surface, including
+`DELETE /api/delete/{filename}` answering **200**. Anyone who could reach the
+port could destroy incident records. Source inspection had missed it because
+the handlers looked fine. A test now enumerates the live route table and fails
+if any endpoint answers anything but 401/403, so a new route is protected by
+default rather than exposed by omission.
+
+Both the container-internal and browser-facing issuer URLs are accepted: the
+`iss` claim carries whichever the browser used, so validating only
+`http://keycloak:8080` rejects every real login.
+
+### Phase 4 — Hybrid search
+
+Keyword (`tsvector` + GIN) and semantic (pgvector) rankings fused with RRF.
+The fusion is not a second implementation — it moved out of
+`chatbot/retrieval.py` into `shared/fusion.py`, and both callers use it, so the
+KB retrieval and the history search cannot drift apart.
+
+Each arm covers the other's blind spot, and the tests demonstrate it rather
+than assert it: keyword finds `IKE phase 1` and `resolvectl flush-caches`,
+where dense vectors are weakest since every incident number embeds to roughly
+the same place; semantic answers *"database lock contention at peak traffic"*
+with a conversation about *"recurring deadlocks on the orders table during the
+flash sale"* — no shared word.
+
+Embeddings are optional and backfilled out of band. With no model loaded the
+semantic arm returns nothing and search degrades to keyword-only. The embedder
+is the chatbot's existing model, attached after it loads, so search never puts
+a second copy in memory.
+
+### Phase 5 — Frontend
+
+OIDC Authorization Code + PKCE written directly against the browser crypto API
+(~150 lines) rather than adding `oidc-client-ts` or `keycloak-js`, which hide
+the redirect handling that is the part worth reading when a login loop breaks.
+
+Three token details that are easy to get wrong: only the refresh token is
+persisted, in **sessionStorage** (localStorage survives tab close and stays
+readable by any XSS for the token's lifetime); concurrent refreshes are
+collapsed into one in-flight promise, because Keycloak rotates refresh tokens
+and parallel redemptions would log the user out; and `authFetch` retries once
+after a refresh on 401, since a token can expire between the client's skew
+check and the server validating it.
+
+Plus Cmd-K search with per-result badges showing which arm matched — when a
+result shares no words with the query, that badge is the only thing explaining
+why it is there — and CSS-first dark mode, as Tailwind v4 requires, with an
+inline script applying the class before first paint.
+
+*What signing in revealed.* The analyst account showed **zero conversations** —
+correct behaviour, and confirmation that isolation works: the 26 migrated chats
+belonged to the browser UUID `test-client`, not to a Keycloak subject. Linking
+them is `--link-legacy`, a deliberate operator step and never an inference. A
+browser id identifies a browser, not a person; guessing would hand one person
+another person's history.
+
+## Verified
+
+With Postgres, MinIO and Keycloak running:
+
+- **414 backend tests pass, 0 skipped.** Integration tests genuinely exercise
+  all three services; they skip only when a service is down.
+- **Data migrated intact.** All 26 conversations and 52 messages readable
+  through the API with no missing rows, changed titles or message-count drift.
+  93 report files uploaded, 0 missing, 0 content mismatches by SHA-256, 70
+  catalog rows for 70 reports. Re-runs upload nothing, so version history stays
+  an edit trail rather than a log of migrations.
+- **Against a real uvicorn:** 401 unauthenticated; 70 reports served from MinIO
+  through the catalog; 26 conversations visible and searchable as `analyst`, 0
+  as `viewer`; `viewer` gets 403 on delete while keeping read access.
+- **Frontend builds.** Typechecking reports the same 8 pre-existing errors as
+  before this work — all in the report-generator module, none in the new code.
+
+## Production hardening
+
+- **Migrations run at boot** (`alembic upgrade head` in the entrypoint) and a
+  failure is fatal. Booting against a mismatched schema surfaces later as
+  scattered column errors on whichever request touches the missing column
+  first; refusing to start points at the real problem immediately.
+- **CORS is environment-aware.** Empty by default (FastAPI serves the SPA from
+  one origin); the Vite dev origin is allowed only when `APP_ENV` is a
+  development one, and `CORS_ORIGINS` covers a separately-hosted frontend.
+  Methods and headers are enumerated rather than `*`.
+- **`AUTH_DISABLED=1` is refused** when `APP_ENV` is production or staging. A
+  misconfiguration that fails at boot is recoverable; one that quietly serves
+  an unauthenticated API is a breach.
+- **`infra/.env.example`** documents every knob and flags the two sets of
+  credentials that must change before this runs anywhere but a laptop.
+- The container still runs as a **non-root uid** with the entrypoint handing
+  over volume ownership before dropping privileges (pre-existing, preserved).
+
+## Known gaps
+
+Deliberately out of scope, listed so they are choices rather than oversights:
+
+- **Keycloak runs in `start-dev`** — HTTP, no hostname strictness. Correct for
+  a local-only stack; a deployed one needs `start --optimized` with TLS.
+- **Default credentials in compose.** Fine for a laptop, listed in
+  `.env.example` as the first thing to change.
+- **Tokens in `sessionStorage`.** A cookie-based BFF would be stronger but
+  needs a server-side session store this stack deliberately does not have.
+- **No rate limiting** on the auth or chat endpoints.
+- **Bundle is 610 KB** (173 KB gzipped) in one chunk; code-splitting the report
+  editor would be the obvious first cut.
+- **8 pre-existing TypeScript errors** in the report-generator module, left
+  alone because that module is explicitly not ours to refactor.
 
 ## What stays unchanged
 
@@ -164,5 +311,10 @@ Sequenced so nothing is blocked and each step leaves the app runnable.
 - The `{metadata, blocks[]}` report contract — the integration seam between the
   two modules.
 - The whole AI pipeline: retrieval, gates, hazard handling, security,
-  evaluation harness. This work sits *underneath* it.
-- The 63 backend tests must keep passing at every phase boundary.
+  evaluation harness. This work sits *underneath* it. The one change inside it
+  was moving RRF into `shared/fusion.py` so the history search reuses it; the
+  69 retrieval tests pass unchanged, which is the evidence that the extraction
+  preserved behaviour.
+- The pre-existing test suite kept passing at every phase boundary. It started
+  at **269** tests (not the 63 this plan first claimed — that figure was stale)
+  and ends at **414**, all passing.

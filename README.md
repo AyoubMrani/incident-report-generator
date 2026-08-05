@@ -17,22 +17,34 @@ is replaced by `backend/app/routers/reports.py`.
 Architecture: **modular monolith** — one backend process, clean module
 boundaries (`chatbot/`, `reports/`, `shared/`), no microservice overhead.
 
+> **Data layer.** On the `platform-hardening` branch this app runs on Postgres
+> (identity, chat, search), MinIO (report blobs, versioned) and Keycloak
+> (OIDC auth), with hybrid keyword + semantic search over chat history.
+> See **[docs/PLATFORM_HARDENING.md](docs/PLATFORM_HARDENING.md)** for the
+> architecture, the migration commands, and what the real data exposed.
+> `main` keeps the earlier SQLite + filesystem + no-auth version.
+
 ## Layout
 
 ```
 ntt-incident-platform/
-├── frontend/                 # React 18 + Vite + Tailwind (from the generator app)
+├── frontend/                 # React 18 + Vite + Tailwind v4
+│   └── src/auth/             # OIDC PKCE flow, auth context, login screen
 ├── backend/
 │   ├── app/
 │   │   ├── main.py           # FastAPI entrypoint (replaces server.ts)
-│   │   ├── routers/          # HTTP layer: reports.py (done), chat.py (Phase 2)
-│   │   ├── reports/          # report CRUD + HTML export (ported from server.ts)
-│   │   ├── chatbot/          # RAG/LLM pipeline (Phase 2: from incident_chatbot)
-│   │   └── shared/           # schema.py (contract) + llm/ (swappable providers)
+│   │   ├── routers/          # HTTP layer: reports.py, chat.py
+│   │   ├── reports/          # report CRUD: filesystem + object-storage services
+│   │   ├── chatbot/          # RAG/LLM pipeline
+│   │   ├── auth/             # OIDC validation, role guards
+│   │   ├── db/               # models, chat repository, hybrid search
+│   │   └── shared/           # schema.py (contract), llm/, storage/, fusion.py
+│   ├── alembic/              # schema migrations
 │   ├── tests/
 │   └── requirements.txt
-├── reports/                  # shared report data (→ SharePoint adapter later)
-└── infra/                    # Dockerfile.backend, docker-compose.yml
+├── reports/                  # shared report data (source for the MinIO migration)
+├── scripts/                  # migrate_to_postgres.py, migrate_reports_to_minio.py
+└── infra/                    # Dockerfile.backend, docker-compose.yml, keycloak/
 ```
 
 ## Run the full app locally
