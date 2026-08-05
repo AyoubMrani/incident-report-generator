@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Send, AlertTriangle, Loader2, Database, ImagePlus, X,
   ExternalLink, Link2, FileText, ShieldAlert,
-  ThumbsUp, ThumbsDown, Sparkles, Copy,
+  ThumbsUp, ThumbsDown, Sparkles, Copy, Download,
 } from 'lucide-react';
 import {
   streamChat, listMessages, sendFeedback, sendCorrection, generateReport,
@@ -11,6 +11,7 @@ import {
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
 import { useCopy, useToast } from '../../ui/Toast';
+import type { Preferences } from '../../ui/SettingsDialog';
 import { NTT_BLUE, NttMark } from '../../ui/Brand';
 
 // Empty-state prompts. Phrased as real incident symptoms rather than "Tell me
@@ -161,7 +162,7 @@ function SourceCard({ source, onOpen }: {
     >
       <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${openable ? 'text-blue-600' : 'text-slate-400 dark:text-slate-500'}`} />
       <span className="min-w-0">
-        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <span className="block text-[10px] font-semibold uppercase tracking-wide text-app-muted">
           Grounded in
         </span>
         <span className={`block text-sm font-medium truncate ${openable ? 'text-blue-800' : 'text-slate-700 dark:text-slate-300'}`}>
@@ -187,8 +188,8 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
   const sources = Array.from(seen.values());
 
   return (
-    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
-      <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
+    <div className="pt-2 border-t border-app">
+      <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-app-muted">
         <Database className="w-3.5 h-3.5" /> Sources
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -216,7 +217,7 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
             <span
               key={i}
               title="This source has no in-app view"
-              className={`${common} bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700`}
+              className={`${common} bg-slate-50 dark:bg-slate-800/50 text-app-muted border-slate-200 dark:border-slate-700`}
             >
               {s.incident_id && <span className="font-medium">{s.incident_id}</span>}
               <span className="truncate">{title}</span>
@@ -306,7 +307,7 @@ function Section({ title, children }: {
 }) {
   return (
     <section>
-      <h4 className="mb-1.5 text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+      <h4 className="mb-1.5 text-[13px] font-semibold text-app">
         {title}
       </h4>
       {children}
@@ -344,9 +345,9 @@ function StepBlock({ step }: { step: ResolutionStep }) {
           : 'rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3'
       }
     >
-      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
+      <div className="text-sm font-medium text-app">
         Step {step.step} — {step.title}
-        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
+        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-app-muted">
           {label}
         </span>
         {isHazard && (
@@ -364,7 +365,7 @@ function StepBlock({ step }: { step: ResolutionStep }) {
         </div>
       )}
       {!isFiller(step.purpose) && (
-        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Purpose: {step.purpose}</div>
+        <div className="mt-0.5 text-xs text-app-muted">Purpose: {step.purpose}</div>
       )}
       {!isFiller(step.action) && (
         <div className="mt-1 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{step.action}</div>
@@ -372,7 +373,7 @@ function StepBlock({ step }: { step: ResolutionStep }) {
 
       {/* LOG_ANALYSIS renders its excerpt as a quote; code/config as a block. */}
       {art && type === 'LOG_ANALYSIS' && (
-        <blockquote className="mt-2 border-l-4 border-slate-300 dark:border-slate-600 bg-white pl-3 py-1.5 text-xs font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
+        <blockquote className="mt-2 border-l-4 border-slate-300 dark:border-slate-600 bg-white pl-3 py-1.5 text-xs font-mono text-app-muted whitespace-pre-wrap">
           {art.content}
         </blockquote>
       )}
@@ -381,7 +382,7 @@ function StepBlock({ step }: { step: ResolutionStep }) {
       )}
 
       {!isFiller(step.validation) && (
-        <div className="mt-1 text-xs text-slate-600 dark:text-slate-400 italic">Validate: {step.validation}</div>
+        <div className="mt-1 text-xs text-app-muted italic">Validate: {step.validation}</div>
       )}
       {step.evidence && step.evidence.length > 0 && (
         <div className="mt-1 text-xs text-blue-700">Evidence: {step.evidence.join(', ')}</div>
@@ -414,7 +415,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
   return (
     <div className="space-y-5 text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
       <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
-        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+        <span className="text-sm font-semibold text-app">
           {answer.incident_type}
         </span>
         <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
@@ -478,7 +479,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
             {answer.steps.map((s, i) => <StepBlock key={s.step ?? i} step={s as ResolutionStep} />)}
           </div>
           {answer.has_media && (
-            <p className="mt-2 flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-app-muted">
               <ImagePlus className="mt-0.5 w-3.5 h-3.5 shrink-0" />
               This report includes screenshots illustrating the above steps; open the
               original incident report to view them.
@@ -507,7 +508,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         <Section title={`Supporting ${unattachedArtifacts.length > 1 ? 'artifacts' : 'artifact'}`}>
           {unattachedArtifacts.map((a, i) => (
             <div key={i}>
-              {a.title && <div className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">{a.title}</div>}
+              {a.title && <div className="text-xs text-app-muted mb-0.5">{a.title}</div>}
               <CodeBlock code={a.content} language={a.language} />
             </div>
           ))}
@@ -576,12 +577,15 @@ interface ChatbotModuleProps {
   onSelectConversation: (id: string | null) => void;
   /** Ask the sidebar to reload its list (a turn may have created or retitled one). */
   onConversationsChanged: () => void;
+  /** User preferences from Settings (Enter-to-send, streaming). */
+  prefs: Preferences;
 }
 
 export default function ChatbotModule({
   activeId,
   onSelectConversation,
   onConversationsChanged,
+  prefs,
 }: ChatbotModuleProps) {
   // Conversation list and selection now live in App, because the sidebar
   // renders the list while this module renders the transcript — two consumers
@@ -612,6 +616,35 @@ export default function ChatbotModule({
     } finally {
       setReportBusy(false);
     }
+  }
+
+  // Export the open conversation as Markdown, for pasting into a ticket or
+  // attaching to a change record. Built from the transcript already in memory
+  // — no extra request, and it matches exactly what is on screen.
+  function exportConversation() {
+    if (!messages.length) return;
+    const lines: string[] = [`# ${activeTitle}`, ''];
+    for (const m of messages) {
+      if (m.role === 'user') {
+        lines.push('## Question', '', m.text || '_(image only)_', '');
+      } else if (m.role === 'assistant') {
+        lines.push('## Answer', '', answerToText(m.answer), '');
+      } else if (m.role === 'chat') {
+        lines.push(m.text, '');
+      }
+    }
+    lines.push('---', '_Exported from the NTT DATA Incident Platform._');
+
+    const blob = new Blob([lines.join('\n')], { type: 'text/markdown' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${activeTitle.replace(/[^a-z0-9]+/gi, '-').slice(0, 60) || 'conversation'}.md`;
+    a.click();
+    // Revoking immediately can cancel the download in some browsers; a tick is
+    // enough for the navigation to have started.
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    toast.success('Conversation exported');
   }
 
   // Replay the selected thread whenever the sidebar changes it.
@@ -705,7 +738,13 @@ export default function ChatbotModule({
   };
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-    if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
+    if (e.key !== 'Enter') return;
+    // Two conventions, chosen in Settings: Enter sends (Shift+Enter newlines),
+    // or Enter newlines and ⌘/Ctrl+Enter sends.
+    const send = prefs.enterToSend
+      ? !e.shiftKey && !e.metaKey && !e.ctrlKey
+      : e.metaKey || e.ctrlKey;
+    if (send) { e.preventDefault(); submit(); }
   };
 
   const hasMessages = messages.length > 0;
@@ -721,9 +760,19 @@ export default function ChatbotModule({
     // header carries only what is specific to the open conversation.
     <div className="flex h-full flex-col">
       <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
-        <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-slate-700 dark:text-slate-200">
+        <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-app">
           {activeTitle}
         </h1>
+        {activeId && messages.length > 0 && (
+          <button
+            onClick={exportConversation}
+            className="text-app-muted hover:bg-app-hover inline-flex shrink-0 items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-[13px] font-medium transition"
+            title="Download this conversation as Markdown"
+          >
+            <Download className="w-4 h-4" />
+            Export
+          </button>
+        )}
         {activeId && messages.some((m) => m.role === 'assistant') && (
           <button
             onClick={generateReportFromChat}
@@ -750,7 +799,7 @@ export default function ChatbotModule({
                 <h1 className="text-center text-[27px] font-semibold tracking-tight text-slate-900 dark:text-slate-50">
                   What incident are you looking at?
                 </h1>
-                <p className="mt-2.5 text-center text-[15px] text-slate-500 dark:text-slate-400">
+                <p className="mt-2.5 text-center text-[15px] text-app-muted">
                   Describe the symptoms, paste an error, or attach a screenshot.
                 </p>
                 <div className="mt-8 grid gap-2 sm:grid-cols-2">
@@ -758,7 +807,7 @@ export default function ChatbotModule({
                     <button
                       key={s}
                       onClick={() => setInput(s)}
-                      className="group rounded-xl border border-slate-200 bg-white px-4 py-3 text-left text-[13px] leading-relaxed text-slate-600 shadow-sm transition hover:border-slate-300 hover:shadow-md dark:border-slate-700 dark:bg-slate-800/40 dark:text-slate-300 dark:hover:border-slate-600"
+                      className="group rounded-xl border-app bg-app-elevated text-app-muted border px-4 py-3 text-left text-[13px] leading-relaxed shadow-sm transition hover:border-app-strong hover:shadow-md"
                     >
                       <span
                         className="mb-1.5 block text-[10px] font-semibold uppercase tracking-wider opacity-60 transition group-hover:opacity-100"
@@ -784,7 +833,7 @@ export default function ChatbotModule({
                     <div key={i} className="ntt-rise mb-6 flex justify-end">
                       <div className="max-w-[80%] rounded-2xl bg-slate-100 px-4 py-2.5 text-slate-800 dark:bg-slate-800 dark:text-slate-100">
                         {msg.hasImage && (
-                          <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                          <div className="mb-1 inline-flex items-center gap-1 text-xs text-app-muted">
                             <ImagePlus className="w-3 h-3" /> screenshot attached
                           </div>
                         )}
@@ -826,7 +875,7 @@ export default function ChatbotModule({
                       <span className="whitespace-pre-wrap">{msg.text}</span>
                     </div>
                   ) : (
-                    <div key={i} className="mb-6 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-200">
+                    <div key={i} className="mb-6 whitespace-pre-wrap text-[15px] leading-relaxed text-app">
                       {msg.text}
                     </div>
                   );
@@ -867,7 +916,7 @@ export default function ChatbotModule({
         </div>
 
         {/* Composer: pinned, on a fading backdrop so text scrolls out under it. */}
-        <div className="shrink-0 bg-gradient-to-t from-white via-white to-transparent px-4 pb-4 pt-2 dark:from-[#0a0f1a] dark:via-[#0a0f1a]">
+        <div className="shrink-0 bg-gradient-to-t from-app via-app to-transparent px-4 pb-4 pt-2">
           <div className="mx-auto w-full max-w-3xl">
             {image && (
               <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
@@ -878,7 +927,7 @@ export default function ChatbotModule({
               </div>
             )}
 
-            <div className="flex items-end gap-1.5 rounded-[26px] border border-slate-200 bg-white px-2.5 py-1.5 shadow-sm transition focus-within:border-slate-300 focus-within:shadow-md dark:border-slate-700 dark:bg-slate-800/80">
+            <div className="flex items-end gap-1.5 border-app bg-app-elevated rounded-[26px] border px-2.5 py-1.5 shadow-sm transition focus-within:border-app-strong focus-within:shadow-md">
               <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
               <button
                 onClick={() => fileRef.current?.click()}
@@ -911,8 +960,17 @@ export default function ChatbotModule({
             </div>
 
             <p className="mt-2 text-center text-[11px] text-slate-400 dark:text-slate-500">
-              Grounded in your incident reports · <kbd className="font-sans">Enter</kbd> to send ·{' '}
-              <kbd className="font-sans">Shift+Enter</kbd> for a new line
+              Grounded in your incident reports ·{' '}
+              {prefs.enterToSend ? (
+                <>
+                  <kbd className="font-sans">Enter</kbd> to send ·{' '}
+                  <kbd className="font-sans">Shift+Enter</kbd> for a new line
+                </>
+              ) : (
+                <>
+                  <kbd className="font-sans">⌘/Ctrl+Enter</kbd> to send
+                </>
+              )}
             </p>
           </div>
         </div>

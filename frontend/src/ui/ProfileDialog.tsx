@@ -137,11 +137,11 @@ export default function ProfileDialog({
       aria-label="Profile"
     >
       <div
-        className="w-full max-w-sm rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="w-full max-w-sm rounded-xl border border-app bg-app-elevated shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center justify-between border-b border-slate-100 px-5 py-3.5 dark:border-slate-800">
-          <h2 className="text-[15px] font-semibold text-slate-900 dark:text-slate-100">
+          <h2 className="text-[15px] font-semibold text-app">
             Profile
           </h2>
           <button

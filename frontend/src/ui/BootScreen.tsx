@@ -40,7 +40,7 @@ export default function BootScreen({ done }: { done: boolean }) {
 
   return (
     <div
-      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-white transition-opacity duration-[400ms] dark:bg-[#0a0f1a] ${
+      className={`fixed inset-0 z-[100] flex flex-col items-center justify-center bg-app transition-opacity duration-[400ms] ${
         leaving ? 'pointer-events-none opacity-0' : 'opacity-100'
       }`}
       role="status"

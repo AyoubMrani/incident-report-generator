@@ -78,7 +78,7 @@ export default function Sidebar({
 
   return (
     <aside
-      className={`flex shrink-0 flex-col border-r border-slate-200 bg-slate-50/70 transition-[width] duration-200 dark:border-slate-800 dark:bg-[#0d1524] ${
+      className={`flex shrink-0 flex-col border-r border-app bg-app-surface transition-[width] duration-200 ${
         collapsed ? 'w-[64px]' : 'w-[264px]'
       }`}
     >
@@ -89,7 +89,7 @@ export default function Sidebar({
         <button
           onClick={onToggleCollapsed}
           title={`${collapsed ? 'Expand' : 'Collapse'} sidebar  ⌘\\`}
-          className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+          className="text-app-muted hover:bg-app-hover rounded-lg p-1.5 transition"
         >
           {collapsed ? <PanelLeft className="w-[18px] h-[18px]" /> : <PanelLeftClose className="w-[18px] h-[18px]" />}
         </button>
@@ -99,7 +99,7 @@ export default function Sidebar({
             <button
               onClick={onOpenSearch}
               title="Search conversations  ⌘K"
-              className="rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-slate-300"
+              className="text-app-muted hover:bg-app-hover rounded-lg p-1.5 transition"
             >
               <Search className="w-[18px] h-[18px]" />
             </button>
@@ -115,7 +115,7 @@ export default function Sidebar({
           <button
             onClick={onOpenSearch}
             title="Search  ⌘K"
-            className="rounded-lg p-2 text-slate-400 transition hover:bg-slate-200/60 hover:text-slate-600 dark:hover:bg-slate-800"
+            className="text-app-muted hover:bg-app-hover rounded-lg p-2 transition"
           >
             <Search className="w-[18px] h-[18px]" />
           </button>
@@ -134,8 +134,8 @@ export default function Sidebar({
               title={t.label}
               className={`rounded-lg p-2 transition ${
                 tool === t.id
-                  ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-                  : 'text-slate-400 hover:bg-slate-200/60 dark:hover:bg-slate-800'
+                  ? 'bg-app-elevated text-app shadow-sm'
+                  : 'text-app-muted hover:bg-app-hover'
               }`}
               style={tool === t.id ? { color: NTT_BLUE } : undefined}
             >
@@ -164,8 +164,8 @@ export default function Sidebar({
                   onClick={() => onSelectTool(t.id)}
                   className={`relative flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-left text-[13px] font-medium transition ${
                     active
-                      ? 'bg-white text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-                      : 'text-slate-600 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:bg-slate-800/50'
+                      ? 'bg-app-elevated text-app shadow-sm'
+                      : 'text-app-muted hover:bg-app-hover'
                   }`}
                 >
                   {active && (
@@ -323,8 +323,8 @@ const ConversationRow: React.FC<RowProps> = ({
       onClick={onSelect}
       className={`group relative flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-[13px] transition ${
         active
-          ? 'bg-white font-medium text-slate-900 shadow-sm dark:bg-slate-800 dark:text-slate-100'
-          : 'text-slate-600 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:bg-slate-800/50'
+          ? 'bg-app-elevated text-app font-medium shadow-sm'
+          : 'text-app-muted hover:bg-app-hover'
       }`}
     >
       {c.pinned && (
@@ -345,7 +345,7 @@ const ConversationRow: React.FC<RowProps> = ({
       {menuOpen && (
         <>
           <div className="fixed inset-0 z-10" onClick={(e) => { e.stopPropagation(); setMenuOpen(false); }} />
-          <div className="absolute right-1 top-full z-20 mt-0.5 w-40 overflow-hidden rounded-lg border border-slate-200 bg-white py-1 shadow-lg dark:border-slate-700 dark:bg-slate-900">
+          <div className="absolute right-1 top-full z-20 mt-0.5 w-40 overflow-hidden rounded-lg border-app bg-app-elevated border py-1 shadow-lg">
             <MenuItem
               icon={<Pencil className="w-3.5 h-3.5" />}
               label="Rename"

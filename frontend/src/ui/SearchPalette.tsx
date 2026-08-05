@@ -100,7 +100,7 @@ export default function SearchPalette({ open, onClose, onSelect }: Props) {
       aria-label="Search conversations"
     >
       <div
-        className="w-full max-w-xl rounded-xl border border-slate-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
+        className="w-full max-w-xl rounded-xl border border-app bg-app-elevated shadow-2xl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-center gap-3 border-b border-slate-200 px-4 dark:border-slate-700">
@@ -158,7 +158,7 @@ export default function SearchPalette({ open, onClose, onSelect }: Props) {
                   >
                     <div className="flex items-center gap-2">
                       <MessageSquare className="w-3.5 h-3.5 shrink-0 text-slate-400" />
-                      <span className="truncate text-sm font-medium text-slate-900 dark:text-slate-100">
+                      <span className="truncate text-sm font-medium text-app">
                         {hit.title}
                       </span>
                       <span className="ml-auto flex shrink-0 items-center gap-1 rounded-full bg-slate-100 px-2 py-0.5 text-[10px] text-slate-500 dark:bg-slate-800 dark:text-slate-400">
@@ -168,7 +168,7 @@ export default function SearchPalette({ open, onClose, onSelect }: Props) {
                     </div>
                     {hit.snippet && (
                       <p
-                        className="mt-1 line-clamp-2 pl-5 text-xs text-slate-500 dark:text-slate-400"
+                        className="mt-1 line-clamp-2 pl-5 text-xs text-app-muted"
                         // Safe: the only markup in a snippet is the <mark> tags
                         // ts_headline inserts — StartSel/StopSel are fixed in
                         // db/search.py and Postgres escapes the message text

@@ -6,34 +6,70 @@
    an explicit user choice can override the OS setting. */
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* ── Design tokens ───────────────────────────────────────────────────────────
-   Semantic names, not raw colours: components reference --color-surface rather
-   than a specific slate shade, so the two themes below are the only place a
-   palette decision lives. This is the CSS-first equivalent of the `theme`
-   block a v3 config would have carried. */
-@theme {
-  --color-canvas: oklch(98.4% 0.003 247.9);
-  --color-surface: oklch(100% 0 0);
-  --color-surface-muted: oklch(96.8% 0.007 247.9);
-  --color-border-subtle: oklch(92.9% 0.013 255.5);
-  --color-content: oklch(20.8% 0.042 265.8);
-  --color-content-muted: oklch(55.4% 0.041 257.4);
-  --color-accent: oklch(54.6% 0.215 262.9);
-  --color-accent-content: oklch(100% 0 0);
+/* ── Theme surfaces ──────────────────────────────────────────────────────────
+   Three palettes. Components reference these variables (via the `app-*`
+   utilities below) rather than hardcoding a slate shade, so adding a palette
+   is a block here and not an audit of every component.
 
-  --radius-card: 0.75rem;
-  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+   The earlier dark theme was a navy-tinted slate that read as muddy. `dim` is
+   a neutral charcoal with a faint cool cast, and `black` is true #000 for
+   OLED — the two things "dark mode" usually means, offered separately instead
+   of averaged into one compromise. */
+:root,
+:root[data-theme='light'] {
+  --app-canvas: #ffffff;
+  --app-surface: #f8fafc;      /* sidebar, rails */
+  --app-elevated: #ffffff;     /* cards, menus, popovers */
+  --app-border: #e2e8f0;
+  --app-border-strong: #cbd5e1;
+  --app-text: #0f172a;
+  --app-text-muted: #64748b;
+  --app-hover: #f1f5f9;
 }
 
-.dark {
-  --color-canvas: oklch(20.8% 0.042 265.8);
-  --color-surface: oklch(27.9% 0.041 260.0);
-  --color-surface-muted: oklch(37.2% 0.044 257.3);
-  --color-border-subtle: oklch(37.2% 0.044 257.3);
-  --color-content: oklch(96.8% 0.007 247.9);
-  --color-content-muted: oklch(70.4% 0.04 256.8);
-  --color-accent: oklch(62.3% 0.214 259.8);
-  --color-accent-content: oklch(100% 0 0);
+:root[data-theme='dim'] {
+  --app-canvas: #16181c;
+  --app-surface: #1c1f24;
+  --app-elevated: #22262c;
+  --app-border: #2c3138;
+  --app-border-strong: #3a4048;
+  --app-text: #e8eaed;
+  --app-text-muted: #9aa3ad;
+  --app-hover: #262b32;
+}
+
+:root[data-theme='black'] {
+  --app-canvas: #000000;
+  --app-surface: #0a0a0a;
+  --app-elevated: #141414;
+  --app-border: #232323;
+  --app-border-strong: #333333;
+  --app-text: #f2f2f2;
+  --app-text-muted: #8f8f8f;
+  --app-hover: #1a1a1a;
+}
+
+/* Utilities that resolve through the variables above. Used for the app frame
+   (canvas, sidebar, cards, borders); component-level `dark:` utilities still
+   work as before, so this was additive rather than a rewrite. */
+@layer utilities {
+  .bg-app          { background-color: var(--app-canvas); }
+  .bg-app-surface  { background-color: var(--app-surface); }
+  .bg-app-elevated { background-color: var(--app-elevated); }
+  .bg-app-hover    { background-color: var(--app-hover); }
+  .hover\:bg-app-hover:hover { background-color: var(--app-hover); }
+  .text-app        { color: var(--app-text); }
+  .text-app-muted  { color: var(--app-text-muted); }
+  .border-app      { border-color: var(--app-border); }
+  .border-app-strong { border-color: var(--app-border-strong); }
+  /* For the composer's fade, which must match the canvas it sits on. */
+  .from-app        { --tw-gradient-from: var(--app-canvas); }
+  .via-app         { --tw-gradient-via: var(--app-canvas); }
+}
+
+@theme {
+  --radius-card: 0.75rem;
+  --shadow-card: 0 1px 2px 0 rgb(0 0 0 / 0.05);
 }
 
 /* ── Boot screen ─────────────────────────────────────────────────────────────

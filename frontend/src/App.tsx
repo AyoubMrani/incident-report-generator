@@ -4,8 +4,10 @@ import ReportGeneratorModule from './modules/reports/ReportGeneratorModule';
 import { useAuth } from './auth/AuthContext';
 import LoginScreen from './auth/LoginScreen';
 import BootScreen from './ui/BootScreen';
+import MetricsPanel from './ui/MetricsPanel';
 import ProfileDialog from './ui/ProfileDialog';
 import SearchPalette from './ui/SearchPalette';
+import SettingsDialog, { loadPrefs, type Preferences } from './ui/SettingsDialog';
 import Sidebar, { type Tool } from './ui/Sidebar';
 import SystemStatus from './ui/SystemStatus';
 import UserMenu from './ui/UserMenu';
@@ -25,12 +27,15 @@ const SIDEBAR_KEY = 'ntt.sidebarCollapsed';
 
 export default function App() {
   const { user, loading, error, authEnabled, login, logout, setUser } = useAuth();
-  const { isDark, toggle } = useTheme();
+  const { theme, setTheme, isDark, toggle } = useTheme();
   const toast = useToast();
 
   const [tool, setTool] = useState<Tool>('chatbot');
   const [searchOpen, setSearchOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+  const [settingsOpen, setSettingsOpen] = useState(false);
+  const [metricsOpen, setMetricsOpen] = useState(false);
+  const [prefs, setPrefs] = useState<Preferences>(loadPrefs);
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_KEY) === '1',
   );
@@ -67,6 +72,9 @@ export default function App() {
       } else if (meta && e.key === '\\') {
         e.preventDefault();
         setCollapsed((v) => !v);
+      } else if (meta && e.key === ',') {
+        e.preventDefault();
+        setSettingsOpen((v) => !v);
       }
     };
     window.addEventListener('keydown', onKey);
@@ -143,7 +151,7 @@ export default function App() {
   return (
     <>
       <BootScreen done />
-      <div className="flex h-screen overflow-hidden bg-white text-slate-900 dark:bg-[#0a0f1a] dark:text-slate-100">
+      <div className="flex h-screen overflow-hidden bg-app text-app">
         <Sidebar
           collapsed={collapsed}
           onToggleCollapsed={() => setCollapsed((v) => !v)}
@@ -168,6 +176,8 @@ export default function App() {
                 authEnabled={authEnabled}
                 collapsed={collapsed}
                 onOpenProfile={() => setProfileOpen(true)}
+                onOpenSettings={() => setSettingsOpen(true)}
+                onOpenMetrics={user.is_admin ? () => setMetricsOpen(true) : undefined}
               />
             </>
           }
@@ -182,6 +192,7 @@ export default function App() {
               activeId={activeId}
               onSelectConversation={selectConversation}
               onConversationsChanged={refreshConversations}
+              prefs={prefs}
             />
           ) : (
             <div className="h-full overflow-y-auto px-4 py-8 sm:px-6 lg:px-10">
@@ -194,6 +205,17 @@ export default function App() {
           open={searchOpen}
           onClose={() => setSearchOpen(false)}
           onSelect={openConversation}
+        />
+
+        <MetricsPanel open={metricsOpen} onClose={() => setMetricsOpen(false)} />
+
+        <SettingsDialog
+          open={settingsOpen}
+          onClose={() => setSettingsOpen(false)}
+          theme={theme}
+          onSelectTheme={setTheme}
+          prefs={prefs}
+          onChangePrefs={setPrefs}
         />
 
         <ProfileDialog

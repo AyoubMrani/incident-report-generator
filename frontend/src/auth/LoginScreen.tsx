@@ -37,9 +37,9 @@ const CAPABILITIES = [
 
 export default function LoginScreen({ onLogin, error }: Props) {
   return (
-    <div className="flex min-h-screen bg-white dark:bg-[#0a0f1a]">
+    <div className="bg-app flex min-h-screen">
       {/* ── Brand panel ─────────────────────────────────────────────────── */}
-      <div className="relative hidden w-[52%] shrink-0 overflow-hidden lg:flex lg:flex-col lg:justify-between bg-slate-50 p-12 dark:bg-[#0d1524]">
+      <div className="relative hidden w-[52%] shrink-0 overflow-hidden lg:flex lg:flex-col lg:justify-between bg-app-surface p-12">
         {/* Depth without an image asset. */}
         <div
           aria-hidden
@@ -54,7 +54,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
 
         <div className="relative flex items-center gap-3">
           <NttMark size={34} />
-          <span className="text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+          <span className="text-[15px] font-semibold tracking-tight text-app">
             <span style={{ color: NTT_BLUE }}>NTT</span> DATA
           </span>
         </div>
@@ -65,7 +65,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
             <br />
             what your team already knows.
           </h1>
-          <p className="mt-4 text-[15px] leading-relaxed text-slate-600 dark:text-slate-400">
+          <p className="mt-4 text-[15px] leading-relaxed text-app-muted">
             A retrieval assistant over your incident reports — and the report
             generator that keeps them current.
           </p>
@@ -83,7 +83,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
                   <span className="block text-sm font-medium text-slate-900 dark:text-slate-200">
                     {c.title}
                   </span>
-                  <span className="mt-0.5 block text-[13px] leading-relaxed text-slate-500 dark:text-slate-400">
+                  <span className="mt-0.5 block text-[13px] leading-relaxed text-app-muted">
                     {c.body}
                   </span>
                 </span>
@@ -103,7 +103,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
           {/* Brand repeats here only where the left panel is hidden. */}
           <div className="mb-10 flex items-center gap-2.5 lg:hidden">
             <NttMark size={30} />
-            <span className="text-sm font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+            <span className="text-sm font-semibold tracking-tight text-app">
               <span style={{ color: NTT_BLUE }}>NTT</span> DATA
             </span>
           </div>
@@ -111,7 +111,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
           <h2 className="text-[26px] font-semibold tracking-tight text-slate-900 dark:text-slate-50">
             Sign in
           </h2>
-          <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+          <p className="mt-2 text-sm text-app-muted">
             Continue with your NTT DATA account.
           </p>
 
@@ -127,7 +127,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
 
           <button
             onClick={onLogin}
-            className="group mt-7 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-[#0a0f1a]"
+            className="group mt-7 flex w-full items-center justify-center gap-2 rounded-lg px-4 py-3 text-sm font-medium text-white shadow-sm transition hover:brightness-110 focus:outline-none focus-visible:ring-2 focus-visible:ring-offset-2 "
             style={{ background: NTT_BLUE }}
           >
             Continue with Keycloak
@@ -144,7 +144,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
 
           {/* The realm export seeds these; a teammate running the stack has no
               other way to discover them. */}
-          <div className="mt-4 overflow-hidden rounded-lg border border-slate-200 dark:border-slate-800">
+          <div className="mt-4 overflow-hidden rounded-lg border border-app">
             {[
               ['admin', 'Full access'],
               ['analyst', 'Chat + write reports'],
@@ -153,7 +153,7 @@ export default function LoginScreen({ onLogin, error }: Props) {
               <div
                 key={user}
                 className={`flex items-center justify-between px-3.5 py-2 text-[12px] ${
-                  i > 0 ? 'border-t border-slate-100 dark:border-slate-800' : ''
+                  i > 0 ? 'border-t border-app' : ''
                 }`}
               >
                 <code className="font-mono text-slate-700 dark:text-slate-300">

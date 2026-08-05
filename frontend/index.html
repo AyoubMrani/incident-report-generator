@@ -15,16 +15,20 @@
     <script>
       // Apply the theme before first paint. Running this in React instead
       // would render the light theme for one frame and flash on every load.
+      // Mirrors resolveTheme() in src/ui/useTheme.ts — keep the two in step.
       (function () {
         try {
           var stored = localStorage.getItem('ntt.theme');
-          var dark =
-            stored === 'dark' ||
-            ((stored === 'system' || !stored) &&
-              window.matchMedia('(prefers-color-scheme: dark)').matches);
-          if (dark) document.documentElement.classList.add('dark');
+          var valid = stored === 'light' || stored === 'dim' || stored === 'black';
+          var resolved = valid
+            ? stored
+            : window.matchMedia('(prefers-color-scheme: dark)').matches
+              ? 'dim'
+              : 'light';
+          document.documentElement.dataset.theme = resolved;
+          if (resolved !== 'light') document.documentElement.classList.add('dark');
         } catch (e) {
-          /* private mode: fall back to light */
+          document.documentElement.dataset.theme = 'light';
         }
       })();
     </script>
@@ -33,8 +37,11 @@
     <!-- Painted before the bundle parses, so the first frame is already the
          right colour. Without this the boot screen flashes white in dark mode. -->
     <style>
+      /* Painted before the bundle parses, so the first frame is already the
+         right colour. Values mirror the palettes in index.css. */
       html { background: #ffffff; }
-      html.dark { background: #0a0f1a; }
+      html[data-theme='dim'] { background: #16181c; }
+      html[data-theme='black'] { background: #000000; }
     </style>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>

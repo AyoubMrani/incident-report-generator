@@ -5,7 +5,7 @@
 // missing will report it as a bug.
 
 import React, { useEffect, useRef, useState } from 'react';
-import { LogOut, Moon, Sun, ShieldCheck, Eye, PenLine, UserCog } from 'lucide-react';
+import { LogOut, Moon, Sun, ShieldCheck, Eye, PenLine, UserCog, Settings, BarChart3 } from 'lucide-react';
 import type { UserInfo } from '../auth/oidc';
 import { NTT_BLUE } from './Brand';
 
@@ -18,6 +18,9 @@ interface Props {
   /** Sidebar is collapsed — show the avatar only. */
   collapsed?: boolean;
   onOpenProfile?: () => void;
+  onOpenSettings?: () => void;
+  /** Admin-only: answer quality metrics. Undefined hides the entry. */
+  onOpenMetrics?: () => void;
 }
 
 function primaryRole(user: UserInfo): { label: string; icon: React.ReactNode } {
@@ -43,6 +46,8 @@ export default function UserMenu({
   authEnabled,
   collapsed = false,
   onOpenProfile,
+  onOpenSettings,
+  onOpenMetrics,
 }: Props) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -90,10 +95,10 @@ export default function UserMenu({
         )}
         {!collapsed && (
           <span className="min-w-0 flex-1">
-            <span className="block truncate text-[13px] font-medium text-slate-900 dark:text-slate-100">
+            <span className="block truncate text-[13px] font-medium text-app">
               {user.display_name || user.username}
             </span>
-            <span className="flex items-center gap-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <span className="flex items-center gap-1 text-[11px] text-app-muted">
               {role.icon}
               {role.label}
             </span>
@@ -104,11 +109,11 @@ export default function UserMenu({
       {open && (
         <div
           role="menu"
-          className="absolute bottom-full left-0 z-20 mb-2 w-full min-w-[13rem] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900"
+          className="absolute bottom-full left-0 z-20 mb-2 w-full min-w-[13rem] overflow-hidden rounded-lg border-app bg-app-elevated border shadow-lg"
         >
           {user.email && (
             <div className="border-b border-slate-100 px-3 py-2 dark:border-slate-800">
-              <p className="truncate text-xs text-slate-500 dark:text-slate-400">
+              <p className="truncate text-xs text-app-muted">
                 {user.email}
               </p>
             </div>
@@ -122,6 +127,29 @@ export default function UserMenu({
             >
               <UserCog className="w-4 h-4" />
               Profile
+            </button>
+          )}
+
+          {onOpenSettings && (
+            <button
+              role="menuitem"
+              onClick={() => { onOpenSettings(); setOpen(false); }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-slate-700 transition hover:bg-slate-50 dark:text-slate-200 dark:hover:bg-slate-800"
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+              <kbd className="ml-auto text-[10px] text-slate-400">⌘,</kbd>
+            </button>
+          )}
+
+          {onOpenMetrics && (
+            <button
+              role="menuitem"
+              onClick={() => { onOpenMetrics(); setOpen(false); }}
+              className="flex w-full items-center gap-2.5 px-3 py-2 text-left text-sm text-app transition hover:bg-app-hover"
+            >
+              <BarChart3 className="w-4 h-4" />
+              Answer quality
             </button>
           )}
 

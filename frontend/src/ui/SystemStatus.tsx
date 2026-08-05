@@ -85,14 +85,14 @@ export default function SystemStatus() {
           )}
           <span className={`relative inline-flex h-2 w-2 rounded-full ${tone.dot}`} />
         </span>
-        <span className="flex-1 truncate text-[11px] text-slate-500 dark:text-slate-400">
+        <span className="flex-1 truncate text-[11px] text-app-muted">
           {tone.label}
         </span>
         <Activity className="w-3 h-3 shrink-0 text-slate-400" />
       </button>
 
       {open && (
-        <div className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-lg border border-slate-200 bg-white shadow-lg dark:border-slate-700 dark:bg-slate-900">
+        <div className="absolute bottom-full left-0 z-20 mb-2 w-56 overflow-hidden rounded-lg border-app bg-app-elevated border shadow-lg">
           {!reachable ? (
             <p className="px-3 py-2.5 text-[12px] text-red-600 dark:text-red-400">
               Cannot reach the API. Is the backend running?
