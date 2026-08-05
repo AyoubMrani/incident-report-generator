@@ -121,12 +121,17 @@ export default function App() {
         </div>
       </aside>
 
-      {/* Main content: the active module */}
-      <main className="flex-1 min-w-0 px-4 sm:px-6 lg:px-10 py-8 overflow-x-hidden">
+      {/* Main content: the active module.
+          Chat runs full-bleed — it manages its own scrolling so the composer
+          can stay pinned while the transcript moves under it. The report
+          module keeps the padded page layout it was written for. */}
+      <main className="flex-1 min-w-0 overflow-x-hidden">
         {module === 'chatbot' ? (
           <ChatbotModule key={chatKey} />
         ) : (
-          <ReportGeneratorModule />
+          <div className="px-4 sm:px-6 lg:px-10 py-8">
+            <ReportGeneratorModule />
+          </div>
         )}
       </main>
 

@@ -1,8 +1,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import {
-  Send, Bot, User, AlertTriangle, Loader2, Database, ImagePlus, X,
-  Plus, MessageSquare, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
-  ThumbsUp, ThumbsDown,
+  Send, AlertTriangle, Loader2, Database, ImagePlus, X,
+  Plus, Trash2, ExternalLink, Link2, FileText, ShieldAlert,
+  ThumbsUp, ThumbsDown, Sparkles,
 } from 'lucide-react';
 import {
   streamChat, listConversations, listMessages, deleteConversation, sendFeedback, sendCorrection,
@@ -12,6 +12,16 @@ import {
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
 
+// Empty-state prompts. Phrased as real incident symptoms rather than "Tell me
+// about X", so clicking one produces a question the retrieval can actually
+// ground — and shows a new user what this tool is for.
+const SUGGESTIONS = [
+  'VPN clients cannot establish a tunnel after the maintenance window',
+  'Intermittent DNS resolution failures for internal services',
+  'Users are stuck in a redirect loop and cannot sign in',
+  'Recurring deadlocks on the orders table during peak traffic',
+];
+
 // Render assistant prose, promoting any ```fenced``` code to highlighted blocks.
 function RichText({ text }: { text: string }) {
   const segments = splitFencedCode(text);
@@ -20,7 +30,7 @@ function RichText({ text }: { text: string }) {
       {segments.map((seg, i) =>
         seg.type === 'code'
           ? <CodeBlock key={i} code={seg.content} language={seg.lang} />
-          : seg.content.trim() && <p key={i} className="text-sm text-gray-700 whitespace-pre-wrap">{seg.content.trim()}</p>,
+          : seg.content.trim() && <p key={i} className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{seg.content.trim()}</p>,
       )}
     </div>
   );
@@ -104,16 +114,16 @@ function SourceCard({ source, onOpen }: {
       className={`w-full flex items-start gap-2 rounded-lg border px-3 py-2 text-left ${
         openable
           ? 'bg-blue-50 border-blue-200 hover:bg-blue-100 cursor-pointer'
-          : 'bg-gray-50 border-gray-200 cursor-default'
+          : 'bg-slate-50 dark:bg-slate-800/50 border-slate-200 dark:border-slate-700 cursor-default'
       }`}
       title={openable ? `Open ${title}` : 'This source has no in-app view'}
     >
-      <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${openable ? 'text-blue-600' : 'text-gray-400'}`} />
+      <FileText className={`w-4 h-4 mt-0.5 shrink-0 ${openable ? 'text-blue-600' : 'text-slate-400 dark:text-slate-500'}`} />
       <span className="min-w-0">
-        <span className="block text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           Grounded in
         </span>
-        <span className={`block text-sm font-medium truncate ${openable ? 'text-blue-800' : 'text-gray-700'}`}>
+        <span className={`block text-sm font-medium truncate ${openable ? 'text-blue-800' : 'text-slate-700 dark:text-slate-300'}`}>
           {source.incident_id ? `${source.incident_id} — ` : ''}{title}
         </span>
       </span>
@@ -136,8 +146,8 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
   const sources = Array.from(seen.values());
 
   return (
-    <div className="pt-2 border-t border-gray-100">
-      <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-gray-500">
+    <div className="pt-2 border-t border-slate-100 dark:border-slate-800">
+      <div className="flex items-center gap-1.5 mb-1.5 text-xs font-semibold text-slate-500 dark:text-slate-400">
         <Database className="w-3.5 h-3.5" /> Sources
       </div>
       <div className="flex flex-wrap gap-1.5">
@@ -165,7 +175,7 @@ function Sources({ retrieval, onOpen }: { retrieval: SourceLink[]; onOpen: (file
             <span
               key={i}
               title="This source has no in-app view"
-              className={`${common} bg-gray-50 text-gray-500 border-gray-200`}
+              className={`${common} bg-slate-50 dark:bg-slate-800/50 text-slate-500 dark:text-slate-400 border-slate-200 dark:border-slate-700`}
             >
               {s.incident_id && <span className="font-medium">{s.incident_id}</span>}
               <span className="truncate">{title}</span>
@@ -199,18 +209,18 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
   return (
     <div className="pt-1">
       <div className="flex items-center gap-1">
-        <span className="text-[11px] text-gray-400 mr-1">Was this helpful?</span>
+        <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Was this helpful?</span>
         <button
           onClick={() => onRate(1)}
           title="Helpful"
-          className={`p-1 rounded hover:bg-gray-100 ${value === 1 ? 'text-green-600' : 'text-gray-400'}`}
+          className={`p-1 rounded hover:bg-slate-100 dark:bg-slate-800 ${value === 1 ? 'text-green-600' : 'text-slate-400 dark:text-slate-500'}`}
         >
           <ThumbsUp className="w-3.5 h-3.5" />
         </button>
         <button
           onClick={() => { onRate(-1); setShowCorrect(true); setSaved(false); }}
           title="Not helpful"
-          className={`p-1 rounded hover:bg-gray-100 ${value === -1 ? 'text-red-600' : 'text-gray-400'}`}
+          className={`p-1 rounded hover:bg-slate-100 dark:bg-slate-800 ${value === -1 ? 'text-red-600' : 'text-slate-400 dark:text-slate-500'}`}
         >
           <ThumbsDown className="w-3.5 h-3.5" />
         </button>
@@ -229,7 +239,7 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
                 onChange={(e) => setText(e.target.value)}
                 rows={2}
                 placeholder="What's the correct answer? (this is saved and used for similar future questions)"
-                className="flex-1 resize-none rounded-md border border-gray-300 px-2 py-1 text-xs outline-none focus:border-blue-500"
+                className="flex-1 resize-none rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs outline-none focus:border-blue-500"
               />
               <button
                 onClick={submit}
@@ -247,16 +257,19 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
 }
 
 // Section header used throughout the incident response layout.
-function Section({ icon, title, children }: {
-  icon: string; title: string; children: React.ReactNode;
+// A titled block of the answer. Headings used to lead with an emoji, which is
+// the strongest visual tell of machine-written UI; they now carry their weight
+// typographically instead.
+function Section({ title, children }: {
+  title: string; children: React.ReactNode;
 }) {
   return (
-    <div>
-      <h4 className="text-xs font-bold uppercase tracking-wide text-gray-500 mb-1">
-        {icon} {title}
+    <section>
+      <h4 className="mb-1.5 text-[13px] font-semibold text-slate-900 dark:text-slate-100">
+        {title}
       </h4>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -287,12 +300,12 @@ function StepBlock({ step }: { step: ResolutionStep }) {
       className={
         isHazard
           ? 'rounded-lg border-2 border-amber-400 bg-amber-50 p-3'
-          : 'rounded-lg border border-gray-200 bg-gray-50 p-3'
+          : 'rounded-lg border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800/50 p-3'
       }
     >
-      <div className="text-sm font-medium text-gray-900">
+      <div className="text-sm font-medium text-slate-900 dark:text-slate-100">
         Step {step.step} — {step.title}
-        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-gray-500">
+        <span className="ml-2 text-[10px] font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
           {label}
         </span>
         {isHazard && (
@@ -310,15 +323,15 @@ function StepBlock({ step }: { step: ResolutionStep }) {
         </div>
       )}
       {!isFiller(step.purpose) && (
-        <div className="mt-0.5 text-xs text-gray-500">Purpose: {step.purpose}</div>
+        <div className="mt-0.5 text-xs text-slate-500 dark:text-slate-400">Purpose: {step.purpose}</div>
       )}
       {!isFiller(step.action) && (
-        <div className="mt-1 text-sm text-gray-700 whitespace-pre-wrap">{step.action}</div>
+        <div className="mt-1 text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{step.action}</div>
       )}
 
       {/* LOG_ANALYSIS renders its excerpt as a quote; code/config as a block. */}
       {art && type === 'LOG_ANALYSIS' && (
-        <blockquote className="mt-2 border-l-4 border-gray-300 bg-white pl-3 py-1.5 text-xs font-mono text-gray-600 whitespace-pre-wrap">
+        <blockquote className="mt-2 border-l-4 border-slate-300 dark:border-slate-600 bg-white pl-3 py-1.5 text-xs font-mono text-slate-600 dark:text-slate-400 whitespace-pre-wrap">
           {art.content}
         </blockquote>
       )}
@@ -327,7 +340,7 @@ function StepBlock({ step }: { step: ResolutionStep }) {
       )}
 
       {!isFiller(step.validation) && (
-        <div className="mt-1 text-xs text-gray-600 italic">Validate: {step.validation}</div>
+        <div className="mt-1 text-xs text-slate-600 dark:text-slate-400 italic">Validate: {step.validation}</div>
       )}
       {step.evidence && step.evidence.length > 0 && (
         <div className="mt-1 text-xs text-blue-700">Evidence: {step.evidence.join(', ')}</div>
@@ -357,12 +370,16 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
       return !!art && art.language === 'sql' && isDestructiveSql(art.content);
     });
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-2">
-        <span className="text-sm font-semibold text-gray-900">{answer.incident_type}</span>
-        <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${badge.cls}`}>{badge.label}</span>
+    <div className="space-y-5 text-[15px] leading-relaxed text-slate-700 dark:text-slate-300">
+      <div className="flex flex-wrap items-center gap-2 border-b border-slate-100 pb-3 dark:border-slate-800">
+        <span className="text-sm font-semibold text-slate-900 dark:text-slate-100">
+          {answer.incident_type}
+        </span>
+        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+          {badge.label}
+        </span>
         {answer.low_confidence && (
-          <span className="inline-flex items-center gap-1 text-xs text-amber-700">
+          <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
             <AlertTriangle className="w-3.5 h-3.5" /> low confidence — verify before acting
           </span>
         )}
@@ -379,22 +396,22 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         <SourceCard source={answer.retrieval[0]} onOpen={onOpen} />
       )}
 
-      {/* 📋 Problem Summary */}
+      {/* Problem Summary */}
       {answer.answer && (
-        <Section icon="📋" title="Problem Summary"><RichText text={answer.answer} /></Section>
+        <Section title="Problem Summary"><RichText text={answer.answer} /></Section>
       )}
 
-      {/* 🔍 Root Cause — omitted when the source documents none */}
+      {/* Root Cause — omitted when the source documents none */}
       {!isFiller(answer.root_cause) && (
-        <Section icon="🔍" title="Root Cause">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.root_cause}</p>
+        <Section title="Root Cause">
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{answer.root_cause}</p>
         </Section>
       )}
 
-      {/* 🕵️ Investigation — omitted when the source describes none */}
+      {/* Investigation — omitted when the source describes none */}
       {!isFiller(answer.investigation) && (
-        <Section icon="🕵️" title="Investigation">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.investigation}</p>
+        <Section title="Investigation">
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{answer.investigation}</p>
         </Section>
       )}
 
@@ -412,54 +429,60 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         </div>
       )}
 
-      {/* 🛠️ Resolution Steps — one labelled sub-block per solution type, in order */}
+      {/* Resolution Steps — one labelled sub-block per solution type, in order */}
       {answer.steps.length > 0 && (
-        <Section icon="🛠️" title="Resolution Steps">
+        <Section title="Resolution Steps">
           <div className="space-y-3">
             {answer.steps.map((s, i) => <StepBlock key={s.step ?? i} step={s as ResolutionStep} />)}
           </div>
           {answer.has_media && (
-            <p className="mt-2 text-xs italic text-gray-500">
-              📸 This report includes screenshots illustrating the above steps; refer to the
+            <p className="mt-2 flex items-start gap-1.5 text-xs text-slate-500 dark:text-slate-400">
+              <ImagePlus className="mt-0.5 w-3.5 h-3.5 shrink-0" />
+              This report includes screenshots illustrating the above steps; open the
               original incident report to view them.
             </p>
           )}
         </Section>
       )}
 
-      {/* 🤖 AI suggestion — visibly separated from documented resolutions */}
+      {/* AI suggestion — visibly separated from documented resolutions, because
+          the distinction between "a report says this" and "the model proposes
+          this" is the whole trust model of the tool. */}
       {answer.ai_suggestion && (
-        <div className="rounded-lg border border-purple-200 bg-purple-50 p-3">
-          <div className="text-xs font-bold text-purple-800 mb-1">
-            🤖 AI-Suggested Recommendation (not a documented resolution)
+        <div className="rounded-lg border border-violet-200 bg-violet-50 p-3 dark:border-violet-900/50 dark:bg-violet-950/30">
+          <div className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-violet-800 dark:text-violet-300">
+            <Sparkles className="w-3.5 h-3.5" />
+            AI-suggested — not a documented resolution
           </div>
-          <p className="text-sm text-purple-900 whitespace-pre-wrap">{answer.ai_suggestion}</p>
+          <p className="whitespace-pre-wrap text-sm text-violet-900 dark:text-violet-200">
+            {answer.ai_suggestion}
+          </p>
         </div>
       )}
 
       {/* Artifacts not already shown inside a step. */}
       {unattachedArtifacts.length > 0 && (
-        <Section icon="📎" title={`Supporting ${unattachedArtifacts.length > 1 ? 'artifacts' : 'artifact'}`}>
+        <Section title={`Supporting ${unattachedArtifacts.length > 1 ? 'artifacts' : 'artifact'}`}>
           {unattachedArtifacts.map((a, i) => (
             <div key={i}>
-              {a.title && <div className="text-xs text-gray-500 mb-0.5">{a.title}</div>}
+              {a.title && <div className="text-xs text-slate-500 dark:text-slate-400 mb-0.5">{a.title}</div>}
               <CodeBlock code={a.content} language={a.language} />
             </div>
           ))}
         </Section>
       )}
 
-      {/* ✅ Validation / Verification — omitted when nothing was documented */}
+      {/* Validation / Verification — omitted when nothing was documented */}
       {!isFiller(answer.validation) && (
-        <Section icon="✅" title="Validation / Verification">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.validation}</p>
+        <Section title="Validation / Verification">
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{answer.validation}</p>
         </Section>
       )}
 
-      {/* 📝 Additional Notes — omitted when it carries no real information */}
+      {/* Additional Notes — omitted when it carries no real information */}
       {!isFiller(answer.additional_notes) && (
-        <Section icon="📝" title="Additional Notes">
-          <p className="text-sm text-gray-700 whitespace-pre-wrap">{answer.additional_notes}</p>
+        <Section title="Additional Notes">
+          <p className="text-sm text-slate-700 dark:text-slate-300 whitespace-pre-wrap">{answer.additional_notes}</p>
         </Section>
       )}
 
@@ -632,51 +655,65 @@ export default function ChatbotModule() {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit(); }
   };
 
-  return (
-    <div className="flex h-[calc(100vh-4rem)] gap-4">
-      {/* Conversation sidebar (persistent history) */}
-      <div className="w-60 shrink-0 flex flex-col border-r border-gray-200 pr-3">
-        <button
-          onClick={() => selectConversation(null)}
-          className="mb-3 inline-flex items-center justify-center gap-2 rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-700"
-        >
-          <Plus className="w-4 h-4" /> New chat
-        </button>
-        <div className="flex-1 overflow-y-auto space-y-1">
-          {conversations.length === 0 && (
-            <p className="text-xs text-gray-400 px-2 py-4">No conversations yet.</p>
-          )}
-          {conversations.map((c) => (
-            <div
-              key={c.id}
-              className={`group flex items-center gap-2 rounded-lg px-2.5 py-2 cursor-pointer ${
-                c.id === activeId ? 'bg-blue-50 text-blue-700' : 'text-gray-600 hover:bg-gray-50'
-              }`}
-              onClick={() => selectConversation(c.id)}
-            >
-              <MessageSquare className="w-4 h-4 shrink-0" />
-              <span className="flex-1 truncate text-sm">{c.title}</span>
-              <button
-                onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
-                className="opacity-0 group-hover:opacity-100 text-gray-400 hover:text-red-600"
-                title="Delete conversation"
-              >
-                <Trash2 className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          ))}
-        </div>
-      </div>
+  const hasMessages = messages.length > 0;
 
-      {/* Conversation panel + input */}
-      <div className="flex flex-col flex-1 min-w-0 max-w-3xl">
-        {/* Chat-to-report: offer to save the diagnosed incident as a report. */}
+  return (
+    // Full-bleed: App gives this module the bare <main>, so it owns the
+    // viewport height and its own padding — that is what lets the transcript
+    // scroll underneath a composer pinned to the bottom.
+    <div className="flex h-screen">
+      {/* ── History rail ─────────────────────────────────────────────────── */}
+      <aside className="hidden md:flex w-64 shrink-0 flex-col border-r border-slate-200/80 bg-slate-50/60 dark:border-slate-800 dark:bg-slate-900/40">
+        <div className="p-3">
+          <button
+            onClick={() => selectConversation(null)}
+            className="flex w-full items-center gap-2 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200 dark:hover:bg-slate-750"
+          >
+            <Plus className="w-4 h-4" /> New chat
+          </button>
+        </div>
+
+        <div className="flex-1 overflow-y-auto px-2 pb-3">
+          {conversations.length === 0 ? (
+            <p className="px-3 py-6 text-xs text-slate-400">No conversations yet.</p>
+          ) : (
+            <>
+              <p className="px-3 pb-1 pt-2 text-[11px] font-medium text-slate-400">
+                Recent
+              </p>
+              {conversations.map((c) => (
+                <div
+                  key={c.id}
+                  onClick={() => selectConversation(c.id)}
+                  className={`group flex cursor-pointer items-center gap-2 rounded-lg px-3 py-2 text-sm transition ${
+                    c.id === activeId
+                      ? 'bg-slate-200/70 text-slate-900 dark:bg-slate-800 dark:text-slate-100'
+                      : 'text-slate-600 hover:bg-slate-200/50 dark:text-slate-400 dark:hover:bg-slate-800/60'
+                  }`}
+                >
+                  <span className="flex-1 truncate">{c.title}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); removeConversation(c.id); }}
+                    className="shrink-0 text-slate-400 opacity-0 transition hover:text-red-600 group-hover:opacity-100"
+                    title="Delete conversation"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </>
+          )}
+        </div>
+      </aside>
+
+      {/* ── Transcript + composer ────────────────────────────────────────── */}
+      <div className="relative flex min-w-0 flex-1 flex-col">
         {activeId && messages.some((m) => m.role === 'assistant') && (
-          <div className="mb-2 flex items-center justify-end">
+          <div className="flex justify-end border-b border-slate-200/70 px-4 py-2 dark:border-slate-800">
             <button
               onClick={generateReportFromChat}
               disabled={reportBusy}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-1.5 text-xs font-medium text-blue-700 hover:bg-blue-100 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 transition hover:bg-slate-100 disabled:opacity-50 dark:text-slate-400 dark:hover:bg-slate-800"
               title="Create an incident report from this conversation"
             >
               <FileText className="w-3.5 h-3.5" />
@@ -684,153 +721,179 @@ export default function ChatbotModule() {
             </button>
           </div>
         )}
-        <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-4 pb-4">
-          {messages.length === 0 && (
-            <div className="text-center text-gray-400 mt-16">
-              <Bot className="w-10 h-10 mx-auto mb-3 text-gray-300" />
-              <p className="text-sm">Ask about an incident, attach a screenshot, or both.</p>
+
+        <div ref={scrollRef} className="flex-1 overflow-y-auto">
+          {!hasMessages ? (
+            // Empty state centred in the column, not floating at the top.
+            <div className="flex h-full items-center justify-center px-4">
+              <div className="w-full max-w-2xl text-center">
+                <h1 className="text-2xl font-semibold text-slate-800 dark:text-slate-100">
+                  What incident are you looking at?
+                </h1>
+                <p className="mt-2 text-sm text-slate-500 dark:text-slate-400">
+                  Describe the symptoms, paste an error, or attach a screenshot.
+                </p>
+                <div className="mt-6 grid gap-2 sm:grid-cols-2">
+                  {SUGGESTIONS.map((s) => (
+                    <button
+                      key={s}
+                      onClick={() => setInput(s)}
+                      className="rounded-xl border border-slate-200 px-4 py-3 text-left text-sm text-slate-600 transition hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+                    >
+                      {s}
+                    </button>
+                  ))}
+                </div>
+              </div>
             </div>
-          )}
-
-          {messages.map((msg, i) => {
-            if (msg.role === 'user') {
-              return (
-                <div key={i} className="flex justify-end">
-                  <div className="flex items-start gap-2 max-w-[85%]">
-                    <div className="rounded-2xl rounded-tr-sm bg-blue-600 px-4 py-2 text-sm text-white">
-                      {msg.hasImage && (
-                        <div className="mb-1 inline-flex items-center gap-1 text-xs text-blue-100">
-                          <ImagePlus className="w-3 h-3" /> screenshot attached
+          ) : (
+            <div className="mx-auto w-full max-w-3xl px-4 py-6">
+              {messages.map((msg, i) => {
+                // User turns: a compact bubble aligned right. The assistant's
+                // reply is plain text on the page — no bubble, no avatar — so
+                // long structured answers read as a document rather than as a
+                // chat log squeezed into a box.
+                if (msg.role === 'user') {
+                  return (
+                    <div key={i} className="mb-6 flex justify-end">
+                      <div className="max-w-[80%] rounded-2xl bg-slate-100 px-4 py-2.5 text-slate-800 dark:bg-slate-800 dark:text-slate-100">
+                        {msg.hasImage && (
+                          <div className="mb-1 inline-flex items-center gap-1 text-xs text-slate-500 dark:text-slate-400">
+                            <ImagePlus className="w-3 h-3" /> screenshot attached
+                          </div>
+                        )}
+                        <div className="whitespace-pre-wrap text-[15px] leading-relaxed">
+                          {msg.text || <span className="italic text-slate-400">(image only)</span>}
                         </div>
-                      )}
-                      {msg.text || <span className="italic text-blue-100">(image only)</span>}
-                      {msg.links && msg.links.length > 0 && (
-                        <div className="mt-1 space-y-0.5">
-                          {msg.links.map((u) => (
-                            <a key={u} href={u} target="_blank" rel="noopener noreferrer"
-                               className="flex items-center gap-1 text-xs text-blue-100 underline">
-                              <Link2 className="w-3 h-3" /> {u.replace(/^https?:\/\//, '').slice(0, 36)}
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                        {msg.links && msg.links.length > 0 && (
+                          <div className="mt-1.5 space-y-0.5">
+                            {msg.links.map((u) => (
+                              <a key={u} href={u} target="_blank" rel="noopener noreferrer"
+                                 className="flex items-center gap-1 text-xs text-slate-500 underline dark:text-slate-400">
+                                <Link2 className="w-3 h-3" /> {u.replace(/^https?:\/\//, '').slice(0, 40)}
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <div className="p-1.5 bg-blue-600 text-white rounded-full mt-0.5"><User className="w-4 h-4" /></div>
-                  </div>
-                </div>
-              );
-            }
-            if (msg.role === 'error') {
-              return (
-                <div key={i} className="flex items-start gap-2">
-                  <div className="p-1.5 bg-red-100 text-red-600 rounded-full mt-0.5"><AlertTriangle className="w-4 h-4" /></div>
-                  <div className="rounded-2xl rounded-tl-sm bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700 max-w-[85%]">{msg.text}</div>
-                </div>
-              );
-            }
-            if (msg.role === 'chat') {
-              // Greeting/smalltalk = plain bubble. Clarification request = amber
-              // "needs more info" bubble so it reads as a deliberate ask, not a
-              // failed answer (the model chose NOT to guess).
-              const clarify = msg.clarify;
-              return (
-                <div key={i} className="flex items-start gap-2">
-                  <div className={`p-1.5 rounded-full mt-0.5 text-white ${clarify ? 'bg-amber-500' : 'bg-gray-800'}`}>
-                    {clarify ? <AlertTriangle className="w-4 h-4" /> : <Bot className="w-4 h-4" />}
-                  </div>
-                  <div className={`rounded-2xl rounded-tl-sm px-4 py-2.5 text-sm shadow-sm max-w-[85%] whitespace-pre-wrap ${
-                    clarify ? 'bg-amber-50 border border-amber-200 text-amber-900' : 'bg-white border border-gray-200 text-gray-700'
-                  }`}>
-                    {msg.text}
-                  </div>
-                </div>
-              );
-            }
-            if (msg.role === 'streaming') {
-              // Tokens arriving live (before the structured answer is finalized).
-              return (
-                <div key={i} className="flex items-start gap-2">
-                  <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
-                  <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 text-sm text-gray-500 shadow-sm max-w-[85%] inline-flex items-center gap-2">
-                    <Loader2 className="w-3.5 h-3.5 animate-spin shrink-0" /> Analyzing…
-                  </div>
-                </div>
-              );
-            }
-            // The question this answer responded to = nearest preceding user msg.
-            const prevUser = [...messages.slice(0, i)].reverse().find((m) => m.role === 'user') as
-              | UserMessage | undefined;
-            const question = prevUser?.text || msg.answer.answer || '';
-            return (
-              <div key={i} className="flex items-start gap-2">
-                <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
-                <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 shadow-sm max-w-[85%]">
-                  <AssistantCard
-                    answer={msg.answer}
-                    onOpen={setOpenReport}
-                    feedback={msg.feedback}
-                    onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
-                    onCorrect={msg.messageId ? (c) => sendCorrection(question, c) : undefined}
-                    messageId={msg.messageId}
-                  />
-                </div>
-              </div>
-            );
-          })}
+                  );
+                }
 
-          {loading && !messages.some((m) => m.role === 'streaming') && (
-            <div className="flex items-start gap-2">
-              <div className="p-1.5 bg-gray-800 text-white rounded-full mt-0.5"><Bot className="w-4 h-4" /></div>
-              <div className="rounded-2xl rounded-tl-sm bg-white border border-gray-200 px-4 py-3 text-sm text-gray-500 inline-flex items-center gap-2">
-                <Loader2 className="w-4 h-4 animate-spin" /> Thinking…
-              </div>
+                if (msg.role === 'error') {
+                  return (
+                    <div key={i} className="mb-6 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+                      <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" />
+                      <span>{msg.text}</span>
+                    </div>
+                  );
+                }
+
+                if (msg.role === 'chat') {
+                  // A clarification request keeps its amber treatment: the model
+                  // deliberately declined to guess, which is not the same as a
+                  // plain reply and should not look like one.
+                  const clarify = msg.clarify;
+                  return clarify ? (
+                    <div key={i} className="mb-6 flex items-start gap-2 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200">
+                      <AlertTriangle className="mt-0.5 w-4 h-4 shrink-0" />
+                      <span className="whitespace-pre-wrap">{msg.text}</span>
+                    </div>
+                  ) : (
+                    <div key={i} className="mb-6 whitespace-pre-wrap text-[15px] leading-relaxed text-slate-700 dark:text-slate-200">
+                      {msg.text}
+                    </div>
+                  );
+                }
+
+                if (msg.role === 'streaming') {
+                  return (
+                    <div key={i} className="mb-6 flex items-center gap-2 text-[15px] text-slate-400">
+                      <Loader2 className="w-4 h-4 animate-spin" /> Analyzing…
+                    </div>
+                  );
+                }
+
+                const prevUser = [...messages.slice(0, i)].reverse().find((m) => m.role === 'user') as
+                  | UserMessage | undefined;
+                const question = prevUser?.text || msg.answer.answer || '';
+                return (
+                  <div key={i} className="mb-8">
+                    <AssistantCard
+                      answer={msg.answer}
+                      onOpen={setOpenReport}
+                      feedback={msg.feedback}
+                      onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
+                      onCorrect={msg.messageId ? (c) => sendCorrection(question, c) : undefined}
+                      messageId={msg.messageId}
+                    />
+                  </div>
+                );
+              })}
+
+              {loading && !messages.some((m) => m.role === 'streaming') && (
+                <div className="mb-6 flex items-center gap-2 text-[15px] text-slate-400">
+                  <Loader2 className="w-4 h-4 animate-spin" /> Thinking…
+                </div>
+              )}
             </div>
           )}
         </div>
 
-        {/* Input row: image attach + text, supports all three modes */}
-        <div className="border-t border-gray-200 pt-3">
-          {image && (
-            <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">
-              <ImagePlus className="w-3.5 h-3.5" /> {image.name}
-              <button onClick={() => setImage(null)} className="text-gray-400 hover:text-red-600"><X className="w-3.5 h-3.5" /></button>
+        {/* Composer: pinned, on a fading backdrop so text scrolls out under it. */}
+        <div className="shrink-0 bg-gradient-to-t from-white via-white to-transparent px-4 pb-4 pt-2 dark:from-slate-950 dark:via-slate-950">
+          <div className="mx-auto w-full max-w-3xl">
+            {image && (
+              <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
+                <ImagePlus className="w-3.5 h-3.5" /> {image.name}
+                <button onClick={() => setImage(null)} className="text-slate-400 hover:text-red-500">
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
+            <div className="flex items-end gap-2 rounded-3xl border border-slate-200 bg-white px-3 py-2 shadow-sm transition focus-within:border-slate-300 focus-within:shadow-md dark:border-slate-700 dark:bg-slate-800">
+              <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
+              <button
+                onClick={() => fileRef.current?.click()}
+                className="rounded-full p-2 text-slate-400 transition hover:bg-slate-100 hover:text-slate-600 dark:hover:bg-slate-700"
+                title="Attach a screenshot"
+              >
+                <ImagePlus className="w-5 h-5" />
+              </button>
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={onKeyDown}
+                rows={1}
+                placeholder="Ask about an incident…"
+                className="max-h-48 flex-1 resize-none bg-transparent py-2 text-[15px] text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
+              />
+              <button
+                onClick={submit}
+                disabled={loading || (!input.trim() && !image)}
+                className="rounded-full bg-slate-900 p-2 text-white transition hover:bg-slate-700 disabled:opacity-30 dark:bg-slate-100 dark:text-slate-900 dark:hover:bg-white"
+                aria-label="Send"
+              >
+                <Send className="w-4 h-4" />
+              </button>
             </div>
-          )}
-          <div className="flex items-end gap-2 rounded-xl border border-gray-300 bg-white p-2 shadow-sm focus-within:border-blue-500">
-            <input ref={fileRef} type="file" accept="image/*" className="hidden" onChange={onPickImage} />
-            <button
-              onClick={() => fileRef.current?.click()}
-              className="p-2 text-gray-400 hover:text-blue-600" title="Attach a screenshot"
-            >
-              <ImagePlus className="w-5 h-5" />
-            </button>
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={onKeyDown}
-              rows={1}
-              placeholder="Ask about an incident… (paste a link to attach it)"
-              className="flex-1 resize-none bg-transparent px-1 py-1.5 text-sm outline-none max-h-40"
-            />
-            <button
-              onClick={submit}
-              disabled={loading || (!input.trim() && !image)}
-              className="inline-flex items-center justify-center rounded-lg bg-blue-600 p-2 text-white hover:bg-blue-700 disabled:opacity-40"
-              aria-label="Send"
-            >
-              <Send className="w-4 h-4" />
-            </button>
+
+            <p className="mt-2 text-center text-[11px] text-slate-400">
+              Answers are grounded in your incident reports — verify before acting.
+            </p>
           </div>
-          <p className="mt-1.5 text-center text-xs text-gray-400">Enter to send · Shift+Enter for a new line · 📎 to attach a screenshot</p>
         </div>
       </div>
 
       {/* In-app report viewer for a cited source */}
       {openReport && (
-        <div className="fixed inset-0 z-50 flex items-start justify-center bg-black/40 p-6 overflow-y-auto" onClick={() => setOpenReport(null)}>
-          <div className="w-full max-w-4xl bg-gray-50 rounded-xl shadow-xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-slate-900/50 p-6 backdrop-blur-sm" onClick={() => setOpenReport(null)}>
+          <div className="w-full max-w-4xl rounded-xl bg-slate-50 shadow-2xl dark:bg-slate-900" onClick={(e) => e.stopPropagation()}>
             <div className="flex justify-end p-2">
-              <button onClick={() => setOpenReport(null)} className="p-1.5 text-gray-500 hover:text-gray-900"><X className="w-5 h-5" /></button>
+              <button onClick={() => setOpenReport(null)} className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900 dark:hover:bg-slate-800">
+                <X className="w-5 h-5" />
+              </button>
             </div>
             <div className="px-4 pb-6">
               <ReportViewer filename={openReport} onBack={() => setOpenReport(null)} onEdit={() => setOpenReport(null)} />

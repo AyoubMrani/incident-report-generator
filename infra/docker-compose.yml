@@ -1,50 +1,28 @@
-# Local "one app" stack for the unified NTT incident platform.
+# Local stack for the NTT incident platform.
 #
-#   docker compose -f infra/docker-compose.yml up --build
+#   cp .env.example .env
+#   docker compose -f infra/docker-compose.yml up --build     # http://localhost:8000
 #
-# Brings up the backend (FastAPI) serving the built React SPA — the whole app on
-# http://localhost:8000. The frontend is built inside the image (see
-# Dockerfile.backend), so no host-side npm is needed.
-#
-# LLM: by default the backend talks to OLLAMA ON THE HOST (host.docker.internal),
-# because the user already runs `ollama serve` with the models pulled and it gets
-# Metal GPU acceleration there. On macOS a containerized Ollama would be CPU-only
-# and start with no models. To run Ollama in a container instead, use the
-# "with-ollama" profile:
-#
+# Services, ports and credentials: see docs/SERVICES.md.
+# LLM: talks to Ollama on the host by default. For a containerized one:
 #   docker compose -f infra/docker-compose.yml --profile with-ollama up --build
-#   docker compose -f infra/docker-compose.yml exec ollama ollama pull llama3:8b
-#   docker compose -f infra/docker-compose.yml exec ollama ollama pull qwen2.5vl:3b
-#
-# and set OLLAMA_HOST=http://ollama:11434 for the backend (commented below).
-#
-# The reports/ directory is bind-mounted so the generator and chatbot share the
-# same data on disk (the integration seam). Later: swap for a SharePoint adapter.
+#   ... then set OLLAMA_HOST=http://ollama:11434
 
 services:
-  # ── Data layer ──────────────────────────────────────────────────────────────
-  # Postgres carries identity, chat and search in one schema. The pgvector image
-  # is stock Postgres 16 with the extension preinstalled, so `CREATE EXTENSION
-  # vector` succeeds without building anything.
   postgres:
-    image: pgvector/pgvector:pg16
+    image: pgvector/pgvector:pg16      # stock pg16 + the vector extension
     environment:
       - POSTGRES_USER=${POSTGRES_USER:-ntt}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-ntt}
       - POSTGRES_DB=${POSTGRES_DB:-ntt}
     ports:
-      # Exposed so migration scripts and psql can run from the host. Defaults to
-      # 5433, not 5432: a developer machine usually already has a Postgres on the
-      # standard port, and a port clash at `up` is a confusing first experience.
+      # 5433: dev machines usually already have a Postgres on 5432.
       - "${POSTGRES_PORT:-5433}:5432"
     volumes:
       - pg-data:/var/lib/postgresql/data
-      # Creates the separate Keycloak database on first init. Keycloak owning
-      # its own database keeps its schema churn away from application tables.
-      - ./postgres-init:/docker-entrypoint-initdb.d:ro
+      - ./postgres-init:/docker-entrypoint-initdb.d:ro   # creates the keycloak db
     healthcheck:
-      # -U/-d pinned: without them pg_isready checks the wrong role and reports
-      # healthy while the app's database is still being created.
+      # -U/-d pinned, or this reports healthy while the app's db is still being created.
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-ntt} -d ${POSTGRES_DB:-ntt}"]
       interval: 5s
       timeout: 5s
@@ -52,8 +30,6 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # Object storage for report blobs. S3-compatible, so boto3 talks to it exactly
-  # as it would to AWS — only the endpoint URL differs.
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -61,8 +37,8 @@ services:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-minioadmin}
     ports:
-      - "${MINIO_PORT:-9000}:9000"      # S3 API
-      - "${MINIO_CONSOLE_PORT:-9001}:9001"  # web console
+      - "${MINIO_PORT:-9000}:9000"           # S3 API
+      - "${MINIO_CONSOLE_PORT:-9001}:9001"   # web console
     volumes:
       - minio-data:/data
     healthcheck:
@@ -73,9 +49,8 @@ services:
       start_period: 10s
     restart: unless-stopped
 
-  # One-shot: create the bucket and turn on versioning before the backend runs.
-  # Versioning must be enabled on an empty bucket — retrofitting it later leaves
-  # every existing object at "null" version, which breaks point-in-time reads.
+  # Creates the bucket and enables versioning. Versioning must be turned on
+  # while the bucket is empty, or existing objects are stuck at version "null".
   minio-init:
     image: minio/mc:latest
     depends_on:
@@ -94,9 +69,8 @@ services:
       "
     restart: "no"
 
-  # ── Identity ────────────────────────────────────────────────────────────────
-  # Keycloak in dev mode: HTTP, no hostname strictness. Correct for a local-only
-  # stack; a deployed one needs start --optimized with TLS and a real hostname.
+  # start-dev = HTTP, no hostname checks. Local only; a deployment needs
+  # `start --optimized` with TLS.
   keycloak:
     image: quay.io/keycloak/keycloak:26.0
     command: ["start-dev", "--import-realm"]
@@ -112,15 +86,13 @@ services:
     ports:
       - "${KEYCLOAK_PORT:-8080}:8080"
     volumes:
-      # Realm, roles, client and seed users as code: a teammate gets the same
-      # identity setup from `up`, with no console clicking to reproduce.
+      # Realm, roles, client and seed users as code.
       - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      # The image has no curl/wget; Keycloak 26 exposes health on the management
-      # port 9000 and ships a JRE, so this opens a socket with java itself.
+      # No curl/wget in the image; health is on the management port 9000.
       test:
         - CMD-SHELL
         - >-
@@ -144,19 +116,17 @@ services:
         condition: service_healthy
       minio:
         condition: service_healthy
-      # Not waited on: the backend fetches JWKS lazily and fails tokens closed
-      # (401) until Keycloak answers, so blocking startup on it would trade a
-      # brief window of failed logins for a much longer one of no service at
-      # all — Keycloak takes ~30s to become ready.
+      # Not waited on: JWKS is fetched lazily and tokens fail closed (401)
+      # until Keycloak answers, so blocking startup on its ~30s boot would
+      # cost more availability than it buys.
       keycloak:
         condition: service_started
     environment:
       - REPORTS_DIR=/data/reports
       - HF_HOME=/data/hf-cache
-      - CHAT_DB=/data/chat/chat.db     # legacy SQLite; read only by the migration
+      - CHAT_DB=/data/chat/chat.db          # legacy SQLite; read only by the migration
       - CHATBOT_PROVIDER=ollama
 
-      # ── Data layer ──────────────────────────────────────────────────────────
       - DATABASE_URL=postgresql+psycopg://${POSTGRES_USER:-ntt}:${POSTGRES_PASSWORD:-ntt}@postgres:5432/${POSTGRES_DB:-ntt}
       - STORAGE_BACKEND=${STORAGE_BACKEND:-minio}
       - MINIO_ENDPOINT=http://minio:9000
@@ -164,67 +134,44 @@ services:
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - REPORTS_BUCKET=${REPORTS_BUCKET:-ntt-reports}
 
-      # ── Auth ────────────────────────────────────────────────────────────────
-      # AUTH_DISABLED=1 falls back to the X-Client-Id header, which is how the
-      # test suite and a bare `uvicorn` run work without Keycloak running.
-      # Refused at boot when APP_ENV is production or staging.
+      # AUTH_DISABLED=1 falls back to the X-Client-Id header. Refused at boot
+      # when APP_ENV is production or staging.
       - APP_ENV=${APP_ENV:-development}
       - AUTH_DISABLED=${AUTH_DISABLED:-0}
+      # Two issuers: the browser is redirected to the public URL, the backend
+      # reaches Keycloak internally. Tokens validate against both.
       - OIDC_ISSUER=${OIDC_ISSUER:-http://keycloak:8080/realms/ntt}
-      # Browsers get redirected to the host-visible URL, which is not the
-      # container-internal one above; tokens are validated against both.
       - OIDC_PUBLIC_ISSUER=${OIDC_PUBLIC_ISSUER:-http://localhost:8080/realms/ntt}
       - OIDC_CLIENT_ID=${OIDC_CLIENT_ID:-ntt-platform}
       - OIDC_VERIFY_AUDIENCE=${OIDC_VERIFY_AUDIENCE:-0}
-      # Empty is correct while this app serves its own SPA from one origin.
-      - CORS_ORIGINS=${CORS_ORIGINS:-}
-      # Default: reach the host's Ollama. The ollama client reads OLLAMA_HOST.
-      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
-      # To use the containerized Ollama instead (with-ollama profile), swap to:
-      # - OLLAMA_HOST=http://ollama:11434
+      - CORS_ORIGINS=${CORS_ORIGINS:-}      # empty: the API serves its own SPA
 
-      # Operational knobs, surfaced here so changing them does not need a code
-      # edit and a rebuild. Each falls back to the default in chatbot/config.py.
-      # Generation model. See eval/model_bench.py for the measurement behind
-      # the default; `OLLAMA_MODEL=llama3:8b docker compose up -d` switches it.
+      - OLLAMA_HOST=${OLLAMA_HOST:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.2:3b}
-      # Near-greedy decoding: this task reproduces documented procedures, so
-      # sampling variance is a defect, not creativity.
+      # Near-greedy: this task reproduces documented procedures, so sampling
+      # variance is a defect rather than creativity.
       - OLLAMA_TEMPERATURE=${OLLAMA_TEMPERATURE:-0.1}
-      # Bounds a wedged model; without it a hung call holds a worker for ever.
-      # Sized against measured queueing, not single-request latency. Ollama
-      # serialises generation, so concurrent askers wait their turn: measured
-      # with eval/load_check.py --no-cache (4 workers, 8 distinct requests) all
-      # succeeded but latency ran 27s-133s over 226s wall. A timeout near the
-      # single-request figure (~30s) would fail queued requests spuriously.
-      #
-      # OLLAMA_NUM_PARALLEL=4 was measured as the obvious fix and rejected: on
-      # one M4 GPU the slots share the same silicon, so wall time improved only
-      # 226s -> 190s while the *fastest* request went 27s -> 62s, resident
-      # memory went 2.5GB -> 4.8GB, and one answer degraded to 0 steps under
-      # contention. Serial execution with the answer cache in front of it is
-      # the better trade here. Revisit only on hardware with headroom to run
-      # slots genuinely in parallel.
+      # Sized against measured queueing, not single-request latency: Ollama
+      # serialises generation, so concurrent askers wait their turn (measured
+      # 27s-133s over 226s wall for 8 requests). A ~30s timeout would fail
+      # queued requests spuriously. OLLAMA_NUM_PARALLEL=4 was tried and
+      # rejected — on one GPU it cut wall time 226s->190s but pushed the
+      # fastest request 27s->62s and doubled resident memory.
       - OLLAMA_TIMEOUT=${OLLAMA_TIMEOUT:-300}
-      # text | json — json when shipping logs to a collector.
-      - LOG_FORMAT=${LOG_FORMAT:-text}
+
+      - LOG_FORMAT=${LOG_FORMAT:-text}      # text | json
       - LOG_LEVEL=${LOG_LEVEL:-INFO}
     extra_hosts:
-      # Lets host.docker.internal resolve on Linux too (already works on macOS).
-      - "host.docker.internal:host-gateway"
+      - "host.docker.internal:host-gateway"   # so the alias also resolves on Linux
     volumes:
       - ../reports:/data/reports
       - hf-cache:/data/hf-cache
-      - chat-db:/data/chat          # persists conversation history across restarts
+      - chat-db:/data/chat
     restart: unless-stopped
-    # Steady-state usage is ~600 MB (embedding model + index + FastAPI). The
-    # ceiling is generous enough to absorb a large report or a burst of
-    # concurrent requests, while stopping a leak in this container from
-    # starving Ollama — which shares the host's memory and needs several GB
-    # resident to answer at all.
+    # Steady state is ~600 MB. The ceiling absorbs a burst without letting a
+    # leak here starve Ollama, which shares host memory.
     mem_limit: 2g
 
-  # Opt-in containerized Ollama (profile: with-ollama). Off by default.
   ollama:
     image: ollama/ollama:latest
     profiles: ["with-ollama"]
@@ -235,8 +182,8 @@ services:
     restart: unless-stopped
 
 volumes:
-  hf-cache:       # persists the sentence-transformers embedding model
+  hf-cache:       # sentence-transformers model
   chat-db:        # legacy SQLite history, kept until the migration is verified
-  ollama-models:  # persists pulled Ollama models (with-ollama profile)
-  pg-data:        # Postgres: users, conversations, messages, report catalog
-  minio-data:     # MinIO: report blobs (versioned)
+  ollama-models:
+  pg-data:
+  minio-data:
