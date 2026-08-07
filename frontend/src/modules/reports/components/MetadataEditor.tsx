@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ReportMetadata, StoredCategoryOption, StoredMetadataField } from '../../../types';
 import { Plus, Trash2 } from 'lucide-react';
+import { NTT_BLUE } from '../../../ui/Brand';
 
 interface Props {
   metadata: ReportMetadata;
@@ -146,62 +147,62 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200 mb-6">
-      <h2 className="text-lg font-semibold mb-4 text-gray-800">Incident Metadata</h2>
+    <div className="bg-app-elevated border-app p-6 rounded-xl shadow-sm border mb-6">
+      <h2 className="text-[15px] font-semibold mb-4 text-app">Incident Metadata</h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Incident ID</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Incident ID</label>
           <input
             type="text"
             name="incident_id"
             value={metadata.incident_id}
             onChange={handleChange}
             placeholder="e.g., INC0383916"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Title (Short Description)</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Title (Short Description)</label>
           <input
             type="text"
             name="title"
             value={metadata.title}
             onChange={handleChange}
             placeholder="e.g., Delete Provisions | Defective ports in NRI"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Caller Name</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Caller Name</label>
           <input
             type="text"
             name="caller"
             value={metadata.caller}
             onChange={handleChange}
             placeholder="e.g., Robin Carlos Steffen"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
           />
         </div>
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Date of Incident</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Date of Incident</label>
           <input
             type="date"
             name="date"
             value={metadata.date}
             onChange={handleChange}
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Category</label>
           <div className="flex gap-2">
             <select
               name="category"
               value={metadata.category}
               onChange={handleChange}
-              className="flex-1 p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+              className="flex-1 p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
             >
               <option value="">Select Category</option>
               {DEFAULT_CATEGORIES.map(cat => (
@@ -221,12 +222,12 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
                 value={newCategoryLabel}
                 onChange={handleCustomCategoryChange}
                 placeholder="Enter custom category name"
-                className="flex-1 p-2 border border-gray-300 rounded-md text-sm"
+                className="flex-1 p-2 border-app bg-app text-app border rounded-lg text-sm outline-none"
                 onKeyPress={(e) => e.key === 'Enter' && handleAddCustomCategory()}
               />
               <button
                 onClick={handleAddCustomCategory}
-                className="px-3 py-2 bg-green-500 text-white rounded-md hover:bg-green-600 text-sm font-medium"
+                className="px-3 py-2 bg-emerald-600 text-white rounded-lg hover:bg-emerald-700 text-sm font-medium transition"
                 title="Save this category for future use"
               >
                 Add
@@ -236,7 +237,7 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
                   setShowCustomCategoryInput(false);
                   // Keep the typed value in metadata but don't save to permanent list
                 }}
-                className="px-3 py-2 bg-gray-300 text-gray-700 rounded-md hover:bg-gray-400 text-sm"
+                className="px-3 py-2 bg-app-hover text-app rounded-lg hover:bg-app-hover text-sm transition"
                 title="Use custom category for this report only"
               >
                 Skip
@@ -247,7 +248,7 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
           {metadata.category === '__other__' && !showCustomCategoryInput && (
             <button
               onClick={() => setShowCustomCategoryInput(true)}
-              className="mt-2 text-sm text-blue-600 hover:text-blue-700"
+              className="mt-2 text-sm hover:underline"
             >
               + Add custom category
             </button>
@@ -256,11 +257,11 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
           {customCategories.length > 0 && (
             <div className="mt-2 flex flex-wrap gap-2">
               {customCategories.map(cat => (
-                <div key={cat.id} className="flex items-center gap-1 bg-blue-100 text-blue-700 px-2 py-1 rounded text-xs">
+                <div key={cat.id} className="flex items-center gap-1 bg-app-hover text-app-muted px-2 py-1 rounded text-xs">
                   {cat.label}
                   <button
                     onClick={() => handleDeleteCategory(cat.id)}
-                    className="hover:text-blue-900"
+                    className="hover:text-app"
                   >
                     <Trash2 className="w-3 h-3" />
                   </button>
@@ -271,21 +272,21 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
         </div>
 
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">Subcategory</label>
+          <label className="block text-[13px] font-medium text-app-muted mb-1">Subcategory</label>
           <input
             type="text"
             name="subcategory"
             value={metadata.subcategory}
             onChange={handleChange}
             placeholder="e.g., Database Issue"
-            className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500"
+            className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition"
           />
         </div>
       </div>
 
       {/* Custom Fields Section */}
-      <div className="mt-6 pt-6 border-t border-gray-200">
-        <h3 className="text-sm font-semibold text-gray-800 mb-4">Custom Fields</h3>
+      <div className="mt-6 pt-6 border-t border-app">
+        <h3 className="text-sm font-semibold text-app mb-4">Custom Fields</h3>
 
         {/* Existing custom fields */}
         {customFields.map(field => {
@@ -294,9 +295,9 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
             <div key={field.id} className="flex items-end gap-2 mb-3">
               <div className="flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <label className="block text-xs font-medium text-gray-700">{field.label}</label>
+                  <label className="block text-xs font-medium text-app-muted">{field.label}</label>
                   {isTemporary && (
-                    <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">This report only</span>
+                    <span className="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded dark:bg-amber-950/40 dark:text-amber-400">This report only</span>
                   )}
                 </div>
                 <input
@@ -304,12 +305,12 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
                   value={metadata[field.name] || ''}
                   onChange={(e) => onChange({ ...metadata, [field.name]: e.target.value })}
                   placeholder={`Enter ${field.label}`}
-                  className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                  className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition text-sm"
                 />
               </div>
               <button
                 onClick={() => handleDeleteField(field.id)}
-                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 rounded-md"
+                className="p-2 text-red-600 hover:text-red-700 hover:bg-red-50 dark:hover:bg-red-950/30 rounded-lg transition"
                 title={isTemporary ? "Remove this field from this report" : "Remove this field from all reports"}
               >
                 <Trash2 className="w-4 h-4" />
@@ -319,26 +320,26 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
         })}
 
         {/* Add new field form */}
-        <div className="mt-4 p-4 bg-gray-50 rounded-md">
+        <div className="mt-4 p-4 bg-app-surface rounded-lg">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Field Name (variable)</label>
+              <label className="block text-xs font-medium text-app-muted mb-1">Field Name (variable)</label>
               <input
                 type="text"
                 value={newFieldName}
                 onChange={(e) => setNewFieldName(e.target.value)}
                 placeholder="e.g., severity_level"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition text-sm"
               />
             </div>
             <div>
-              <label className="block text-xs font-medium text-gray-700 mb-1">Field Value (default)</label>
+              <label className="block text-xs font-medium text-app-muted mb-1">Field Value (default)</label>
               <input
                 type="text"
                 value={newFieldValue}
                 onChange={(e) => setNewFieldValue(e.target.value)}
                 placeholder="e.g., High"
-                className="w-full p-2 border border-gray-300 rounded-md focus:ring-blue-500 focus:border-blue-500 text-sm"
+                className="w-full p-2 border-app bg-app text-app border rounded-lg outline-none focus:border-app-strong transition text-sm"
               />
             </div>
           </div>
@@ -348,15 +349,16 @@ export function MetadataEditor({ metadata, onChange, reportCustomFields = [] }: 
               type="checkbox"
               checked={saveNewField}
               onChange={(e) => setSaveNewField(e.target.checked)}
-              className="w-4 h-4 rounded border-gray-300 text-blue-500"
+              className="w-4 h-4 rounded border-app-strong"
             />
-            <span className="text-sm text-gray-700">Save this field for future reports</span>
+            <span className="text-sm text-app-muted">Save this field for future reports</span>
           </label>
 
           <button
             onClick={handleAddCustomField}
             disabled={!newFieldName.trim()}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-500 text-white rounded-md hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="flex items-center gap-2 px-4 py-2 rounded-lg text-white disabled:opacity-50 disabled:cursor-not-allowed text-sm transition hover:brightness-110"
+            style={{ background: NTT_BLUE }}
           >
             <Plus className="w-4 h-4" />
             Add Field

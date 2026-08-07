@@ -2,6 +2,8 @@ import React, { useState } from 'react';
 import Swal from 'sweetalert2';
 import { IncidentReport } from '../../../types';
 import { Save, Loader2 } from 'lucide-react';
+import { apiFetch } from '../../../api/chat';
+import { NTT_BLUE } from '../../../ui/Brand';
 
 interface Props {
   report: IncidentReport;
@@ -134,7 +136,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
     try {
       const markdown = generateMarkdown();
       
-      const response = await fetch('/api/reports', {
+      const response = await apiFetch('/api/reports', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -145,7 +147,7 @@ export function ExportPanel({ report, editingFilename }: Props) {
           editingFilename
         }),
       });
-      
+
       if (response.status === 409) {
         const data = await response.json();
         await Swal.fire({
@@ -157,7 +159,29 @@ export function ExportPanel({ report, editingFilename }: Props) {
         setIsSaving(false);
         return;
       }
-      
+
+      if (response.status === 403) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Not allowed',
+          text: 'Your account has read-only access and cannot save reports.',
+          confirmButtonColor: '#3b82f6',
+        });
+        setIsSaving(false);
+        return;
+      }
+
+      if (response.status === 401) {
+        await Swal.fire({
+          icon: 'error',
+          title: 'Session expired',
+          text: 'Please sign in again to save this report.',
+          confirmButtonColor: '#3b82f6',
+        });
+        setIsSaving(false);
+        return;
+      }
+
       if (!response.ok) {
         throw new Error('Failed to save report');
       }
@@ -206,12 +230,13 @@ export function ExportPanel({ report, editingFilename }: Props) {
   };
 
   return (
-    <div className="mt-8 pt-6 border-t border-gray-200">
-      <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
+    <div className="border-app mt-8 border-t pt-6">
+      <div className="flex flex-col items-start gap-4 sm:flex-row sm:items-center">
         <button
           onClick={handleSaveReport}
           disabled={isSaving}
-          className="flex items-center px-6 py-3 bg-blue-600 text-white font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-70"
+          className="flex items-center rounded-lg px-6 py-3 font-medium text-white transition hover:brightness-110 disabled:opacity-70"
+          style={{ background: NTT_BLUE }}
         >
           {isSaving ? (
             <Loader2 className="w-5 h-5 mr-2 animate-spin" />

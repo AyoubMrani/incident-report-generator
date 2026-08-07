@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from 'react';
 import { IncidentReport } from '../../../types';
-import { Loader2, ArrowLeft, Download, FileJson, FileText, Trash2, Edit } from 'lucide-react';
+import { Loader2, ArrowLeft, Download, FileJson, FileText, Trash2, Edit, AlertTriangle } from 'lucide-react';
 import Swal from 'sweetalert2';
+import { apiFetch } from '../../../api/chat';
+import { NTT_BLUE } from '../../../ui/Brand';
 
 interface Props {
   filename: string;
@@ -16,16 +18,11 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
   const [isDeleting, setIsDeleting] = useState(false);
 
   const handleDeleteReport = async () => {
-    // Extract incident_id from simple filename "incident_inc0001_timestamp.json"
     const incidentMatch = filename.match(/incident_([^_]+)_/);
     const incident_id = incidentMatch ? incidentMatch[1] : null;
 
     if (!incident_id) {
-      await Swal.fire({
-        title: 'Error!',
-        text: 'Could not determine incident ID.',
-        icon: 'error',
-      });
+      await Swal.fire({ title: 'Error!', text: 'Could not determine incident ID.', icon: 'error' });
       return;
     }
 
@@ -39,48 +36,53 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
       confirmButtonText: 'Delete',
       cancelButtonText: 'Cancel',
     });
-
-    if (!result.isConfirmed) {
-      return;
-    }
+    if (!result.isConfirmed) return;
 
     setIsDeleting(true);
     try {
-      const response = await fetch(`/api/delete?incident_id=${encodeURIComponent(incident_id)}`, {
+      const response = await apiFetch(`/api/delete?incident_id=${encodeURIComponent(incident_id)}`, {
         method: 'DELETE',
       });
+      if (response.status === 403) {
+        await Swal.fire({ title: 'Not allowed', text: 'Your account has read-only access.', icon: 'error' });
+        setIsDeleting(false);
+        return;
+      }
       if (!response.ok) throw new Error('Failed to delete report');
-      
-      await Swal.fire({
-        title: 'Deleted!',
-        text: 'Report has been deleted.',
-        icon: 'success',
-        timer: 1500,
-      });
-      
-      // Go back to list after deletion
+
+      await Swal.fire({ title: 'Deleted!', text: 'Report has been deleted.', icon: 'success', timer: 1500 });
       onBack();
     } catch (err) {
       setError('Could not delete report.');
       console.error(err);
-      await Swal.fire({
-        title: 'Error!',
-        text: 'Failed to delete report.',
-        icon: 'error',
-      });
+      await Swal.fire({ title: 'Error!', text: 'Failed to delete report.', icon: 'error' });
       setIsDeleting(false);
     }
   };
 
   useEffect(() => {
     const fetchReport = async () => {
+      setError(null);
       try {
-        const response = await fetch(`/api/reports/content/${encodeURIComponent(filename)}`);
-        if (!response.ok) throw new Error('Failed to fetch report content');
+        const response = await apiFetch(`/api/reports/content/${encodeURIComponent(filename)}`);
+        // Same rule as the list: name the real cause instead of a generic one.
+        if (response.status === 401) {
+          setError('Your session has expired. Sign in again to view this report.');
+          return;
+        }
+        if (response.status === 403) {
+          setError('Your account does not have permission to view this report.');
+          return;
+        }
+        if (response.status === 404) {
+          setError('This report no longer exists. It may have been deleted.');
+          return;
+        }
+        if (!response.ok) throw new Error(`Request failed (${response.status})`);
         const data = await response.json();
         setReport(data);
       } catch (err) {
-        setError('Could not load report content.');
+        setError('Could not load this report. Check your connection and try again.');
         console.error(err);
       } finally {
         setIsLoading(false);
@@ -92,17 +94,22 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
 
   if (isLoading) {
     return (
-      <div className="flex justify-center items-center p-12">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+      <div className="flex items-center justify-center p-12">
+        <Loader2 className="w-6 h-6 animate-spin" style={{ color: NTT_BLUE }} />
       </div>
     );
   }
 
   if (error || !report) {
     return (
-      <div className="p-6 bg-red-50 text-red-700 rounded-lg border border-red-200">
-        {error || 'Report not found'}
-        <button onClick={onBack} className="block mt-4 text-red-800 underline">Go Back</button>
+      <div className="flex items-start gap-3 rounded-xl border border-red-200 bg-red-50 p-5 text-red-700 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-300">
+        <AlertTriangle className="mt-0.5 w-5 h-5 shrink-0" />
+        <div>
+          <p className="text-sm">{error || 'Report not found'}</p>
+          <button onClick={onBack} className="mt-2 text-sm font-medium underline underline-offset-2">
+            ← Back to list
+          </button>
+        </div>
       </div>
     );
   }
@@ -112,98 +119,100 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
   const mdFilename = filename.replace('.json', '.md');
 
   return (
-    <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
-      <div className="bg-gray-50 border-b border-gray-200 p-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <button 
-          onClick={onBack}
-          className="flex items-center text-gray-600 hover:text-gray-900"
-        >
-          <ArrowLeft className="w-4 h-4 mr-1" />
+    <div className="bg-app-elevated border-app overflow-hidden rounded-xl border shadow-sm">
+      <div className="bg-app-surface border-app flex flex-col items-start justify-between gap-4 border-b p-4 sm:flex-row sm:items-center">
+        <button onClick={onBack} className="text-app-muted hover:text-app flex items-center text-sm transition">
+          <ArrowLeft className="mr-1 h-4 w-4" />
           Back to List
         </button>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             onClick={() => onEdit(filename)}
-            className="flex items-center px-3 py-1.5 bg-blue-100 text-blue-700 hover:bg-blue-200 rounded text-sm transition-colors"
+            className="flex items-center rounded-lg px-3 py-1.5 text-[13px] font-medium transition"
+            style={{ background: `${NTT_BLUE}14`, color: NTT_BLUE }}
             title="Edit this report"
           >
-            <Edit className="w-4 h-4 mr-1.5" />
+            <Edit className="mr-1.5 h-4 w-4" />
             Edit
           </button>
-          <a 
+          <a
             href={`/api/download?filename=${encodeURIComponent(filename)}`}
             download
-            className="flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded text-sm transition-colors"
+            className="bg-app-hover text-app-muted hover:text-app flex items-center rounded-lg px-3 py-1.5 text-[13px] transition"
           >
-            <FileJson className="w-4 h-4 mr-1.5" />
+            <FileJson className="mr-1.5 h-4 w-4" />
             JSON
           </a>
-          <a 
+          <a
             href={`/api/download?filename=${encodeURIComponent(mdFilename)}`}
             download
-            className="flex items-center px-3 py-1.5 bg-gray-200 text-gray-700 hover:bg-gray-300 rounded text-sm transition-colors"
+            className="bg-app-hover text-app-muted hover:text-app flex items-center rounded-lg px-3 py-1.5 text-[13px] transition"
           >
-            <FileText className="w-4 h-4 mr-1.5" />
+            <FileText className="mr-1.5 h-4 w-4" />
             Markdown
           </a>
-          <a 
+          <a
             href={`/api/html?filename=${encodeURIComponent(filename)}`}
             download
-            className="flex items-center px-3 py-1.5 bg-green-100 text-green-700 hover:bg-green-200 rounded text-sm transition-colors"
+            className="flex items-center rounded-lg bg-emerald-50 px-3 py-1.5 text-[13px] text-emerald-700 transition hover:bg-emerald-100 dark:bg-emerald-950/30 dark:text-emerald-400 dark:hover:bg-emerald-950/50"
             title="Download as HTML with embedded images"
           >
-            <FileText className="w-4 h-4 mr-1.5" />
+            <Download className="mr-1.5 h-4 w-4" />
             HTML
           </a>
           <button
             onClick={handleDeleteReport}
             disabled={isDeleting}
-            className="flex items-center px-3 py-1.5 bg-red-100 text-red-700 hover:bg-red-200 rounded text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+            className="flex items-center rounded-lg bg-red-50 px-3 py-1.5 text-[13px] text-red-700 transition hover:bg-red-100 disabled:cursor-not-allowed disabled:opacity-50 dark:bg-red-950/30 dark:text-red-400 dark:hover:bg-red-950/50"
             title="Delete this report"
           >
-            <Trash2 className="w-4 h-4" />
+            {isDeleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
           </button>
         </div>
       </div>
 
       <div className="p-6 sm:p-8">
-        {/* Metadata Header */}
-        <div className="mb-8 pb-6 border-b border-gray-100">
-          <div className="flex items-center gap-3 mb-2">
-            <span className="px-2.5 py-1 bg-blue-100 text-blue-800 text-sm font-mono rounded-md">
+        {/* Metadata header */}
+        <div className="border-app mb-8 border-b pb-6">
+          <div className="mb-2 flex items-center gap-3">
+            <span
+              className="rounded-md px-2.5 py-1 font-mono text-sm"
+              style={{ background: `${NTT_BLUE}14`, color: NTT_BLUE }}
+            >
               {metadata.incident_id || 'No ID'}
             </span>
-            <span className="text-gray-500 text-sm">{metadata.date}</span>
+            <span className="text-app-muted text-sm">{metadata.date}</span>
           </div>
-          <h1 className="text-3xl font-bold text-gray-900 mb-4">{metadata.title || 'Untitled Report'}</h1>
-          
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-8 text-sm">
+          <h1 className="text-app mb-4 text-2xl font-semibold tracking-tight sm:text-3xl">
+            {metadata.title || 'Untitled Report'}
+          </h1>
+
+          <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm sm:grid-cols-3">
             <div>
-              <span className="block text-gray-500 mb-1">Caller</span>
-              <span className="font-medium text-gray-900">{metadata.caller || '-'}</span>
+              <span className="text-app-muted mb-1 block">Caller</span>
+              <span className="text-app font-medium">{metadata.caller || '-'}</span>
             </div>
             <div>
-              <span className="block text-gray-500 mb-1">Category</span>
-              <span className="font-medium text-gray-900">{metadata.category || '-'}</span>
+              <span className="text-app-muted mb-1 block">Category</span>
+              <span className="text-app font-medium">{metadata.category || '-'}</span>
             </div>
             <div>
-              <span className="block text-gray-500 mb-1">Subcategory</span>
-              <span className="font-medium text-gray-900">{metadata.subcategory || '-'}</span>
+              <span className="text-app-muted mb-1 block">Subcategory</span>
+              <span className="text-app font-medium">{metadata.subcategory || '-'}</span>
             </div>
           </div>
 
-          {/* Custom Metadata Fields */}
           {(() => {
             const standardFields = ['incident_id', 'title', 'caller', 'category', 'subcategory', 'date'];
-            const customFields = Object.keys(metadata).filter(key => !standardFields.includes(key));
+            const customFields = Object.keys(metadata).filter((key) => !standardFields.includes(key));
             return customFields.length > 0 ? (
-              <div className="mt-6 pt-6 border-t border-gray-100">
-                <h3 className="text-sm font-semibold text-gray-700 mb-3">Custom Fields</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-y-4 gap-x-8 text-sm">
-                  {customFields.map(field => (
+              <div className="border-app mt-6 border-t pt-6">
+                <h3 className="text-app mb-3 text-sm font-semibold">Custom Fields</h3>
+                <div className="grid grid-cols-2 gap-x-8 gap-y-4 text-sm sm:grid-cols-3">
+                  {customFields.map((field) => (
                     <div key={field}>
-                      <span className="block text-gray-500 mb-1 capitalize">{field}</span>
-                      <span className="font-medium text-gray-900">{metadata[field] || '-'}</span>
+                      <span className="text-app-muted mb-1 block capitalize">{field}</span>
+                      <span className="text-app font-medium">{metadata[field] || '-'}</span>
                     </div>
                   ))}
                 </div>
@@ -212,50 +221,52 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
           })()}
         </div>
 
-        {/* Content Blocks */}
-        <div className="space-y-6 text-gray-800">
+        {/* Content blocks — same rendering logic, retheme only. */}
+        <div className="text-app space-y-6">
           {blocks.map((block, index) => {
             switch (block.type) {
-              case 'heading':
-                const sizeClass = block.level === 1 ? 'text-2xl mt-8 mb-4' : 
-                                  block.level === 2 ? 'text-xl mt-6 mb-3' : 
-                                  block.level === 3 ? 'text-lg mt-4 mb-2' : 'text-base mt-4 mb-2';
-                const className = `font-bold text-gray-900 ${sizeClass}`;
-                const headingElement = 
+              case 'heading': {
+                const sizeClass =
+                  block.level === 1 ? 'text-2xl mt-8 mb-4' :
+                  block.level === 2 ? 'text-xl mt-6 mb-3' :
+                  block.level === 3 ? 'text-lg mt-4 mb-2' : 'text-base mt-4 mb-2';
+                const className = `text-app font-semibold ${sizeClass}`;
+                const headingElement =
                   block.level === 1 ? <h1 className={className}>{block.content}</h1> :
                   block.level === 2 ? <h2 className={className}>{block.content}</h2> :
-                  block.level === 3 ? <h3 className={className}>{block.content}</h3> : 
+                  block.level === 3 ? <h3 className={className}>{block.content}</h3> :
                   <h4 className={className}>{block.content}</h4>;
                 return (
                   <div key={index}>
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-1 uppercase">{block.title}</div>}
+                    {block.title && <div className="text-app-muted mb-1 text-sm font-semibold uppercase">{block.title}</div>}
                     {headingElement}
                   </div>
                 );
-              
+              }
+
               case 'paragraph':
                 return (
                   <div key={index}>
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
-                    <div 
-                      className="prose prose-sm max-w-none"
+                    {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
+                    <div
+                      className="prose prose-sm dark:prose-invert max-w-none"
                       dangerouslySetInnerHTML={{ __html: block.content || '' }}
                     />
                   </div>
                 );
-              
-              case 'list':
+
+              case 'list': {
                 const isDescBox = block.label && block.label.trim() !== '';
                 if (isDescBox) {
                   return (
                     <div key={index}>
-                      {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
-                      <div className="border-l-4 border-gray-300 pl-4 py-3 bg-gray-50 rounded-r my-4">
-                        <div className="font-semibold text-gray-900 mb-2">{block.label}</div>
-                        <ul className="space-y-1 text-gray-700">
+                      {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
+                      <div className="border-app-strong bg-app-surface my-4 rounded-r border-l-4 py-3 pl-4">
+                        <div className="text-app mb-2 font-semibold">{block.label}</div>
+                        <ul className="text-app space-y-1">
                           {block.items.map((item, i) => (
                             <li key={i} className="flex gap-2">
-                              <span className="text-gray-400">-</span>
+                              <span className="text-app-muted">-</span>
                               <span>{item}</span>
                             </li>
                           ))}
@@ -268,30 +279,35 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                 const listClass = block.ordered ? 'list-decimal' : 'list-disc';
                 return (
                   <div key={index}>
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
-                    <ListTag className={`${listClass} pl-5 space-y-1`}>
+                    {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
+                    <ListTag className={`${listClass} space-y-1 pl-5`}>
                       {block.items.map((item, i) => <li key={i}>{item}</li>)}
                     </ListTag>
                   </div>
                 );
-              
+              }
+
               case 'incident_example':
                 return (
                   <div key={index}>
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
-                    <div className="bg-blue-50 p-4 rounded-md border border-blue-100 my-4">
-                      <div className="flex items-center gap-2 mb-2">
-                        <span className="font-semibold text-blue-900">Incident ID:</span>
-                        <span className="text-blue-800 font-mono">{block.incident_id}</span>
+                    {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
+                    <div
+                      className="my-4 rounded-md border p-4"
+                      style={{ background: `${NTT_BLUE}0d`, borderColor: `${NTT_BLUE}33` }}
+                    >
+                      <div className="mb-2 flex items-center gap-2">
+                        <span className="text-app font-semibold">Incident ID:</span>
+                        <span className="font-mono" style={{ color: NTT_BLUE }}>{block.incident_id}</span>
                       </div>
                       {block.link && (
                         <div className="flex items-center gap-2">
-                          <span className="font-semibold text-blue-900">Link:</span>
+                          <span className="text-app font-semibold">Link:</span>
                           <a
                             href={block.link}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-600 hover:text-blue-800 hover:underline break-all"
+                            className="break-all hover:underline"
+                            style={{ color: NTT_BLUE }}
                           >
                             {block.link}
                           </a>
@@ -300,30 +316,29 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                     </div>
                   </div>
                 );
-              
 
               case 'code':
                 return (
-                  <div key={index} className="space-y-4 my-4">
+                  <div key={index} className="my-4 space-y-4">
                     {block.items.map((item) => (
-                      <div key={item.id} className={item.type === 'code' ? 'rounded-md overflow-hidden bg-gray-900 border border-gray-800' : ''}>
+                      <div key={item.id} className={item.type === 'code' ? 'overflow-hidden rounded-md border border-slate-800 bg-slate-900' : ''}>
                         {item.type === 'code' ? (
                           <>
                             {item.title && (
-                              <div className="px-4 py-2 bg-blue-600 border-b border-blue-700">
+                              <div className="border-b px-4 py-2" style={{ background: NTT_BLUE, borderColor: NTT_BLUE }}>
                                 <h4 className="font-semibold text-white">{item.title}</h4>
                               </div>
                             )}
                             {item.header && (
-                              <div className="px-4 py-2 bg-gray-800 border-b border-gray-700">
+                              <div className="border-b border-slate-700 bg-slate-800 px-4 py-2">
                                 <h4 className="font-semibold text-white">{item.header}</h4>
                               </div>
                             )}
                             <div>
-                              <div className="px-4 py-1 bg-gray-800 text-xs text-gray-400 font-mono border-b border-gray-700">
+                              <div className="border-b border-slate-700 bg-slate-800 px-4 py-1 font-mono text-xs text-slate-400">
                                 {item.language || 'text'}
                               </div>
-                              <pre className="p-4 overflow-x-auto text-sm text-green-400 font-mono">
+                              <pre className="overflow-x-auto p-4 font-mono text-sm text-emerald-400">
                                 <code>{item.content}</code>
                               </pre>
                             </div>
@@ -331,11 +346,11 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                         ) : (
                           <div className="space-y-2">
                             {item.title && (
-                              <div className="px-4 py-2 bg-purple-600">
+                              <div className="bg-violet-600 px-4 py-2">
                                 <h4 className="font-semibold text-white">{item.title}</h4>
                               </div>
                             )}
-                            <div className="px-4 py-4 prose prose-sm max-w-none text-gray-700">
+                            <div className="prose prose-sm dark:prose-invert text-app max-w-none px-4 py-4">
                               <div dangerouslySetInnerHTML={{ __html: item.content || '' }} />
                             </div>
                           </div>
@@ -344,36 +359,36 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                     ))}
                   </div>
                 );
-              
+
               case 'image':
                 return (
                   <figure key={index} className="my-6">
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
-                    <img src={block.data_url} alt={block.caption} className="max-w-full h-auto rounded-md border border-gray-200" />
+                    {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
+                    <img src={block.data_url} alt={block.caption} className="border-app h-auto max-w-full rounded-md border" />
                     {block.caption && (
-                      <figcaption className="text-center text-sm text-gray-500 mt-2">{block.caption}</figcaption>
+                      <figcaption className="text-app-muted mt-2 text-center text-sm">{block.caption}</figcaption>
                     )}
                   </figure>
                 );
-              
+
               case 'table':
                 return (
                   <div key={index} className="my-4">
-                    {block.title && <div className="text-sm font-semibold text-gray-500 mb-2 uppercase">{block.title}</div>}
+                    {block.title && <div className="text-app-muted mb-2 text-sm font-semibold uppercase">{block.title}</div>}
                     <div className="overflow-x-auto">
-                      <table className="min-w-full border-collapse border border-gray-300 text-sm">
-                        <thead className="bg-gray-50">
+                      <table className="border-app min-w-full border-collapse border text-sm">
+                        <thead className="bg-app-surface">
                           <tr>
                             {block.headers.map((h, i) => (
-                              <th key={i} className="border border-gray-300 px-4 py-2 text-left font-semibold text-gray-900">{h}</th>
+                              <th key={i} className="border-app text-app border px-4 py-2 text-left font-semibold">{h}</th>
                             ))}
                           </tr>
                         </thead>
                         <tbody>
                           {block.rows.map((row, i) => (
-                            <tr key={i} className="hover:bg-gray-50">
+                            <tr key={i} className="hover:bg-app-hover">
                               {row.map((cell, j) => (
-                                <td key={j} className="border border-gray-300 px-4 py-2">{cell}</td>
+                                <td key={j} className="border-app text-app border px-4 py-2">{cell}</td>
                               ))}
                             </tr>
                           ))}
@@ -382,7 +397,7 @@ export function ReportViewer({ filename, onBack, onEdit }: Props) {
                     </div>
                   </div>
                 );
-              
+
               default:
                 return null;
             }

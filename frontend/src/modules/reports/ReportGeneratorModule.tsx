@@ -6,30 +6,31 @@ import { ExportPanel } from './components/ExportPanel';
 import { ReportList } from './components/ReportList';
 import { ReportViewer } from './components/ReportViewer';
 import { FileText, Plus, List } from 'lucide-react';
+import { apiFetch } from '../../api/chat';
+import { useToast } from '../../ui/Toast';
+import { NTT_BLUE } from '../../ui/Brand';
 
 type ViewState = 'create' | 'list' | 'view' | 'edit';
+
+const EMPTY_METADATA: ReportMetadata = {
+  incident_id: '',
+  title: '',
+  caller: '',
+  category: '',
+  subcategory: '',
+  date: new Date().toISOString().split('T')[0],
+};
 
 export default function ReportGeneratorModule() {
   const [view, setView] = useState<ViewState>('create');
   const [selectedReportFile, setSelectedReportFile] = useState<string | null>(null);
   const [editingFilename, setEditingFilename] = useState<string | null>(null);
   const [reportCustomFields, setReportCustomFields] = useState<StoredMetadataField[]>([]);
-
-  const [metadata, setMetadata] = useState<ReportMetadata>({
-    incident_id: '',
-    title: '',
-    caller: '',
-    category: '',
-    subcategory: '',
-    date: new Date().toISOString().split('T')[0],
-  });
-
+  const [metadata, setMetadata] = useState<ReportMetadata>(EMPTY_METADATA);
   const [blocks, setBlocks] = useState<ContentBlock[]>([]);
+  const toast = useToast();
 
-  const report: IncidentReport = {
-    metadata,
-    blocks,
-  };
+  const report: IncidentReport = { metadata, blocks };
 
   const handleSelectReport = (filename: string) => {
     setSelectedReportFile(filename);
@@ -38,34 +39,31 @@ export default function ReportGeneratorModule() {
 
   const handleEditReport = async (filename: string) => {
     try {
-      const response = await fetch(`/api/reports/content/${encodeURIComponent(filename)}`);
-      
-      // Check if file exists (404 = file was deleted)
+      const response = await apiFetch(`/api/reports/content/${encodeURIComponent(filename)}`);
+
       if (response.status === 404) {
-        alert('Report not found. It may have been deleted. Please refresh the list.');
+        toast.error('Report not found — it may have been deleted. Refresh the list.');
         return;
       }
-      
+      if (response.status === 401 || response.status === 403) {
+        toast.error('You do not have permission to edit this report.');
+        return;
+      }
       if (!response.ok) throw new Error('Failed to load report');
       const reportData = await response.json();
-      
+
       // Ensure all blocks have IDs (for old reports that don't have them)
       const blocksWithIds = reportData.blocks.map((block: ContentBlock) => ({
         ...block,
-        id: block.id || crypto.randomUUID()
+        id: block.id || crypto.randomUUID(),
       }));
-      
+
       // Extract custom fields from report metadata (any fields not in the standard set)
       const standardMetadataKeys = new Set(['incident_id', 'title', 'caller', 'category', 'subcategory', 'date']);
       const customFieldsFromReport: StoredMetadataField[] = Object.keys(reportData.metadata)
-        .filter(key => !standardMetadataKeys.has(key))
-        .map(key => ({
-          id: key,
-          name: key,
-          label: key
-        }));
-      
-      // Load data into edit form
+        .filter((key) => !standardMetadataKeys.has(key))
+        .map((key) => ({ id: key, name: key, label: key }));
+
       setMetadata(reportData.metadata);
       setBlocks(blocksWithIds);
       setReportCustomFields(customFieldsFromReport);
@@ -73,122 +71,127 @@ export default function ReportGeneratorModule() {
       setView('edit');
     } catch (error) {
       console.error('Error loading report for editing:', error);
-      alert('Failed to load report for editing');
+      toast.error('Failed to load report for editing.');
     }
   };
 
   const handleBackFromEdit = () => {
-    // Reset form
-    setMetadata({
-      incident_id: '',
-      title: '',
-      caller: '',
-      category: '',
-      subcategory: '',
-      date: new Date().toISOString().split('T')[0],
-    });
+    setMetadata(EMPTY_METADATA);
     setBlocks([]);
     setReportCustomFields([]);
     setEditingFilename(null);
     setView('list');
   };
 
+  const TABS: { id: Extract<ViewState, 'create' | 'list'>; label: string; icon: React.ReactNode }[] = [
+    { id: 'create', label: 'Create New', icon: <Plus className="w-4 h-4" /> },
+    { id: 'list', label: 'View Reports', icon: <List className="w-4 h-4" /> },
+  ];
+
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-900 py-8 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-4xl mx-auto">
-        <header className="mb-8 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <div className="p-3 bg-blue-600 text-white rounded-lg shadow-sm">
-              <FileText className="w-6 h-6" />
-            </div>
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">Incident Report Generator</h1>
-              <p className="text-sm text-gray-500">Create structured, AI-ready incident reports</p>
-            </div>
+    <div className="mx-auto max-w-4xl">
+      <header className="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div
+            className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white shadow-sm"
+            style={{ background: NTT_BLUE }}
+          >
+            <FileText className="w-5 h-5" />
           </div>
-          
-          <div className="flex bg-gray-200 p-1 rounded-lg">
-            <button
-              onClick={() => setView('create')}
-              className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                view === 'create' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              Create New
-            </button>
-            <button
-              onClick={() => setView('list')}
-              className={`flex items-center px-4 py-2 rounded-md text-sm font-medium transition-colors ${
-                view === 'list' || view === 'view' ? 'bg-white text-blue-700 shadow-sm' : 'text-gray-600 hover:text-gray-900'
-              }`}
-            >
-              <List className="w-4 h-4 mr-2" />
-              View Reports
-            </button>
+          <div>
+            <h1 className="text-app text-xl font-semibold tracking-tight">
+              Incident Report Generator
+            </h1>
+            <p className="text-app-muted text-sm">
+              Create structured, AI-ready incident reports
+            </p>
           </div>
-        </header>
+        </div>
 
-        <main>
-          {view === 'create' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <MetadataEditor metadata={metadata} onChange={setMetadata} />
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 className="text-lg font-semibold mb-4 text-gray-800">Report Content</h2>
-                <BlockEditor blocks={blocks} onChange={setBlocks} />
-              </div>
+        <div className="bg-app-surface border-app inline-flex rounded-lg border p-1">
+          {TABS.map((t) => {
+            const active = view === t.id || (t.id === 'list' && view === 'view');
+            return (
+              <button
+                key={t.id}
+                onClick={() => setView(t.id)}
+                className={`flex items-center gap-2 rounded-md px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+                  active
+                    ? 'bg-app-elevated text-app shadow-sm'
+                    : 'text-app-muted hover:text-app'
+                }`}
+                style={active ? { color: NTT_BLUE } : undefined}
+              >
+                {t.icon}
+                {t.label}
+              </button>
+            );
+          })}
+        </div>
+      </header>
 
-              <ExportPanel report={report} editingFilename={null} />
+      <main className="pb-16">
+        {view === 'create' && (
+          <div className="ntt-rise space-y-6">
+            <MetadataEditor metadata={metadata} onChange={setMetadata} />
+
+            <div className="bg-app-elevated border-app rounded-xl border p-6 shadow-sm">
+              <h2 className="text-app mb-4 text-[15px] font-semibold">Report Content</h2>
+              <BlockEditor blocks={blocks} onChange={setBlocks} />
             </div>
-          )}
 
-          {view === 'edit' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <div className="flex items-center gap-3 mb-4 pb-4 border-b border-gray-200">
-                <h2 className="text-xl font-bold text-gray-900">Edit Report</h2>
-                <span className="text-xs px-2 py-1 bg-blue-100 text-blue-700 rounded">
-                  {editingFilename}
-                </span>
-              </div>
-              
-              <MetadataEditor metadata={metadata} onChange={setMetadata} reportCustomFields={reportCustomFields} />
-              
-              <div className="bg-white p-6 rounded-lg shadow-sm border border-gray-200">
-                <h2 className="text-lg font-semibold mb-4 text-gray-800">Report Content</h2>
-                <BlockEditor blocks={blocks} onChange={setBlocks} />
-              </div>
+            <ExportPanel report={report} editingFilename={null} />
+          </div>
+        )}
 
-              <div className="mt-4 mb-8 flex gap-2">
-                <button
-                  onClick={handleBackFromEdit}
-                  className="px-4 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400 transition-colors"
-                >
-                  Cancel
-                </button>
-              </div>
-
-              <ExportPanel report={report} editingFilename={editingFilename} />
+        {view === 'edit' && (
+          <div className="ntt-rise space-y-6">
+            <div className="border-app flex items-center gap-3 border-b pb-4">
+              <h2 className="text-app text-lg font-semibold">Edit Report</h2>
+              <span
+                className="rounded px-2 py-1 font-mono text-[11px]"
+                style={{ background: `${NTT_BLUE}14`, color: NTT_BLUE }}
+              >
+                {editingFilename}
+              </span>
             </div>
-          )}
 
-          {view === 'list' && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <ReportList onSelectReport={handleSelectReport} />
-            </div>
-          )}
+            <MetadataEditor metadata={metadata} onChange={setMetadata} reportCustomFields={reportCustomFields} />
 
-          {view === 'view' && selectedReportFile && (
-            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
-              <ReportViewer 
-                filename={selectedReportFile} 
-                onBack={() => setView('list')}
-                onEdit={handleEditReport}
-              />
+            <div className="bg-app-elevated border-app rounded-xl border p-6 shadow-sm">
+              <h2 className="text-app mb-4 text-[15px] font-semibold">Report Content</h2>
+              <BlockEditor blocks={blocks} onChange={setBlocks} />
             </div>
-          )}
-        </main>
-      </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={handleBackFromEdit}
+                className="bg-app-surface text-app hover:bg-app-hover border-app rounded-lg border px-4 py-2 text-sm font-medium transition"
+              >
+                Cancel
+              </button>
+            </div>
+
+            <ExportPanel report={report} editingFilename={editingFilename} />
+          </div>
+        )}
+
+        {view === 'list' && (
+          <div className="ntt-rise">
+            <ReportList onSelectReport={handleSelectReport} />
+          </div>
+        )}
+
+        {view === 'view' && selectedReportFile && (
+          <div className="ntt-rise">
+            <ReportViewer
+              filename={selectedReportFile}
+              onBack={() => setView('list')}
+              onEdit={handleEditReport}
+            />
+          </div>
+        )}
+      </main>
     </div>
   );
 }

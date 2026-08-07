@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { ContentBlock, BlockType } from '../../../types';
 import { BlockRenderer } from './BlockRenderer';
 import { PlusCircle, FileJson, FileText } from 'lucide-react';
+import { NTT_BLUE } from '../../../ui/Brand';
 
 interface Props {
   blocks: ContentBlock[];
@@ -82,24 +83,25 @@ export function BlockEditor({ blocks, onChange }: Props) {
 
       <div className="relative mt-6">
         {showMenu ? (
-          <div className="absolute bottom-full mb-2 left-0 w-64 bg-white rounded-lg shadow-xl border border-gray-200 overflow-hidden z-10">
-            <div className="p-2 grid grid-cols-2 gap-1">
-              <button onClick={() => addBlock('heading')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Heading</button>
-              <button onClick={() => addBlock('paragraph')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Paragraph</button>
-              <button onClick={() => addBlock('list')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">List / Steps</button>
-              <button onClick={() => addBlock('incident_example')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Incident Example</button>
-              <button onClick={() => addBlock('code')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Code / SQL</button>
-              <button onClick={() => addBlock('image')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Image</button>
-              <button onClick={() => addBlock('table')} className="text-left px-3 py-2 text-sm hover:bg-gray-100 rounded">Table</button>
+          <div className="bg-app-elevated border-app absolute bottom-full left-0 z-10 mb-2 w-64 overflow-hidden rounded-lg border shadow-xl">
+            <div className="grid grid-cols-2 gap-1 p-2">
+              <button onClick={() => addBlock('heading')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Heading</button>
+              <button onClick={() => addBlock('paragraph')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Paragraph</button>
+              <button onClick={() => addBlock('list')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">List / Steps</button>
+              <button onClick={() => addBlock('incident_example')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Incident Example</button>
+              <button onClick={() => addBlock('code')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Code / SQL</button>
+              <button onClick={() => addBlock('image')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Image</button>
+              <button onClick={() => addBlock('table')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Table</button>
             </div>
           </div>
         ) : null}
-        
+
         <button
           onClick={() => setShowMenu(!showMenu)}
-          className="flex items-center justify-center w-full py-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-500 hover:text-blue-600 hover:border-blue-400 hover:bg-blue-50 transition-colors"
+          className="border-app-strong text-app-muted hover:text-[var(--ntt-blue)] flex w-full items-center justify-center rounded-lg border-2 border-dashed py-4 transition hover:bg-app-hover"
+          style={{ ['--ntt-blue' as any]: NTT_BLUE }}
         >
-          <PlusCircle className="w-5 h-5 mr-2" />
+          <PlusCircle className="mr-2 w-5 h-5" />
           Add Content Block
         </button>
       </div>

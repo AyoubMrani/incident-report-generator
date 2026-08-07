@@ -33,11 +33,17 @@ function headers(): HeadersInit {
  * `fetch` for our API: attaches the bearer token when signed in, and retries
  * once after a refresh on 401.
  *
- * Every call below goes through this rather than raw `fetch`, so authentication
- * is one seam instead of a decision repeated at twenty call sites — the same
- * reason the backend declares auth at the router.
+ * Every call in this file goes through this rather than raw `fetch`, so
+ * authentication is one seam instead of a decision repeated at every call
+ * site — the same reason the backend declares auth at the router.
+ *
+ * Exported because the reports module was still using raw `fetch` directly
+ * against `/api/reports` and friends: with auth enabled, every one of those
+ * requests got 401 and showed as "could not load reports" — the backend was
+ * never reached at all. Routing them through this fixes that class of call
+ * site rather than one endpoint at a time.
  */
-async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
+export async function apiFetch(input: string, init: RequestInit = {}): Promise<Response> {
   return authFetch(input, { ...init, headers: { ...headers(), ...(init.headers ?? {}) } });
 }
 
