@@ -1,0 +1,10 @@
+# Git on Windows defaults to core.autocrlf=true, which rewrites checked-out
+# files to CRLF. Anything that runs *inside* a Linux container must stay LF:
+# the kernel reads `#!/bin/sh\r` literally and reports the interpreter as
+# "no such file or directory", which is a confusing way to say "bad newline".
+* text=auto
+
+*.sh        text eol=lf
+Dockerfile* text eol=lf
+*.yml       text eol=lf
+*.yaml      text eol=lf

@@ -42,7 +42,11 @@ RUN useradd --create-home --uid 10001 appuser \
     && mkdir -p /data/reports /data/hf-cache /data/chat /data/embed-cache \
     && chown -R appuser:appuser /data /app
 COPY infra/entrypoint.sh /usr/local/bin/entrypoint.sh
-RUN chmod +x /usr/local/bin/entrypoint.sh
+# Belt and braces alongside .gitattributes: a clone made before that file
+# existed (or with an overriding core.autocrlf) still has CRLF on disk, and a
+# CRLF shebang makes this image fail to start with a misleading ENOENT.
+RUN sed -i 's/\r$//' /usr/local/bin/entrypoint.sh \
+    && chmod +x /usr/local/bin/entrypoint.sh
 # Note: no `USER appuser` here. Named volumes are created root-owned when they
 # are mounted, which masks the chown above — so the entrypoint starts as root
 # only long enough to hand those paths over, then execs the app as appuser.

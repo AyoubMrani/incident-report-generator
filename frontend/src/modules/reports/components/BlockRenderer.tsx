@@ -23,20 +23,20 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
         return (
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm mb-2"
+                className="w-full p-2 border border-app rounded bg-app-elevated text-app text-sm mb-2 placeholder:text-app-muted"
               />
             </div>
             <div className="flex items-center gap-2">
               <select
                 value={block.level}
                 onChange={(e) => onChange({ ...block, level: parseInt(e.target.value) as 1|2|3|4 })}
-                className="p-2 border border-gray-300 rounded bg-gray-50"
+                className="p-2 border border-app rounded bg-app-elevated text-app"
               >
                 <option value={1}>H1</option>
                 <option value={2}>H2</option>
@@ -48,7 +48,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                 value={block.content}
                 onChange={(e) => onChange({ ...block, content: e.target.value })}
                 placeholder="Heading text..."
-                className={`flex-1 p-2 border-b border-transparent hover:border-gray-300 focus:border-blue-500 focus:outline-none bg-transparent font-bold ${
+                className={`flex-1 p-2 border-b border-transparent hover:border-app-strong focus:border-blue-500 focus:outline-none bg-transparent text-app font-bold placeholder:text-app-muted ${
                   block.level === 1 ? 'text-2xl' : block.level === 2 ? 'text-xl' : block.level === 3 ? 'text-lg' : 'text-base'
                 }`}
               />
@@ -59,13 +59,13 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
         return (
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm mb-2"
+                className="w-full p-2 border border-app rounded bg-app-elevated text-app text-sm mb-2 placeholder:text-app-muted"
               />
             </div>
             <QuillEditor
@@ -79,28 +79,28 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
         return (
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm"
+                className="w-full p-2 border border-app rounded bg-app-elevated text-app text-sm placeholder:text-app-muted"
               />
             </div>
-            <div className={isDescriptionBox ? 'border-l-4 border-gray-300 pl-4 py-2 bg-gray-50 rounded-r' : ''}>
+            <div className={isDescriptionBox ? 'border-l-4 border-app-strong pl-4 py-2 bg-app-elevated rounded-r' : ''}>
               {isDescriptionBox && (
                 <input
                   type="text"
                   value={block.label || ''}
                   onChange={(e) => onChange({ ...block, label: e.target.value })}
                   placeholder="Label (e.g., [GUXHG] Please delete:)"
-                  className="w-full p-1 mb-2 font-semibold bg-transparent border-b border-gray-200 focus:border-blue-500 focus:outline-none"
+                  className="w-full p-1 mb-2 font-semibold bg-transparent text-app border-b border-app focus:border-blue-500 focus:outline-none placeholder:text-app-muted"
                 />
               )}
               {!isDescriptionBox && (
                 <div className="mb-2 flex items-center gap-2">
-                  <label className="text-sm text-gray-600 flex items-center gap-1">
+                  <label className="text-sm text-app-muted flex items-center gap-1">
                     <input
                       type="checkbox"
                       checked={block.ordered}
@@ -113,7 +113,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
               <div className={isDescriptionBox ? 'space-y-1' : 'space-y-2'}>
                 {block.items.map((item, i) => (
                   <div key={i} className="flex items-center gap-2">
-                    <span className={`${isDescriptionBox ? 'text-gray-500' : 'text-gray-400'} w-6 text-right`}>
+                    <span className={`${isDescriptionBox ? 'text-app-muted' : 'text-app-muted'} w-6 text-right`}>
                       {isDescriptionBox ? '-' : block.ordered ? `${i + 1}.` : '•'}
                     </span>
                     <input
@@ -124,7 +124,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                         newItems[i] = e.target.value;
                         onChange({ ...block, items: newItems });
                       }}
-                      className={`flex-1 p-1 bg-transparent border-b border-transparent hover:border-gray-200 focus:border-blue-500 focus:outline-none ${
+                      className={`flex-1 p-1 bg-transparent text-app border-b border-transparent hover:border-app-strong focus:border-blue-500 focus:outline-none placeholder:text-app-muted ${
                         isDescriptionBox ? 'text-sm' : ''
                       }`}
                       placeholder="Item..."
@@ -134,7 +134,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                         const newItems = block.items.filter((_, idx) => idx !== i);
                         onChange({ ...block, items: newItems.length ? newItems : [''] });
                       }}
-                      className="text-gray-400 hover:text-red-500"
+                      className="text-app-muted hover:text-red-500"
                     >
                       &times;
                     </button>
@@ -142,7 +142,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                 ))}
                 <button
                   onClick={() => onChange({ ...block, items: [...block.items, ''] })}
-                  className={`text-sm text-blue-500 hover:text-blue-700 ${
+                  className={`text-sm text-blue-700 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300 ${
                     isDescriptionBox ? 'ml-4' : 'ml-8'
                   }`}
                 >
@@ -150,42 +150,42 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                 </button>
               </div>
               {!isDescriptionBox && (
-                <div className="mt-2 text-xs text-gray-500" />
+                <div className="mt-2 text-xs text-app-muted" />
               )}
             </div>
           </div>
         );
       case 'incident_example':
         return (
-          <div className="space-y-3 bg-blue-50 p-3 rounded border border-blue-100">
+          <div className="space-y-3 bg-blue-50 dark:bg-blue-950/20 p-3 rounded border border-blue-200 dark:border-blue-800/40">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-1 border-b border-blue-200 bg-transparent focus:border-blue-500 focus:outline-none text-blue-900 text-sm"
+                className="w-full p-1 border-b border-blue-200 dark:border-blue-800/40 bg-transparent focus:border-blue-500 focus:outline-none text-app text-sm placeholder:text-app-muted"
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-blue-800">Incident ID:</span>
+              <span className="font-semibold text-blue-800 dark:text-blue-300">Incident ID:</span>
               <input
                 type="text"
                 value={block.incident_id}
                 onChange={(e) => onChange({ ...block, incident_id: e.target.value })}
                 placeholder="INCXXXXXXX"
-                className="flex-1 p-1 border-b border-blue-200 bg-transparent focus:border-blue-500 focus:outline-none text-blue-900"
+                className="flex-1 p-1 border-b border-blue-200 dark:border-blue-800/40 bg-transparent focus:border-blue-500 focus:outline-none text-app placeholder:text-app-muted"
               />
             </div>
             <div className="flex items-center gap-2">
-              <span className="font-semibold text-blue-800">Link:</span>
+              <span className="font-semibold text-blue-800 dark:text-blue-300">Link:</span>
               <input
                 type="url"
                 value={block.link || ''}
                 onChange={(e) => onChange({ ...block, link: e.target.value })}
                 placeholder="https://example.com/incident/INC001"
-                className="flex-1 p-1 border-b border-blue-200 bg-transparent focus:border-blue-500 focus:outline-none text-blue-900"
+                className="flex-1 p-1 border-b border-blue-200 dark:border-blue-800/40 bg-transparent focus:border-blue-500 focus:outline-none text-app placeholder:text-app-muted"
               />
             </div>
           </div>
@@ -384,16 +384,16 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
         return (
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm"
+                className="w-full p-2 border border-app rounded bg-app-elevated text-app text-sm placeholder:text-app-muted"
               />
             </div>
-            <div className="border border-gray-200 rounded p-2">
+            <div className="border border-app rounded p-2 bg-app-elevated">
               {block.data_url ? (
                 <div className="relative group">
                   <img src={block.data_url} alt="Uploaded" className="max-h-64 object-contain mx-auto rounded" />
@@ -405,12 +405,12 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                   </button>
                 </div>
               ) : (
-                <div 
-                  className="h-32 border-2 border-dashed border-gray-300 rounded flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50"
+                <div
+                  className="h-32 border-2 border-dashed border-app-strong rounded flex flex-col items-center justify-center cursor-pointer hover:bg-app-hover"
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <ImageIcon className="w-8 h-8 text-gray-400 mb-2" />
-                  <span className="text-sm text-gray-500">Click to upload image</span>
+                  <ImageIcon className="w-8 h-8 text-app-muted mb-2" />
+                  <span className="text-sm text-app-muted">Click to upload image</span>
                   <input
                     type="file"
                     ref={fileInputRef}
@@ -425,7 +425,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                 value={block.caption}
                 onChange={(e) => onChange({ ...block, caption: e.target.value })}
                 placeholder="Image caption..."
-                className="w-full mt-2 p-2 text-sm text-center border-b border-transparent hover:border-gray-200 focus:border-blue-500 focus:outline-none"
+                className="w-full mt-2 p-2 text-sm text-center text-app bg-transparent border-b border-transparent hover:border-app-strong focus:border-blue-500 focus:outline-none placeholder:text-app-muted"
               />
             </div>
           </div>
@@ -434,21 +434,21 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
         return (
           <div className="space-y-2">
             <div>
-              <label className="text-xs font-bold text-yellow-400">TITLE (optional)</label>
+              <label className="text-xs font-bold text-blue-700 dark:text-blue-400">TITLE (optional)</label>
               <input
                 type="text"
                 value={block.title || ''}
                 onChange={(e) => onChange({ ...block, title: e.target.value })}
                 placeholder="Add a section title..."
-                className="w-full p-2 border border-gray-300 rounded bg-gray-50 text-sm"
+                className="w-full p-2 border border-app rounded bg-app-elevated text-app text-sm placeholder:text-app-muted"
               />
             </div>
             <div className="overflow-x-auto">
-              <table className="w-full border-collapse border border-gray-300 text-sm">
+              <table className="w-full border-collapse border border-app text-sm">
                 <thead>
                   <tr>
                     {block.headers.map((header, i) => (
-                      <th key={i} className="border border-gray-300 bg-gray-100 p-0">
+                      <th key={i} className="border border-app bg-app-elevated p-0">
                         <div className="flex items-center">
                           <input
                             type="text"
@@ -458,7 +458,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                               newHeaders[i] = e.target.value;
                               onChange({ ...block, headers: newHeaders });
                             }}
-                            className="w-full p-2 bg-transparent focus:outline-none font-semibold text-center"
+                            className="w-full p-2 bg-transparent text-app focus:outline-none font-semibold text-center"
                           />
                           <button
                             onClick={() => {
@@ -467,7 +467,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                               const newRows = block.rows.map(row => row.filter((_, idx) => idx !== i));
                               onChange({ ...block, headers: newHeaders, rows: newRows });
                             }}
-                            className="px-1 text-gray-400 hover:text-red-500"
+                            className="px-1 text-app-muted hover:text-red-500"
                             title="Remove Column"
                           >
                             &times;
@@ -475,7 +475,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                         </div>
                       </th>
                     ))}
-                    <th className="border border-gray-300 bg-gray-100 w-8">
+                    <th className="border border-app bg-app-elevated w-8">
                       <button
                         onClick={() => {
                           onChange({
@@ -484,7 +484,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                             rows: block.rows.map(row => [...row, ''])
                           });
                         }}
-                        className="w-full h-full text-blue-500 hover:bg-blue-50"
+                        className="w-full h-full text-blue-700 dark:text-blue-400 hover:bg-app-hover"
                         title="Add Column"
                       >
                         +
@@ -496,7 +496,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                   {block.rows.map((row, rowIndex) => (
                     <tr key={rowIndex}>
                       {row.map((cell, colIndex) => (
-                        <td key={colIndex} className="border border-gray-300 p-0">
+                        <td key={colIndex} className="border border-app p-0">
                           <input
                             type="text"
                             value={cell}
@@ -505,18 +505,18 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                               newRows[rowIndex][colIndex] = e.target.value;
                               onChange({ ...block, rows: newRows });
                             }}
-                            className="w-full p-2 bg-transparent focus:outline-none"
+                            className="w-full p-2 bg-transparent text-app focus:outline-none"
                           />
                         </td>
                       ))}
-                      <td className="border border-gray-300 text-center">
+                      <td className="border border-app text-center">
                         <button
                           onClick={() => {
                             if (block.rows.length <= 1) return;
                             const newRows = block.rows.filter((_, idx) => idx !== rowIndex);
                             onChange({ ...block, rows: newRows });
                           }}
-                          className="text-gray-400 hover:text-red-500"
+                          className="text-app-muted hover:text-red-500"
                           title="Remove Row"
                         >
                           &times;
@@ -533,7 +533,7 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
                     rows: [...block.rows, Array(block.headers.length).fill('')]
                   });
                 }}
-                className="mt-2 text-sm text-blue-500 hover:text-blue-700"
+                className="mt-2 text-sm text-blue-700 dark:text-blue-400 hover:text-blue-600 dark:hover:text-blue-300"
               >
                 + Add Row
               </button>
@@ -546,26 +546,26 @@ export function BlockRenderer({ block, onChange, onRemove, onMoveUp, onMoveDown,
   };
 
   return (
-    <div className="group relative bg-white p-4 rounded-lg shadow-sm border border-gray-200 hover:border-blue-300 transition-colors">
+    <div className="group relative bg-app-surface p-4 rounded-lg shadow-sm border border-app hover:border-blue-500/50 transition-colors">
       <div className="absolute -left-3 top-1/2 -translate-y-1/2 flex flex-col gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onMoveUp} disabled={isFirst} className="p-1 bg-white border border-gray-200 rounded-full shadow-sm text-gray-500 hover:text-blue-600 disabled:opacity-30">
+        <button onClick={onMoveUp} disabled={isFirst} className="p-1 bg-app-elevated border border-app rounded-full shadow-sm text-app-muted hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30">
           <ArrowUp className="w-3 h-3" />
         </button>
-        <button onClick={onMoveDown} disabled={isLast} className="p-1 bg-white border border-gray-200 rounded-full shadow-sm text-gray-500 hover:text-blue-600 disabled:opacity-30">
+        <button onClick={onMoveDown} disabled={isLast} className="p-1 bg-app-elevated border border-app rounded-full shadow-sm text-app-muted hover:text-blue-600 dark:hover:text-blue-400 disabled:opacity-30">
           <ArrowDown className="w-3 h-3" />
         </button>
       </div>
-      
+
       <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onRemove} className="p-1.5 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded">
+        <button onClick={onRemove} className="p-1.5 text-app-muted hover:text-red-500 hover:bg-red-500/10 rounded">
           <Trash2 className="w-4 h-4" />
         </button>
       </div>
 
       <div className="mb-2">
-        <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider">{block.type.replace('_', ' ')}</span>
+        <span className="text-xs font-semibold text-app-muted uppercase tracking-wider">{block.type.replace('_', ' ')}</span>
       </div>
-      
+
       {renderBlockContent()}
     </div>
   );

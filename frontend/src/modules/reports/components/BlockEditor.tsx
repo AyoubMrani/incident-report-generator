@@ -82,8 +82,17 @@ export function BlockEditor({ blocks, onChange }: Props) {
       ))}
 
       <div className="relative mt-6">
+        <button
+          onClick={() => setShowMenu(!showMenu)}
+          className="border-app-strong text-app-muted hover:text-[var(--ntt-blue)] flex w-full items-center justify-center rounded-lg border-2 border-dashed py-4 transition hover:bg-app-hover"
+          style={{ ['--ntt-blue' as any]: NTT_BLUE }}
+        >
+          <PlusCircle className="mr-2 w-5 h-5" />
+          Add Content Block
+        </button>
+
         {showMenu ? (
-          <div className="bg-app-elevated border-app absolute bottom-full left-0 z-10 mb-2 w-64 overflow-hidden rounded-lg border shadow-xl">
+          <div className="bg-app-elevated border-app absolute top-full left-0 z-10 mt-2 w-64 overflow-hidden rounded-lg border shadow-xl">
             <div className="grid grid-cols-2 gap-1 p-2">
               <button onClick={() => addBlock('heading')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Heading</button>
               <button onClick={() => addBlock('paragraph')} className="hover:bg-app-hover text-app rounded px-3 py-2 text-left text-sm transition">Paragraph</button>
@@ -95,15 +104,6 @@ export function BlockEditor({ blocks, onChange }: Props) {
             </div>
           </div>
         ) : null}
-
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="border-app-strong text-app-muted hover:text-[var(--ntt-blue)] flex w-full items-center justify-center rounded-lg border-2 border-dashed py-4 transition hover:bg-app-hover"
-          style={{ ['--ntt-blue' as any]: NTT_BLUE }}
-        >
-          <PlusCircle className="mr-2 w-5 h-5" />
-          Add Content Block
-        </button>
       </div>
     </div>
   );
