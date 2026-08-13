@@ -47,6 +47,44 @@
   \caption{#1}
   \end{figure}}
 
+% A screenshot of the running application: \screenshot{caption}{file}{width fraction}.
+% Distinct from \diagram (hand-authored SVG/PDF) because these are photographic
+% evidence of the deployed system, not schematics — kept in NTTData/ rather
+% than figures/.
+\newcommand{\screenshot}[3]{%
+  \begin{figure}[H]
+  \centering
+  \fbox{\includegraphics[width=#3\textwidth]{#2}}
+  \caption{#1}
+  \end{figure}}
+
+% One technology logo with a caption underneath, sized to a fixed height so a
+% row of \techlogo calls lines up regardless of each source image's aspect
+% ratio. Falls back to a bracketed text placeholder when no logo file has been
+% supplied yet, so the row renders (and the layout can be checked) before every
+% asset is in hand.
+\newcommand{\techlogoheight}{9mm}
+\newcommand{\techlogo}[2]{%
+  \begin{minipage}[t]{0.18\textwidth}
+    \centering
+    \IfFileExists{#1}%
+      {\includegraphics[height=\techlogoheight]{#1}}%
+      {\fbox{\begin{minipage}[c][\techlogoheight][c]{0.85\linewidth}\centering\tiny logo\end{minipage}}}\\[3pt]
+    {\small #2}
+  \end{minipage}}
+
+% A centered row of technology logos, used once per architectural layer
+% introduced in Section~\ref{sec:hardening}. Usage:
+%   \techlogorow{
+%     \techlogo{figures/logos/postgresql.pdf}{PostgreSQL}
+%     \techlogo{figures/logos/minio.pdf}{MinIO}
+%   }
+\newcommand{\techlogorow}[1]{%
+  \begin{figure}[H]
+  \centering
+  #1
+  \end{figure}}
+
 \title{\textbf{Hybrid Sparse--Dense Retrieval for Privacy-Constrained\\Incident Resolution: Design and Evaluation of a\\Locally-Hosted Retrieval-Augmented Assistant}}
 
 \author{Ayoub Aarab\\
@@ -68,6 +106,8 @@ This work designs and evaluates an incident-resolution assistant built on a hybr
 Hybrid retrieval attains Recall@5 $=$ 1.000 and MRR $=$ 0.987, against 0.768 and 0.678 for dense-only retrieval. A per-class analysis localizes the improvement: on exact-identifier queries, dense-only Recall@5 is 0.221 while the hybrid attains 1.000, confirming that the fusion supplies precisely the lexical precision the dense index lacks. Ablations show retrieval quality is invariant to chunk size over $[400, 1000]$ characters and saturates at $k \geq 3$, a result used to bound the generation context. Error analysis records a 0.0\% failure rate over the benchmark. The retrieval component is embedded in a grounded generation pipeline with intent-based abstention and adversarial-input defenses, and in an automated report-synthesis mechanism that maps a resolved dialogue onto a validated structured schema.
 
 Beyond ranking, the work addresses the gap between what a small local model is instructed to do and what it does. A source-selection stage admits the empty set, so questions the corpus does not document yield no citation rather than a spurious one; a post-conditioning stage removes artifacts unattested by the retrieved evidence, bounds self-reported confidence by the answer's actual content, and annotates irreversible operations according to whether a report documents them. Layered validation --- 269 component tests, a 69-report retrieval sweep, and a 16-case behavioral suite against the deployed model --- accompanies the retrieval benchmark. A controlled comparison against a model of 2.7$\times$ the parameter count finds identical correctness (15/15 reports, 60/60 property checks) at 43\% higher latency, supporting the central claim that under a local-inference constraint the decisive variable is context quality rather than model scale.
+
+A second phase of the work hardens the evaluated system for shared use: the single-process, single-file deployment is replaced with a data layer of independently-operated services --- PostgreSQL for chat and catalog metadata, MinIO for versioned report storage, and Keycloak for OpenID Connect authentication in front of every endpoint --- and the same dense/sparse fusion evaluated for report retrieval is applied a second time, over the user's own conversation history. A systematic audit of the authentication boundary, run after this phase, found ten endpoints reachable without any credential, including the report-deletion endpoint; the finding and its remediation are reported alongside the retrieval results as an instance of a defect class no unit test targeting individual handlers would have caught. The test suite backing this phase reaches 414 cases, up from 269, with no case from the original suite weakened to accommodate the new services.
 \end{abstract}
 
 \newpage
@@ -102,7 +142,7 @@ This constraint is not incidental; it conditions the design. It excludes frontie
 
 The objectives are: (i) to design a retrieval pipeline that serves both semantic and lexical query classes under local-inference constraints; (ii) to quantify its behavior on a labeled benchmark with standard information-retrieval metrics and ablations; (iii) to embed it in a generation pipeline that abstains rather than fabricates when evidence is insufficient, and to enforce that property by post-conditioning rather than by instruction alone; (iv) to close the documentation loop by synthesizing new structured reports from resolved dialogues; and (v) to establish, by measurement, that the resulting system's quality derives from context construction rather than from generative model scale.
 
-Section~\ref{sec:background} reviews the relevant retrieval background. Section~\ref{sec:arch} presents the system architecture and Section~\ref{sec:pipeline} the request pipeline and corpus workflow. Section~\ref{sec:corpus} describes the corpus, its representation, and the evaluation protocol. Section~\ref{sec:retrieval} formalizes the retrieval method, including the source selection that permits abstention. Section~\ref{sec:eval} reports retrieval results. Sections~\ref{sec:generation}--\ref{sec:quality} cover grounded generation and the post-conditioning that enforces its guarantees, and Section~\ref{sec:synthesis} report synthesis. Sections~\ref{sec:efficiency}--\ref{sec:validation} report efficiency and the validation methodology, including the measured model-selection decision. Section~\ref{sec:discussion} discusses limitations.
+Section~\ref{sec:background} reviews the relevant retrieval background. Section~\ref{sec:arch} presents the system architecture, Section~\ref{sec:hardening} the multi-service data layer, authentication, and client that harden this architecture for shared use, and Section~\ref{sec:pipeline} the request pipeline and corpus workflow. Section~\ref{sec:corpus} describes the corpus, its representation, and the evaluation protocol. Section~\ref{sec:retrieval} formalizes the retrieval method, including the source selection that permits abstention. Section~\ref{sec:eval} reports retrieval results. Sections~\ref{sec:generation}--\ref{sec:quality} cover grounded generation and the post-conditioning that enforces its guarantees, and Section~\ref{sec:synthesis} report synthesis. Sections~\ref{sec:efficiency}--\ref{sec:validation} report efficiency and the validation methodology, including the measured model-selection decision. Section~\ref{sec:discussion} discusses limitations.
 
 %=============================================================================
 \section{Background}
@@ -154,6 +194,7 @@ The implementation is a modular monolith: a FastAPI backend with separated inter
 \diagram{System architecture: the web client (assistant and report-editor modules) over a FastAPI backend hosting the RAG pipeline, the report service, and the model-provider abstraction, against locally-hosted models and the shared report corpus.}{figures/architecture_overview}{1.0}
 
 \subsection{Structured Report Schema as a Shared Contract}
+\label{sec:report-schema}
 
 Reports are represented by a typed schema, $\texttt{Report} = (\texttt{metadata}, \texttt{blocks})$, defined once as Pydantic models and mirrored in the client's type system. The \texttt{metadata} record carries identifying attributes (identifier, title, category, subcategory, reporter, date). The \texttt{blocks} field is a sequence over a discriminated union of content types: heading, paragraph, ordered/unordered list, code, table, image, and cross-referenced incident example.
 
@@ -165,9 +206,98 @@ Generation is accessed through a provider interface exposing text and vision com
 
 \subsection{Deployment}
 
-The application is containerized with a multi-stage build in which the client is compiled and served as static assets by the backend process, yielding a single-process deployment. Persistent state comprises the report corpus, the embedding-model cache, and a SQLite database holding dialogue history.
+The application is containerized with a multi-stage build in which the client is compiled and served as static assets by the backend process, yielding a single-process deployment. Persistent state initially comprised the report corpus, the embedding-model cache, and a SQLite database holding dialogue history; Section~\ref{sec:hardening} describes the migration of this state to a multi-service data layer and the authentication that was added in front of it.
 
 The container runs the application under an unprivileged account rather than as \texttt{root}. Because named volumes are created root-owned at mount time --- which masks ownership assigned during the image build --- an entry point assumes ownership of the mounted paths and then replaces itself with the application process under the unprivileged identity. Replacing rather than forking matters: the application becomes process~1 and therefore receives termination signals directly, so shutdown is orderly (measured at one second, exit status zero) instead of terminating by timeout, which would abandon in-flight response streams and risk a torn database write. A health probe reports readiness distinctly from liveness, allowing an orchestrator to restart a process that is running but unable to serve. Memory is bounded so that a fault in this container cannot exhaust the host it shares with the inference server.
+
+%=============================================================================
+\section{Platform Hardening: A Multi-Service Data Layer}
+\label{sec:hardening}
+%=============================================================================
+
+Sections~\ref{sec:eval}--\ref{sec:validation} evaluate the retrieval and generation stack described above, which was the system as first presented. The architecture of Section~\ref{sec:arch} is deliberately minimal in its persistence layer --- one process, one SQLite file, no authentication --- because that minimalism was the correct choice \emph{while the open question was retrieval quality}. It stops being the correct choice once the system moves from a single-operator evaluation to something intended for shared, ongoing use: an unauthenticated API and a single-writer embedded database are properties that are acceptable to measure against but not to hand to a team.
+
+This section documents the second phase of the work: replacing that persistence layer with a data layer built from established, independently-operated services, adding authentication in front of every endpoint, extending retrieval to the dialogue history itself, and reworking the client to the standard expected of an internal tool rather than a research prototype. The retrieval and generation stack of Sections~\ref{sec:arch}--\ref{sec:quality} is unchanged by this work; what changes is everything the stack sits on and everything a user touches before reaching it.
+
+\subsection{Motivation and Scope}
+
+Three properties of the original deployment do not survive contact with more than one user. First, \emph{identity} was a client-generated header with no verification, so any request could claim to be any user; there was no way to grant one person write access and another read-only access, and no way to know who did what. Second, \emph{persistence} was a single SQLite file and a bind-mounted directory of loose files: adequate for one process on one machine, but with no story for concurrent writers, no version history on a report that gets edited after the incident closes, and no way to search prior conversations once their number exceeds what fits on screen. Third, the \emph{interface} was functional but visually and structurally a demonstration artifact --- a single flat list of conversations, no persisted user preferences, and a report-authoring module styled independently of the assistant it shares a corpus with.
+
+The scope of the hardening work follows directly from these three gaps: identity and access control (Section~\ref{sec:hardening-auth}); durable, queryable storage for chat history and report artifacts (Section~\ref{sec:hardening-data}); retrieval extended from the report corpus to the user's own conversation history (Section~\ref{sec:hardening-search}); and a client rework covering navigation, theming, and the report-authoring surface (Section~\ref{sec:hardening-ui}). Each of the four is deployed as a separate, independently-operated container, chosen deliberately over folding the same capability into the existing FastAPI process --- the justification for that choice is given alongside each service below.
+
+\techlogorow{
+  \techlogo{figures/logos/postgresql.pdf}{PostgreSQL}
+  \techlogo{figures/logos/pgvector.pdf}{pgvector}
+  \techlogo{figures/logos/minio.pdf}{MinIO}
+  \techlogo{figures/logos/keycloak.pdf}{Keycloak}
+  \techlogo{figures/logos/docker.pdf}{Docker Compose}
+}
+
+\subsection{Identity and Access Control}
+\label{sec:hardening-auth}
+
+Authentication is delegated to Keycloak, an OpenID Connect identity provider, rather than implemented in the application. The application never observes a password: the client performs an Authorization Code flow with PKCE (Proof Key for Code Exchange) directly against Keycloak, and the backend's only responsibility is verifying the resulting signed token against Keycloak's published key set on every request. Three realm roles are defined --- \texttt{admin}, \texttt{analyst}, \texttt{viewer} --- mapped to write access, read-and-write access to the assistant and report editor, and read-only access respectively; role assignment is a Keycloak administrative action, not an application code path.
+
+\screenshot{The Keycloak-hosted sign-in screen, reached from the application's own login page. The application redirects here and never sees the submitted credentials; only a signed token is returned.}{NTTData/keycloack_login.png}{0.78}
+
+\screenshot{The application's sign-in page. A single action starts the OIDC flow; local development accounts are listed for convenience since this deployment is not internet-facing.}{NTTData/login_page.png}{0.85}
+
+An authenticated-endpoint audit was run after wiring the token check into the request pipeline: every route was probed without a token, and any response other than an explicit rejection was treated as a defect. The audit found ten endpoints --- the entire report-editing surface --- reachable with no credential at all, including the report-deletion endpoint, which had been exercising exactly the destructive-operation risk that Section~\ref{sec:quality} guards against in generated \emph{content} while remaining unguarded as an \emph{API}. This is recorded because it is the clearest instance in the project of a defect that only a systematic, adversarial check finds: a route-by-route code review of the same handlers did not surface it, since each handler was written correctly against the assumption that authentication happened earlier in the pipeline than it did.
+
+\subsection{Data Layer: PostgreSQL and MinIO}
+\label{sec:hardening-data}
+
+Two service boundaries replace the single SQLite file and the bind-mounted report directory.
+
+\textbf{Chat and catalog metadata} move to PostgreSQL. The migration is schema-driven and versioned (Alembic), and the store's public interface is preserved exactly across the change, so the request pipeline of Section~\ref{sec:pipeline} required no modification --- only its persistence dependency changed. Bringing dialogue history under a relational schema, rather than treating it purely as an opaque blob, is also the precondition for Section~\ref{sec:hardening-search}: a query language over the conversation store is what makes it searchable at all.
+
+\textbf{Report artifacts} move to MinIO, an S3-compatible object store, addressed by content-derived keys with the Postgres report-catalog table holding metadata and pointing at the corresponding object. Versioning is enabled on the bucket, so an edit to a previously-authored report does not discard the prior version --- a property the original filesystem storage did not have. A migration script moved the existing corpus (68 reports at evaluation time, Table~\ref{tab:corpus}) into this store; every object was verified present and byte-identical against its filesystem source before the filesystem copy was retired.
+
+The migration surfaced two defects in the original single-writer assumptions, both caught by verifying the moved data against its source rather than by inspection of the migration code. Object keys were derived under an implicit assumption of alphanumeric-only identifiers; eighty of the ninety-three real report filenames in the corpus contain spaces and punctuation the original scheme mishandled, and the fix was validated by re-running the migration against the full corpus and diffing every object rather than a sample. Separately, the storage schema's uniqueness constraint was keyed on incident identifier, which silently discards a second report filed against an identifier already in use; the constraint was corrected to key on the storage object itself once the corpus was found to contain exactly this case.
+
+\subsection{Retrieval Over Conversation History}
+\label{sec:hardening-search}
+
+The retrieval method of Section~\ref{sec:retrieval} operates over the report corpus. The same fusion --- dense embedding similarity combined with sparse lexical matching by Reciprocal Rank Fusion (Eq.~\ref{eq:rrf}) --- is applied a second time, over a different corpus: the user's own prior conversations, stored as described in Section~\ref{sec:hardening-data}. This is implemented as the identical fusion function applied to a second pair of rankers rather than a parallel reimplementation, for the same reason the underlying method was chosen for report retrieval in the first place --- a query for a past conversation is subject to the same semantic/lexical split as a query against the report corpus: a user recalling a conversation by its gist needs the dense ranker, and a user recalling a specific term or identifier needs the sparse one.
+
+\screenshot{Conversation search. Each result is labeled by which ranker matched it (\emph{keyword}, \emph{meaning}, or both); the top result here matched by keyword and by meaning simultaneously.}{NTTData/search_keyword_meaning.png}{0.78}
+
+Two further capabilities follow from the same relational chat store: conversations may be renamed and pinned, and an administrative view aggregates the answer-quality feedback (thumbs and free-text corrections) already collected by the mechanism of Section~\ref{sec:feedback}, which existed as a data-collection path with no corresponding interface until this phase.
+
+\screenshot{Aggregated answer-quality metrics, visible to administrators. The underlying thumbs and correction data were already collected (Section~\ref{sec:feedback}); this view is the first consumer of it.}{NTTData/answer_quality.png}{0.78}
+
+\subsection{Client Rework}
+\label{sec:hardening-ui}
+
+The client was restructured around the navigation model the identity and search work now supports: a persistent sidebar listing pinned and recent conversations, a tools switcher between the assistant and the report editor, and a settings surface exposing three color themes (a light theme and two dark variants distinguished by contrast level) plus per-user composing preferences, all persisted per account rather than per browser.
+
+\screenshot{The assistant, signed in, showing the pinned/recent conversation sidebar, the tool switcher, and a suggested-query empty state.}{NTTData/home_chat_page.png}{0.85}
+
+\screenshot{The interface while generation (stage~7 of the pipeline in Section~\ref{sec:pipeline}) is in flight, distinguishing an answer being composed from one already returned rather than presenting a blank wait.}{NTTData/chat_thinking.png}{0.85}
+
+\screenshot{The completed, grounded answer: the cited source report, a confidence badge, and an executable SQL artifact drawn from that report --- the same pipeline output described in Section~\ref{sec:generation}, now in its production interface.}{NTTData/chat_answering.png}{0.85}
+
+\screenshot{Theme and composing preferences, persisted server-side per account.}{NTTData/settings.png}{0.78}
+
+The report editor received the same visual treatment as the assistant, having previously been styled independently of it despite sharing the corpus described in Section~\ref{sec:corpus}. Report listing, search and filtering, and the block-based content editor were brought onto the shared design system without changing the underlying \texttt{Report} = (\texttt{metadata}, \texttt{blocks}) schema of Section~\ref{sec:report-schema} or the synthesis mechanism of Section~\ref{sec:synthesis}, which continues to write through the same interface.
+
+\screenshot{The report editor's list view: search, category and date filters, and per-report actions, now on the same design system as the assistant.}{NTTData/view_reports.png}{0.85}
+
+\screenshot{A synthesized report, opened in the viewer, with its export actions (JSON, Markdown, HTML) and edit entry point.}{NTTData/report_clickable.png}{0.85}
+
+\screenshot{Report authoring: the metadata form of Section~\ref{sec:report-schema} and, below it, the empty block-content editor for a new report.}{NTTData/create_report.png}{0.85}
+
+\screenshot{The block-type picker, mid-authoring: each of the seven block types of Section~\ref{sec:report-schema} --- heading, paragraph, list, incident example, code, image, table --- is directly selectable, and existing custom fields and a code block are already attached to this report.}{NTTData/report_adding_centent_block.png}{0.85}
+
+Two further points close the loop between identity and the rest of the client. Per-account display name and avatar are editable independently of the identity fields Keycloak owns (username, email, role), which are read-only in this view precisely because they are not this application's data to write.
+
+\screenshot{Per-account profile: display name and avatar are stored by the application; username, email and role are Keycloak-owned and shown read-only.}{NTTData/profile.png}{0.7}
+
+\subsection{Verification}
+
+The component-test discipline of Section~\ref{sec:validation} was extended rather than relaxed across this phase: every migration script asserts against the true source of record before the source is retired, the authentication audit of Section~\ref{sec:hardening-auth} is itself now a standing test rather than a one-time check, and the full test suite --- 414 cases at the end of this phase, up from the 269 reported in Section~\ref{sec:validation} --- is required to pass before any container image is rebuilt. No test in the original suite was weakened or removed to accommodate the new services; the increase reflects genuinely new coverage of the data migration, the authentication boundary, and the conversation-search ranking.
+
+\screenshot{The application's loading screen, shown while the session and its permissions are resolved against Keycloak before the interface renders.}{NTTData/loading.png}{0.6}
 
 %=============================================================================
 \section{Request Pipeline and Control Flow}
@@ -517,6 +647,7 @@ Second, the generation prompt permits the model to declare insufficient evidence
 User text is screened for instruction-override and prompt-extraction patterns; detected inputs are enclosed in an explicit untrusted-data delimiter within the prompt, so the model treats them as content to analyze rather than instructions to follow, and the system prompt is never emitted. A legitimate incident containing such phrasing is still processed as an incident, with the detection surfaced to the user, rather than refused. Secrets and personal data (credentials, bearer tokens, connection strings, private keys, email addresses) are redacted from dialogue text before persistence.
 
 \subsection{Feedback}
+\label{sec:feedback}
 
 Answers may be rated, and a negative rating admits a free-text correction. Corrections are stored and, on subsequent queries with lexical overlap to the corrected question, injected into the prompt as high-priority guidance. The mechanism is explicitly a retrieval-time intervention over an inspectable store, not parameter adaptation: no model weights are modified, and the system makes no claim to the contrary.
 
@@ -711,6 +842,8 @@ This work designs and evaluates a locally-hosted retrieval-augmented incident as
 Ranking, however, proved to be only the first half of the problem. A retriever always returns its top-ranked candidates, so a pipeline that cites them unconditionally attributes an answer to whichever document ranked first even when none is relevant; and a small model instructed to ground its output does so imperfectly, carrying artifacts between incidents, over-reporting confidence on answers containing nothing actionable, and proposing destructive operations no report documents. The system therefore places a selection stage between retrieval and generation that admits the empty set, and a post-conditioning stage after generation that reconciles the answer against the evidence --- removing unattested artifacts, bounding confidence by content, and distinguishing documented destructive procedures from invented ones. These are enforced properties rather than instructions, which is what makes them hold under a model that follows instructions imperfectly.
 
 The measured outcome supports the technical thesis stated in Section~\ref{sec:intro}. Against a generative model of 2.7$\times$ the parameter count, evaluated through an identical pipeline on identical questions, correctness is a tie --- both answer all 15 sampled reports and satisfy all 60 property checks --- while the larger model is 43\% slower and produces \emph{fewer} resolution steps. Under a local-inference constraint, the decisive variable is not model scale but the quality of the context constructed for it: schema-aware document representation, hybrid retrieval, narrow and thresholded selection, and post-conditioning against the retrieved evidence. The system satisfies its privacy constraint throughout, executing all inference locally.
+
+The second phase of the work (Section~\ref{sec:hardening}) tested a complementary claim: that the properties evaluated above are properties of the retrieval and generation stack, not of the single-process deployment they were first measured in, and that the stack survives being placed behind authentication and on top of independently-operated storage unchanged. The request pipeline, the selection thresholds of Table~\ref{tab:selection}, and the post-conditioning checks of Section~\ref{sec:quality} required no modification for this migration; only their persistence dependency changed. The audit that accompanied it is, on its own, a finding worth stating plainly: reasoning about each request handler in isolation left ten of them --- the entire report-editing surface, including deletion --- reachable with no credential, a class of defect that is invisible to correctness review of individual handlers and visible only to a check run against the deployed system as a whole. The same discipline that produced the retrieval and generation results --- measure the deployed system rather than trust the design --- is what found it.
 
 \begin{thebibliography}{9}
 
