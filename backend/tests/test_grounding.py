@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 
+import pytest
+
 from app.chatbot.ingestion import (
     _declared_incident_id,
     _get_report_title,
@@ -298,3 +300,78 @@ def test_a_grounded_answer_is_not_affected_by_the_no_sources_cap():
 
     assert shaped["confidence"] >= 80
     assert shaped["low_confidence"] is False
+
+
+# ── feedback-aware selection ──────────────────────────────────────────────────
+#
+# Thumbs-up used to be write-only: recorded, then read by nothing. It now
+# nudges the ranking of reports that have produced answers people marked
+# useful. The rule these lock down is that it may only *reorder* reports that
+# already earned selection on topical merit — never admit one that did not.
+
+
+def test_feedback_breaks_a_tie_between_equally_matching_reports():
+    from app.chatbot.selection import select_sources
+
+    query = "kafka consumer group lag growing without bound"
+    hits = [_hit(0.04, query, "INC1"), _hit(0.04, query, "INC2")]
+
+    selected = select_sources(query, hits, feedback_scores={"inc2": 3})
+
+    assert [h["incident_id"] for h in selected][0] == "INC2"
+
+
+def test_feedback_cannot_ground_an_unrelated_report():
+    """The whole safety property in one test.
+
+    The absolute floor is what stops an off-topic report being cited as if the
+    corpus documented the question. Feedback is applied after that check, so no
+    amount of upvoting can smuggle a report past it.
+    """
+    from app.chatbot.selection import select_sources
+
+    hits = [_hit(0.02, "Kubernetes job pods OOMKilled", "INC9")]
+
+    for net in (1, 10, 1000, 10**6):
+        assert select_sources(
+            "how do I tune a guitar", hits, feedback_scores={"inc9": net}
+        ) == []
+
+
+def test_feedback_adjustment_is_capped():
+    from app.chatbot.selection import select_sources
+    from app.chatbot.selection import _FEEDBACK_CAP
+
+    query = "kafka consumer group lag growing without bound"
+    hits = [_hit(0.04, query, "INC1")]
+
+    baseline = select_sources(query, hits)[0]["selection_score"]
+    boosted = select_sources(query, hits, feedback_scores={"inc1": 10**6})[0]
+
+    assert boosted["selection_score"] - baseline == pytest.approx(_FEEDBACK_CAP)
+
+
+def test_downvotes_lower_a_report_but_do_not_drop_it():
+    """A disliked report still answers when it is the only real match — the
+    signal is a preference, not a veto."""
+    from app.chatbot.selection import select_sources
+
+    query = "kafka consumer group lag growing without bound"
+    hits = [_hit(0.04, query, "INC1")]
+
+    selected = select_sources(query, hits, feedback_scores={"inc1": -5})
+
+    assert [h["incident_id"] for h in selected] == ["INC1"]
+
+
+def test_selection_without_feedback_scores_is_unchanged():
+    """None must behave exactly as before this feature existed."""
+    from app.chatbot.selection import select_sources
+
+    query = "kafka consumer group lag growing without bound"
+    hits = [_hit(0.04, query, "INC1")]
+
+    assert (
+        select_sources(query, hits)[0]["selection_score"]
+        == select_sources(query, hits, feedback_scores={})[0]["selection_score"]
+    )

@@ -22,7 +22,7 @@ import time
 import uuid
 from typing import Any
 
-from sqlalchemy import delete, func, select, update
+from sqlalchemy import delete, func, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -324,6 +324,35 @@ class ChatRepository:
             "corrections": corr,
         }
 
+    def report_feedback_scores(self) -> dict[str, int]:
+        """Net thumbs per cited incident id, e.g. {"inc0012001": 2}.
+
+        Read off the stored answer payload rather than a join table: the answer
+        already records which reports it cited (`retrieval[].incident_id`), so
+        the signal is derivable from data we keep anyway — no schema change and
+        no risk of the two drifting apart.
+
+        A rated answer with an empty `retrieval` (an ungrounded AI suggestion)
+        contributes nothing, which is correct: there is no report to reward.
+        """
+        sql = text(
+            """
+            SELECT lower(trim(src.incident_id)) AS incident_id,
+                   SUM(m.feedback)              AS net
+              FROM messages AS m
+              CROSS JOIN LATERAL jsonb_to_recordset(
+                       COALESCE(m.payload -> 'retrieval', '[]'::jsonb)
+                   ) AS src(incident_id text)
+             WHERE m.feedback IS NOT NULL
+               AND src.incident_id IS NOT NULL
+               AND trim(src.incident_id) <> ''
+             GROUP BY 1
+            """
+        )
+        with self.db.session() as s:
+            rows = s.execute(sql).all()
+        return {r.incident_id: int(r.net) for r in rows}
+
     # ── learned corrections ───────────────────────────────────────────────────
 
     def add_correction(self, client_id: str, question: str, correction: str) -> dict:
@@ -345,6 +374,43 @@ class ChatRepository:
             "correction": correction,
             "created_at": now,
         }
+
+    def list_corrections(self, limit: int = 200) -> list[dict]:
+        """All stored corrections, newest first — for admin review.
+
+        Corrections are injected into every future matching prompt and are not
+        scoped to their author, so they need to be inspectable and removable by
+        someone: an unreviewed, permanent write path into the prompt is the
+        part of this loop most worth being able to undo.
+        """
+        with self.db.session() as s:
+            rows = s.execute(
+                select(
+                    Correction.id,
+                    Correction.question,
+                    Correction.correction,
+                    Correction.created_at,
+                )
+                .order_by(Correction.created_at.desc())
+                .limit(limit)
+            ).all()
+        return [
+            {
+                "id": r.id,
+                "question": r.question,
+                "correction": r.correction,
+                "created_at": r.created_at,
+            }
+            for r in rows
+        ]
+
+    def delete_correction(self, correction_id: str) -> bool:
+        """Remove a correction. Returns False when it does not exist."""
+        with self.db.session() as s:
+            result = s.execute(
+                delete(Correction).where(Correction.id == correction_id)
+            )
+            return bool(result.rowcount)
 
     def relevant_corrections(self, query: str, limit: int = 3) -> list[dict]:
         """Past corrections whose question overlaps this query.

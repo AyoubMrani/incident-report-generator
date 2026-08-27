@@ -2,14 +2,18 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   Send, AlertTriangle, Loader2, Database, ImagePlus, X,
   ExternalLink, Link2, FileText, ShieldAlert,
-  ThumbsUp, ThumbsDown, Sparkles, Copy, Download,
+  ThumbsUp, ThumbsDown, Sparkles, Copy, Download, CheckCircle2,
 } from 'lucide-react';
 import {
-  streamChat, listMessages, sendFeedback, sendCorrection, generateReport,
+  streamChat, listMessages, sendFeedback, sendCorrection, generateReport, fetchFollowups,
   ChatAnswer, SourceLink, StoredMessage, ResolutionStep,
 } from '../../api/chat';
 import { ReportViewer } from '../reports/components/ReportViewer';
 import { CodeBlock, splitFencedCode } from './CodeBlock';
+import {
+  matchSlashCommands, activeSlashFragment, placeholderRange, stripPlaceholderMarkers,
+  type SlashCommand,
+} from './slashCommands';
 import { useCopy, useToast } from '../../ui/Toast';
 import type { Preferences } from '../../ui/SettingsDialog';
 import { NTT_BLUE, NttMark } from '../../ui/Brand';
@@ -46,10 +50,41 @@ interface StreamingMessage { role: 'streaming'; text: string }    // tokens as t
 interface ErrorMessage { role: 'error'; text: string }
 type Message = UserMessage | AssistantMessage | ChatMessage | StreamingMessage | ErrorMessage;
 
-function confidenceBadge(confidence: number) {
-  if (confidence >= 75) return { label: `${confidence}% confidence`, cls: 'bg-green-100 text-green-800' };
-  if (confidence >= 50) return { label: `${confidence}% confidence`, cls: 'bg-yellow-100 text-yellow-800' };
-  return { label: `${confidence}% confidence`, cls: 'bg-red-100 text-red-800' };
+// The badge answers "where did this come from", not "how sure is the model" —
+// a raw percentage conflated those two questions, so an answer reasoned
+// correctly from general knowledge (no matching report to cite) displayed
+// identically to a genuinely shaky, poorly-grounded guess. Splitting on
+// whether a report was actually matched fixes that: "AI Suggestion" is an
+// expected, unremarkable state, not a warning.
+//
+// Groundedness is read from `retrieval`, not `matched_report_ids`: the latter
+// only fills in when the model also populates a separate, optional
+// "similar incidents" field in its structured output, so a fully-grounded
+// answer that cites its report through resolution-step evidence (not that
+// field) leaves matched_report_ids empty — confirmed live against
+// INC0012001, a documented VPN fix the model answered at 95% confidence,
+// where matched_report_ids was [] but retrieval correctly held the match.
+function sourceBadge(answer: ChatAnswer): { label: string; cls: string; icon: 'check' | 'sparkles' } {
+  const documented = answer.retrieval.length > 0;
+  if (!documented) {
+    return {
+      label: 'AI Suggestion — no matching report',
+      cls: 'bg-violet-100 text-violet-800 dark:bg-violet-950/50 dark:text-violet-300',
+      icon: 'sparkles',
+    };
+  }
+  if (answer.low_confidence) {
+    return {
+      label: 'Weak match',
+      cls: 'bg-amber-100 text-amber-800 dark:bg-amber-950/50 dark:text-amber-300',
+      icon: 'check',
+    };
+  }
+  return {
+    label: 'Documented',
+    cls: 'bg-green-100 text-green-800 dark:bg-green-950/50 dark:text-green-300',
+    icon: 'check',
+  };
 }
 
 // Turn a stored DB message into the local view model (for replay on reload).
@@ -103,7 +138,10 @@ function answerToText(a: ChatAnswer): string {
     if (body && !isFiller(body)) parts.push(`${title}\n${body.trim()}`);
   };
 
-  parts.push(`${a.incident_type} (${a.confidence}% confidence)`);
+  const source = a.retrieval.length > 0
+    ? (a.low_confidence ? 'Weak match' : 'Documented')
+    : 'AI Suggestion — no matching report';
+  parts.push(`${a.incident_type} (${source})`);
   add('Problem Summary', a.answer);
   add('Root Cause', a.root_cause);
   add('Investigation', a.investigation);
@@ -253,8 +291,8 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
       <div className="flex items-center gap-1">
         <span className="text-[11px] text-slate-400 dark:text-slate-500 mr-1">Was this helpful?</span>
         <button
-          onClick={() => onRate(1)}
-          title="Helpful"
+          onClick={() => { onRate(1); setShowCorrect(false); }}
+          title="Helpful — the cited report is preferred for similar questions"
           className={`p-1 rounded hover:bg-slate-100 dark:bg-slate-800 ${value === 1 ? 'text-green-600' : 'text-slate-400 dark:text-slate-500'}`}
         >
           <ThumbsUp className="w-3.5 h-3.5" />
@@ -266,6 +304,14 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
         >
           <ThumbsDown className="w-3.5 h-3.5" />
         </button>
+        {/* Confirm the upvote did something. It now nudges the cited report up
+            the ranking for similar questions, so saying so is accurate rather
+            than the usual "thanks for your feedback" placebo. */}
+        {value === 1 && (
+          <span className="ml-1 text-[11px] text-green-600 dark:text-green-500">
+            ✓ Noted — I'll prefer this source for similar questions.
+          </span>
+        )}
       </div>
 
       {showCorrect && (
@@ -275,24 +321,45 @@ function FeedbackButtons({ value, onRate, onCorrect }: {
               ✓ Thanks — I'll use this correction for similar questions.
             </div>
           ) : (
-            <div className="flex items-start gap-1.5">
-              <textarea
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                rows={2}
-                placeholder="What's the correct answer? (this is saved and used for similar future questions)"
-                className="flex-1 resize-none rounded-md border border-slate-300 dark:border-slate-600 px-2 py-1 text-xs outline-none focus:border-blue-500"
-              />
-              <button
-                onClick={submit}
-                disabled={!text.trim()}
-                className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-40"
-              >
-                Save
-              </button>
-            </div>
+            <>
+              {/* The rating alone teaches the system nothing on a thumbs-down:
+                  only the correction text is fed back into future prompts.
+                  Saying so plainly stops a bare downvote from feeling like it
+                  reported the problem. */}
+              <p className="mb-1 text-[11px] text-amber-600 dark:text-amber-400">
+                The rating alone isn't used — add the correct answer below and it
+                will steer future answers to similar questions.
+              </p>
+              <div className="flex items-start gap-1.5">
+                <textarea
+                  value={text}
+                  onChange={(e) => setText(e.target.value)}
+                  rows={2}
+                  placeholder="What's the correct answer? (this is saved and used for similar future questions)"
+                  className="flex-1 resize-none rounded-md border border-slate-300 bg-app text-app placeholder:text-app-muted dark:border-slate-600 px-2 py-1 text-xs outline-none focus:border-blue-500"
+                />
+                <button
+                  onClick={submit}
+                  disabled={!text.trim()}
+                  className="rounded-md bg-blue-600 px-2 py-1 text-xs text-white hover:bg-blue-700 disabled:opacity-40"
+                >
+                  Save
+                </button>
+              </div>
+            </>
           )}
         </div>
+      )}
+
+      {/* Downvoted, box dismissed without a correction — keep a way back, since
+          the rating on its own changed nothing. */}
+      {value === -1 && !showCorrect && !saved && (
+        <button
+          onClick={() => setShowCorrect(true)}
+          className="mt-1 text-[11px] text-blue-600 hover:underline dark:text-blue-400"
+        >
+          Add the correct answer
+        </button>
       )}
     </div>
   );
@@ -391,14 +458,95 @@ function StepBlock({ step }: { step: ResolutionStep }) {
   );
 }
 
-function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId }: {
+// Follow-up question suggestions: on demand, not automatic. Generating them is
+// a real LLM call (~5-15s on the local model — see chatbot/followups.py on the
+// backend), so firing it after every answer would double the wait on every
+// single turn. A small affordance instead, paid only by someone who wants it.
+function FollowupSuggestions({ messageId, question, onAsk }: {
+  messageId: string;
+  question: string;
+  onAsk: (question: string) => void;
+}) {
+  const [state, setState] = useState<'idle' | 'loading' | 'done' | 'empty' | 'error'>('idle');
+  const [questions, setQuestions] = useState<string[]>([]);
+
+  const request = async () => {
+    setState('loading');
+    try {
+      const result = await fetchFollowups(messageId, question);
+      if (result.length === 0) {
+        setState('empty');
+      } else {
+        setQuestions(result);
+        setState('done');
+      }
+    } catch {
+      setState('error');
+    }
+  };
+
+  if (state === 'idle') {
+    return (
+      <button
+        onClick={request}
+        className="inline-flex items-center gap-1 text-[11px] text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
+        title="Suggest follow-up questions for this answer"
+      >
+        <Sparkles className="w-3 h-3" /> Suggest follow-ups
+      </button>
+    );
+  }
+
+  if (state === 'loading') {
+    return (
+      <span className="inline-flex items-center gap-1.5 text-[11px] text-slate-400">
+        <Loader2 className="w-3 h-3 animate-spin" /> Thinking of follow-ups…
+      </span>
+    );
+  }
+
+  if (state === 'error') {
+    return (
+      <button
+        onClick={request}
+        className="text-[11px] text-slate-400 underline decoration-dotted underline-offset-2 hover:text-slate-600 dark:hover:text-slate-300"
+      >
+        Couldn't load follow-ups — retry
+      </button>
+    );
+  }
+
+  if (state === 'empty') {
+    return <span className="text-[11px] text-slate-400">No follow-ups to suggest.</span>;
+  }
+
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {questions.map((q) => (
+        <button
+          key={q}
+          onClick={() => onAsk(q)}
+          className="rounded-full border border-slate-200 px-2.5 py-1 text-[11px] text-slate-600 transition hover:border-slate-300 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800"
+        >
+          {q}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId, question, onAskFollowup }: {
   answer: ChatAnswer; onOpen: (filename: string) => void;
   feedback?: number | null; onRate?: (v: 1 | -1) => void;
   onCorrect?: (correction: string) => Promise<void>;
   messageId?: string;
+  /** The user's question this answer responded to (for the follow-ups prompt). */
+  question?: string;
+  onAskFollowup?: (question: string) => void;
 }) {
   const copy = useCopy();
-  const badge = confidenceBadge(answer.confidence);
+  const badge = sourceBadge(answer);
+  const documented = answer.retrieval.length > 0;
   const linksInReasoning = extractLinks(answer.raw || '');
   // Steps render their own artifact; only show the rest in a trailing block.
   const stepArtifactContents = new Set(
@@ -418,12 +566,17 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         <span className="text-sm font-semibold text-app">
           {answer.incident_type}
         </span>
-        <span className={`rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+        <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-medium ${badge.cls}`}>
+          {badge.icon === 'sparkles' ? <Sparkles className="w-3 h-3" /> : <CheckCircle2 className="w-3 h-3" />}
           {badge.label}
         </span>
-        {answer.low_confidence && (
+        {/* Only a matched-but-shaky report warrants "verify before acting" —
+            an ungrounded AI suggestion already says so via its own badge, so
+            stacking this warning on top of it doubled up on alarm for an
+            expected, unremarkable state. */}
+        {documented && answer.low_confidence && (
           <span className="inline-flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-            <AlertTriangle className="w-3.5 h-3.5" /> low confidence — verify before acting
+            <AlertTriangle className="w-3.5 h-3.5" /> verify before acting
           </span>
         )}
       </div>
@@ -542,7 +695,7 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         </div>
       )}
 
-      <div className="flex items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
+      <div className="flex flex-wrap items-center gap-3 border-t border-slate-100 pt-3 dark:border-slate-800">
         <button
           onClick={() => copy(answerToText(answer), 'Answer copied')}
           className="inline-flex items-center gap-1 text-[11px] text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
@@ -553,20 +706,13 @@ function AssistantCard({ answer, onOpen, feedback, onRate, onCorrect, messageId 
         {onRate && onCorrect && (
           <FeedbackButtons value={feedback} onRate={onRate} onCorrect={onCorrect} />
         )}
-        {messageId && (
-          // Full HTML rendering of this answer, with the source report's
-          // screenshots embedded — the chat card cannot show those inline.
-          <a
-            href={`/api/messages/${messageId}/html`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="ml-auto inline-flex items-center gap-1 whitespace-nowrap text-[11px] text-slate-500 transition hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200"
-            title="Open this answer with the report's screenshots"
-          >
-            <ExternalLink className="w-3 h-3" /> Open with screenshots
-          </a>
-        )}
       </div>
+
+      {/* Own row: suggested questions need room to wrap as chips, and
+          shouldn't compete with the feedback/copy row for horizontal space. */}
+      {messageId && onAskFollowup && (
+        <FollowupSuggestions messageId={messageId} question={question || ''} onAsk={onAskFollowup} />
+      )}
     </div>
   );
 }
@@ -598,6 +744,9 @@ export default function ChatbotModule({
   const [reportBusy, setReportBusy] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const [slashOpen, setSlashOpen] = useState(false);
+  const [slashActive, setSlashActive] = useState(0);
   const toast = useToast();
 
   // Turn the current diagnosed conversation into a saved report, then open it.
@@ -687,8 +836,10 @@ export default function ChatbotModule({
     try { await sendFeedback(messageId, next); } catch { /* non-critical */ }
   }
 
-  const submit = async () => {
-    const query = input.trim();
+  const submit = async (overrideText?: string) => {
+    // overrideText lets a follow-up suggestion chip ask its question directly,
+    // without a round trip through setInput + a second click.
+    const query = (overrideText ?? input).trim();
     if ((!query && !image) || loading) return; // supports text-only, image+text, image-only
     const links = extractLinks(query);
     setInput('');
@@ -737,7 +888,46 @@ export default function ChatbotModule({
     }
   };
 
+  // Slash commands (see slashCommands.ts). Typing "/" alone in an otherwise
+  // empty composer opens a picker; the fragment after it filters the list.
+  const slashFragment = activeSlashFragment(input);
+  const slashMatches = slashFragment !== null ? matchSlashCommands(slashFragment) : [];
+  const slashPickerOpen = slashOpen && slashMatches.length > 0;
+
+  const expandSlashCommand = (cmd: SlashCommand) => {
+    const range = placeholderRange(cmd.template);
+    const clean = stripPlaceholderMarkers(cmd.template);
+    setInput(clean);
+    setSlashOpen(false);
+    setSlashActive(0);
+    // Select the placeholder text (brackets already stripped from `clean`) so
+    // typing immediately overwrites it — the same convention a snippet
+    // expander uses. Deferred a frame: the textarea must re-render with the
+    // new value before a selection range on it means anything.
+    if (range) {
+      requestAnimationFrame(() => {
+        const el = textareaRef.current;
+        if (!el) return;
+        el.focus();
+        el.setSelectionRange(range.start, range.end - 4); // -4 for the removed "[[" "]]"
+      });
+    }
+  };
+
+  const onInputChange = (value: string) => {
+    setInput(value);
+    const fragment = activeSlashFragment(value);
+    setSlashOpen(fragment !== null);
+    setSlashActive(0);
+  };
+
   const onKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (slashPickerOpen) {
+      if (e.key === 'ArrowDown') { e.preventDefault(); setSlashActive((i) => Math.min(i + 1, slashMatches.length - 1)); return; }
+      if (e.key === 'ArrowUp') { e.preventDefault(); setSlashActive((i) => Math.max(i - 1, 0)); return; }
+      if (e.key === 'Escape') { e.preventDefault(); setSlashOpen(false); return; }
+      if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); expandSlashCommand(slashMatches[slashActive]); return; }
+    }
     if (e.key !== 'Enter') return;
     // Two conventions, chosen in Settings: Enter sends (Shift+Enter newlines),
     // or Enter newlines and ⌘/Ctrl+Enter sends.
@@ -759,8 +949,9 @@ export default function ChatbotModule({
     // One column. The sidebar owns navigation, history and "New chat"; this
     // header carries only what is specific to the open conversation.
     <div className="flex h-full flex-col">
-      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-5 dark:border-slate-800">
-        <h1 className="min-w-0 flex-1 truncate text-[14px] font-medium text-app">
+      <header className="flex h-14 shrink-0 items-center gap-2 border-b border-slate-200 px-3 sm:px-5 dark:border-slate-800">
+        {/* pl-12 below md leaves room for the fixed menu button in App.tsx. */}
+        <h1 className="min-w-0 flex-1 truncate pl-12 text-[14px] font-medium text-app md:pl-0">
           {activeTitle}
         </h1>
         {activeId && messages.length > 0 && (
@@ -770,7 +961,7 @@ export default function ChatbotModule({
             title="Download this conversation as Markdown"
           >
             <Download className="w-4 h-4" />
-            Export
+            <span className="hidden sm:inline">Export</span>
           </button>
         )}
         {activeId && messages.some((m) => m.role === 'assistant') && (
@@ -781,7 +972,9 @@ export default function ChatbotModule({
             title="Create an incident report from this conversation"
           >
             <FileText className="w-4 h-4" />
-            {reportBusy ? 'Generating…' : 'Save as report'}
+            <span className="hidden sm:inline">
+              {reportBusy ? 'Generating…' : 'Save as report'}
+            </span>
           </button>
         )}
       </header>
@@ -901,6 +1094,8 @@ export default function ChatbotModule({
                       onRate={msg.messageId ? (v) => rate(i, msg.messageId!, msg.feedback, v) : undefined}
                       onCorrect={msg.messageId ? (c) => sendCorrection(question, c) : undefined}
                       messageId={msg.messageId}
+                      question={question}
+                      onAskFollowup={submit}
                     />
                   </div>
                 );
@@ -917,7 +1112,33 @@ export default function ChatbotModule({
 
         {/* Composer: pinned, on a fading backdrop so text scrolls out under it. */}
         <div className="shrink-0 bg-gradient-to-t from-app via-app to-transparent px-4 pb-4 pt-2">
-          <div className="mx-auto w-full max-w-3xl">
+          <div className="relative mx-auto w-full max-w-3xl">
+            {slashPickerOpen && (
+              <div className="border-app bg-app-elevated absolute bottom-full left-0 z-20 mb-2 w-80 overflow-hidden rounded-xl border shadow-xl">
+                {slashMatches.map((cmd, i) => (
+                  <button
+                    key={cmd.command}
+                    // onMouseDown, not onClick: it fires before the textarea's
+                    // onBlur, so the picker's own blur-close (150ms below)
+                    // cannot race a click closed before it registers.
+                    onMouseDown={(e) => { e.preventDefault(); expandSlashCommand(cmd); }}
+                    onMouseEnter={() => setSlashActive(i)}
+                    className={`flex w-full items-center gap-3 px-3 py-2 text-left transition ${
+                      i === slashActive ? 'bg-app-hover' : ''
+                    }`}
+                  >
+                    <span
+                      className="rounded px-1.5 py-0.5 font-mono text-[11px] font-semibold"
+                      style={{ background: `${NTT_BLUE}14`, color: NTT_BLUE }}
+                    >
+                      {cmd.label}
+                    </span>
+                    <span className="text-app-muted truncate text-[12px]">{cmd.description}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+
             {image && (
               <div className="mb-2 inline-flex items-center gap-2 rounded-lg bg-slate-100 px-2.5 py-1.5 text-xs text-slate-600 dark:bg-slate-800 dark:text-slate-300">
                 <ImagePlus className="w-3.5 h-3.5" /> {image.name}
@@ -937,11 +1158,13 @@ export default function ChatbotModule({
                 <ImagePlus className="w-[18px] h-[18px]" />
               </button>
               <textarea
+                ref={textareaRef}
                 value={input}
-                onChange={(e) => setInput(e.target.value)}
+                onChange={(e) => onInputChange(e.target.value)}
                 onKeyDown={onKeyDown}
+                onBlur={() => setTimeout(() => setSlashOpen(false), 150)}
                 rows={1}
-                placeholder="Ask about an incident…"
+                placeholder="Ask about an incident… (try / for commands)"
                 className="max-h-48 flex-1 resize-none bg-transparent py-2.5 text-[15px] leading-relaxed text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-100"
               />
               <button

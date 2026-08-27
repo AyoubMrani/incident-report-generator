@@ -46,6 +46,14 @@ ABSOLUTE_FLOOR = 0.50
 # overlap is what actually separates "mentions rollback" from "is about this".
 _ENTITY_WEIGHT = 1.0
 
+# Per-net-thumb adjustment applied to a report that has produced rated answers,
+# and the cap on its total effect. Deliberately small: feedback breaks ties
+# between reports that already match, it does not decide whether something
+# matches. The cap keeps a popular report from dominating an unrelated query
+# no matter how many upvotes it collects.
+_FEEDBACK_STEP = 0.05
+_FEEDBACK_CAP = 0.15
+
 _STOP = {
     "the", "a", "an", "and", "or", "to", "of", "in", "on", "for", "is", "are",
     "how", "do", "i", "my", "it", "with", "why", "what", "this", "that", "from",
@@ -88,12 +96,24 @@ def _report_key(hit: dict) -> str:
     return f"src:{(hit.get('source') or '').lower()}"
 
 
-def select_sources(query: str, hits: list[dict], max_selected: int = MAX_SELECTED) -> list[dict]:
+def select_sources(
+    query: str,
+    hits: list[dict],
+    max_selected: int = MAX_SELECTED,
+    feedback_scores: dict[str, int] | None = None,
+) -> list[dict]:
     """Return the reports that genuinely answer `query`, best first.
 
     Each returned hit carries a `selection_score` (retrieval + entity overlap)
     for transparency. An empty list means nothing matched well enough, which is
     the only case where the missing-resolution fallback applies.
+
+    `feedback_scores` maps a lowercased incident id to its net thumbs. It
+    re-ranks reports that already cleared the relevance floors; it is applied
+    *after* ABSOLUTE_FLOOR precisely so that upvotes cannot manufacture
+    groundedness for a report the corpus does not actually match. Passing None
+    disables the signal entirely, which is what every existing caller and test
+    gets by default.
     """
     if not hits:
         return []
@@ -129,5 +149,20 @@ def select_sources(query: str, hits: list[dict], max_selected: int = MAX_SELECTE
     # 3. Relative floor: drop candidates far weaker than the best match, so a
     #    single strong match is not padded with a weak second source.
     kept = [h for h in ranked if h["selection_score"] >= RELATIVE_FLOOR * top_score]
+
+    # 4. Feedback re-rank among the survivors. Everything here already passed
+    #    both floors on topical merit, so this only decides *which* good match
+    #    leads — the case it is for is two reports covering the same symptom
+    #    where one has repeatedly been marked useful and the other has not.
+    if feedback_scores:
+        for hit in kept:
+            inc = (hit.get("incident_id") or "").strip().lower()
+            net = feedback_scores.get(inc, 0) if inc else 0
+            if not net:
+                continue
+            adjustment = max(-_FEEDBACK_CAP, min(_FEEDBACK_CAP, net * _FEEDBACK_STEP))
+            hit["feedback_adjustment"] = adjustment
+            hit["selection_score"] += adjustment
+        kept.sort(key=lambda h: h["selection_score"], reverse=True)
 
     return kept[:max_selected]

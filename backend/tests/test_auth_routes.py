@@ -179,6 +179,33 @@ def test_feedback_summary_is_admin_only(client, analyst_headers):
     assert client.get("/api/feedback/summary", headers=admin).status_code == 200
 
 
+def test_listing_corrections_is_admin_only(client, analyst_headers):
+    """Corrections are global — any user's correction steers everyone's
+    answers — so reading them exposes other people's activity."""
+    assert client.get("/api/corrections", headers=analyst_headers).status_code == 403
+    admin = {"Authorization": f"Bearer {_token('admin', 'admin')}"}
+    assert client.get("/api/corrections", headers=admin).status_code == 200
+
+
+def test_deleting_a_correction_is_admin_only(client, analyst_headers):
+    r = client.delete("/api/corrections/does-not-exist", headers=analyst_headers)
+    assert r.status_code == 403
+    admin = {"Authorization": f"Bearer {_token('admin', 'admin')}"}
+    # Authorised, but the id is not real: 404 rather than 403.
+    r = client.delete("/api/corrections/does-not-exist", headers=admin)
+    assert r.status_code == 404
+
+
+def test_an_analyst_can_still_submit_a_correction(client, analyst_headers):
+    """Review is admin-only; *contributing* must stay open or the loop dies."""
+    r = client.post(
+        "/api/corrections",
+        headers=analyst_headers,
+        json={"question": "dns cache", "correction": "flush the resolver cache"},
+    )
+    assert r.status_code == 200
+
+
 def test_garbage_token_rejected(client):
     r = client.get("/api/me", headers={"Authorization": "Bearer not-a-real-token"})
     assert r.status_code == 401

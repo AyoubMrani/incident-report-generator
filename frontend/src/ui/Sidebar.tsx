@@ -51,6 +51,12 @@ interface Props {
   pinningSupported: boolean;
 
   footer: React.ReactNode;
+
+  /** Below `md` the sidebar is an overlay drawer rather than a column in the
+   *  layout: at 390px its fixed 264px left only ~126px for the app itself.
+   *  These control that drawer; on desktop they are inert. */
+  mobileOpen?: boolean;
+  onCloseMobile?: () => void;
 }
 
 const TOOLS: { id: Tool; label: string; icon: React.ReactNode }[] = [
@@ -72,14 +78,46 @@ export default function Sidebar({
   onDelete,
   pinningSupported,
   footer,
+  mobileOpen = false,
+  onCloseMobile,
 }: Props) {
   const pinned = conversations.filter((c) => c.pinned);
   const rest = conversations.filter((c) => !c.pinned);
 
+  // The collapsed (icon-rail) presentation is a desktop affordance. In the
+  // mobile drawer there is no width to reclaim — it is already off-canvas when
+  // closed — so an icon-only drawer would just be a worse menu. Track the
+  // viewport so the drawer always renders its full content.
+  const [isDesktop, setIsDesktop] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia('(min-width: 768px)');
+    const onChange = (e: MediaQueryListEvent) => setIsDesktop(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  const railed = collapsed && isDesktop;
+
   return (
+    <>
+      {/* Scrim: only below md, and only while the drawer is open. */}
+      {mobileOpen && (
+        <button
+          aria-label="Close menu"
+          onClick={onCloseMobile}
+          className="fixed inset-0 z-30 bg-black/50 md:hidden"
+        />
+      )}
+
     <aside
-      className={`flex shrink-0 flex-col border-r border-app bg-app-surface transition-[width] duration-200 ${
-        collapsed ? 'w-[64px]' : 'w-[264px]'
+      className={`z-40 flex shrink-0 flex-col border-r border-app bg-app-surface transition-transform duration-200 md:transition-[width] ${
+        // Mobile: a fixed-position drawer, full height, slid off-canvas unless
+        // opened. It never reserves layout width, so the app gets the viewport.
+        'fixed inset-y-0 left-0 w-[264px] md:static md:translate-x-0 '
+      }${mobileOpen ? 'translate-x-0' : '-translate-x-full'} ${
+        // Desktop: unchanged — the collapse toggle still drives the width.
+        collapsed ? 'md:w-[64px]' : 'md:w-[264px]'
       }`}
     >
       {/* ── Header ─────────────────────────────────────────────────────────
@@ -88,13 +126,13 @@ export default function Sidebar({
       <div className="flex h-14 items-center gap-1 px-2.5">
         <button
           onClick={onToggleCollapsed}
-          title={`${collapsed ? 'Expand' : 'Collapse'} sidebar  ⌘\\`}
+          title={`${railed ? 'Expand' : 'Collapse'} sidebar  ⌘\\`}
           className="text-app-muted hover:bg-app-hover rounded-lg p-1.5 transition"
         >
-          {collapsed ? <PanelLeft className="w-[18px] h-[18px]" /> : <PanelLeftClose className="w-[18px] h-[18px]" />}
+          {railed ? <PanelLeft className="w-[18px] h-[18px]" /> : <PanelLeftClose className="w-[18px] h-[18px]" />}
         </button>
 
-        {!collapsed && (
+        {!railed && (
           <>
             <button
               onClick={onOpenSearch}
@@ -110,7 +148,7 @@ export default function Sidebar({
         )}
       </div>
 
-      {collapsed ? (
+      {railed ? (
         <div className="flex flex-col items-center gap-1 px-2">
           <button
             onClick={onOpenSearch}
@@ -234,6 +272,7 @@ export default function Sidebar({
         {footer}
       </div>
     </aside>
+    </>
   );
 }
 

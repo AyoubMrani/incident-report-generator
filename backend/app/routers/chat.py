@@ -33,6 +33,9 @@ from app.auth.dependencies import (
 )
 from app.chatbot.security import redact
 from app.shared.llm.provider import LLMUnavailable
+from app.shared.logging import get_logger
+
+log = get_logger("app.routers.chat")
 
 # Auth declared at the router so it runs *before* request-body validation.
 # Without it an unauthenticated POST with a malformed body answered 422, which
@@ -190,6 +193,23 @@ def _store(request: Request):
     return request.app.state.chat_store
 
 
+def _feedback_scores(store) -> dict[str, int]:
+    """Net thumbs per report, for feedback-aware source selection.
+
+    Tolerant by design: this is a ranking nicety, so a store that predates the
+    method (or a transient read failure) degrades to "no signal" rather than
+    failing the user's question.
+    """
+    getter = getattr(store, "report_feedback_scores", None)
+    if getter is None:
+        return {}
+    try:
+        return getter()
+    except Exception:  # noqa: BLE001 — never fail a chat over a ranking hint
+        log.warning("could not load report feedback scores", exc_info=True)
+        return {}
+
+
 def _title_from_query(query: str) -> str:
     q = query.strip().replace("\n", " ")
     return (q[:60] + "…") if len(q) > 60 else (q or "New conversation")
@@ -260,7 +280,8 @@ def chat(
     # fabricated low-confidence answer (the "fast but wrong" failure mode).
     try:
         parsed = service.answer(body.query, body.image_b64, history=history,
-                                corrections=corrections)
+                                corrections=corrections,
+                                feedback_scores=_feedback_scores(store))
     except LLMUnavailable as exc:
         raise HTTPException(
             status_code=503,
@@ -297,6 +318,7 @@ def chat_stream(
 
     conversation_id, history = _open_turn(body, client_id, store)
     corrections = store.relevant_corrections(body.query)
+    feedback_scores = _feedback_scores(store)
 
     def event_stream():
         # Tell the client its conversation id up front (needed for a new chat).
@@ -304,7 +326,8 @@ def chat_stream(
 
         try:
             for ev in service.answer_stream(body.query, body.image_b64, history=history,
-                                            corrections=corrections):
+                                            corrections=corrections,
+                                            feedback_scores=feedback_scores):
                 if ev["type"] == "done":
                     answer = _to_answer(ev["answer"])
                     # Persist the completed assistant turn, then emit it.
@@ -382,6 +405,38 @@ def add_correction(
     return {"success": True, "id": saved["id"]}
 
 
+@router.get("/api/corrections")
+def list_corrections(
+    request: Request,
+    limit: int = Query(default=200, ge=1, le=500),
+    user: AuthContext = Depends(require_admin),
+) -> dict:
+    """Review stored corrections. Admin-only, for the same reason the summary
+    is: corrections are global (any user's correction steers every user's
+    answers), so reading them exposes other people's activity."""
+    store = _store(request)
+    getter = getattr(store, "list_corrections", None)
+    if getter is None:
+        raise HTTPException(status_code=501, detail="This store cannot list corrections.")
+    return {"corrections": getter(limit)}
+
+
+@router.delete("/api/corrections/{correction_id}")
+def delete_correction(
+    correction_id: str,
+    request: Request,
+    user: AuthContext = Depends(require_admin),
+) -> dict:
+    """Retract a correction so it stops being injected into future prompts."""
+    store = _store(request)
+    deleter = getattr(store, "delete_correction", None)
+    if deleter is None:
+        raise HTTPException(status_code=501, detail="This store cannot delete corrections.")
+    if not deleter(correction_id):
+        raise HTTPException(status_code=404, detail="Correction not found")
+    return {"success": True}
+
+
 @router.get("/api/feedback/summary")
 def feedback_summary(
     request: Request,
@@ -441,6 +496,46 @@ def message_html(
             break
 
     return HTMLResponse(render_answer_html(answer, report))
+
+
+class FollowupRequest(BaseModel):
+    # The frontend already holds the question text in memory (it rendered it),
+    # so it is supplied here rather than re-derived server-side by scanning the
+    # conversation for "the previous user message" — that search is ambiguous
+    # in a multi-turn thread and costs a round trip this endpoint doesn't need.
+    # It is prompt input only, never trusted as identity: message_id is what
+    # proves the caller owns this answer.
+    question: str = ""
+
+
+@router.post("/api/messages/{message_id}/followups")
+def message_followups(
+    message_id: str,
+    body: FollowupRequest,
+    request: Request,
+    x_client_id: str | None = Header(default=None),
+) -> dict:
+    """Suggest 2-3 follow-up questions for a previously-answered message.
+
+    On demand, not automatic: generating these costs a real LLM call (see
+    chatbot/followups.py), so it runs only when a user asks for it rather than
+    after every turn. 503 mirrors /api/chat's contract when the chatbot isn't
+    up; empty results are a normal, silent outcome, not an error.
+    """
+    client_id = _client_id(x_client_id, request)
+    answer = _store(request).get_message_payload(client_id, message_id)
+    if answer is None:
+        raise HTTPException(status_code=404, detail="Message not found")
+
+    suggester = getattr(request.app.state, "followups", None)
+    if suggester is None:
+        raise HTTPException(
+            status_code=503,
+            detail=request.app.state.chatbot_error or "Chatbot is unavailable.",
+        )
+
+    questions = suggester.suggest(body.question, answer)
+    return {"questions": questions}
 
 
 # ── chat-to-report ────────────────────────────────────────────────────────────

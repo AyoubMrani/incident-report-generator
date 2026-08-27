@@ -203,6 +203,29 @@ class ChatStore:
             corr = c.execute("SELECT COUNT(*) FROM corrections").fetchone()[0]
         return {"up": up, "down": down, "total_rated": up + down, "corrections": corr}
 
+    def report_feedback_scores(self) -> dict[str, int]:
+        """Net thumbs per cited incident id — see the Postgres repository for
+        the rationale. Parsed in Python because payload is a JSON text column
+        here; the row count is bounded by rated messages, which is small."""
+        scores: dict[str, int] = {}
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT payload, feedback FROM messages "
+                "WHERE feedback IS NOT NULL AND payload IS NOT NULL"
+            ).fetchall()
+        for row in rows:
+            try:
+                payload = json.loads(row["payload"]) or {}
+            except (ValueError, TypeError):
+                continue
+            for source in payload.get("retrieval") or []:
+                if not isinstance(source, dict):
+                    continue
+                inc = str(source.get("incident_id") or "").strip().lower()
+                if inc:
+                    scores[inc] = scores.get(inc, 0) + int(row["feedback"])
+        return scores
+
     # ── learned corrections (feedback that improves future answers) ────────────
 
     def add_correction(self, client_id: str, question: str, correction: str) -> dict:
@@ -215,6 +238,22 @@ class ChatStore:
                 (cid, client_id, question.strip(), correction.strip(), now),
             )
         return {"id": cid, "question": question, "correction": correction, "created_at": now}
+
+    def list_corrections(self, limit: int = 200) -> list[dict]:
+        """All stored corrections, newest first — see the Postgres repository."""
+        with self._conn() as c:
+            rows = c.execute(
+                "SELECT id, question, correction, created_at FROM corrections "
+                "ORDER BY created_at DESC LIMIT ?",
+                (limit,),
+            ).fetchall()
+        return [dict(r) for r in rows]
+
+    def delete_correction(self, correction_id: str) -> bool:
+        """Remove a correction. Returns False when it does not exist."""
+        with self._conn() as c:
+            cur = c.execute("DELETE FROM corrections WHERE id=?", (correction_id,))
+            return cur.rowcount > 0
 
     def relevant_corrections(self, query: str, limit: int = 3) -> list[dict]:
         """Return past corrections whose question overlaps this query's terms.

@@ -240,6 +240,7 @@ class ChatbotService:
         image_b64: str | None,
         history: list[dict] | None,
         corrections: list[dict] | None = None,
+        feedback_scores: dict[str, int] | None = None,
     ) -> dict:
         """Route intent, apply security, understand + retrieve, build the prompt.
 
@@ -249,6 +250,9 @@ class ChatbotService:
         `corrections` are learned human corrections (from thumbs-down feedback)
         relevant to this query; they are injected into the prompt so past fixes
         influence future answers.
+
+        `feedback_scores` is net thumbs per report (from thumbs-*up*), used to
+        break ties during source selection — the other half of the same loop.
         """
         intent = classify(query, has_image=bool(image_b64), has_history=bool(history))
         if intent is Intent.CLARIFY:
@@ -295,7 +299,9 @@ class ChatbotService:
         # Gate 3 — select only the reports that genuinely answer the question.
         # Topically-similar-but-wrong candidates are discarded here so they can
         # neither contribute resolution steps nor appear as cited sources.
-        results = select_sources(text_query or query, results)
+        results = select_sources(
+            text_query or query, results, feedback_scores=feedback_scores
+        )
 
         # Build the resolution prompt: prior-turn memory + untrusted-fenced input.
         problem = combine_retrieval_queries(text_query or query, image_query or None)
@@ -435,9 +441,10 @@ class ChatbotService:
         image_b64: str | None = None,
         history: list[dict] | None = None,
         corrections: list[dict] | None = None,
+        feedback_scores: dict[str, int] | None = None,
     ) -> dict:
         """Run the full pipeline and return a structured resolution dict."""
-        prep = self._prepare(query, image_b64, history, corrections)
+        prep = self._prepare(query, image_b64, history, corrections, feedback_scores)
         if "short_circuit" in prep:
             return prep["short_circuit"]
         cached = self._cache_get(prep["prompt"])
@@ -456,6 +463,7 @@ class ChatbotService:
         image_b64: str | None = None,
         history: list[dict] | None = None,
         corrections: list[dict] | None = None,
+        feedback_scores: dict[str, int] | None = None,
     ) -> Iterator[dict]:
         """Yield streaming events for SSE.
 
@@ -464,7 +472,7 @@ class ChatbotService:
           {"type": "token", "text": ...}                 (incremental LLM output)
           {"type": "done",  "answer": <structured dict>} (final parsed result)
         """
-        prep = self._prepare(query, image_b64, history, corrections)
+        prep = self._prepare(query, image_b64, history, corrections, feedback_scores)
         if "short_circuit" in prep:
             reply = prep["short_circuit"]
             yield {"type": "chat", "text": reply["raw"]}

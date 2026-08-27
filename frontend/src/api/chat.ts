@@ -288,6 +288,17 @@ export async function sendCorrection(question: string, correction: string): Prom
   }));
 }
 
+// On-demand follow-up question suggestions for an assistant answer. This is a
+// real LLM call on the backend (~5-15s locally), so it is only fired when the
+// user asks for it — never automatically after every answer, which would
+// double the wait on every single turn.
+export async function fetchFollowups(messageId: string, question: string): Promise<string[]> {
+  const res: { questions: string[] } = await json(await apiFetch(`/api/messages/${messageId}/followups`, {
+    method: 'POST', body: JSON.stringify({ question }),
+  }));
+  return res.questions;
+}
+
 // Turn a diagnosed conversation into a saved incident report.
 export interface GeneratedReport { success: boolean; jsonFilename: string; report: any }
 export async function generateReport(conversationId: string): Promise<GeneratedReport> {

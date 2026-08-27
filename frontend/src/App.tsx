@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
+import { Menu } from 'lucide-react';
 import ChatbotModule from './modules/chatbot/ChatbotModule';
 import ReportGeneratorModule from './modules/reports/ReportGeneratorModule';
 import { useAuth } from './auth/AuthContext';
@@ -39,6 +40,11 @@ export default function App() {
   const [collapsed, setCollapsed] = useState(
     () => localStorage.getItem(SIDEBAR_KEY) === '1',
   );
+  // Below `md` the sidebar overlays the app instead of sitting beside it, so
+  // it needs its own open/closed state — `collapsed` is the desktop width
+  // toggle and means nothing to a drawer. Not persisted: a drawer should open
+  // closed, unlike a width preference.
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
 
   // Conversation state lives here, not in the chat module: the sidebar renders
   // the list and the module renders the transcript, so the single owner has to
@@ -84,6 +90,7 @@ export default function App() {
   const selectConversation = useCallback((id: string | null) => {
     setActiveConversationId(id);
     setActiveId(id);
+    setMobileNavOpen(false);
   }, []);
 
   const openConversation = useCallback((id: string) => {
@@ -157,7 +164,9 @@ export default function App() {
           onToggleCollapsed={() => setCollapsed((v) => !v)}
           onOpenSearch={() => setSearchOpen(true)}
           tool={tool}
-          onSelectTool={setTool}
+          onSelectTool={(t) => { setTool(t); setMobileNavOpen(false); }}
+          mobileOpen={mobileNavOpen}
+          onCloseMobile={() => setMobileNavOpen(false)}
           conversations={conversations}
           activeId={activeId}
           onSelectConversation={selectConversation}
@@ -186,7 +195,18 @@ export default function App() {
         {/* Chat runs full-bleed — it manages its own scrolling so the composer
             stays pinned. The report module keeps the padded page layout it was
             written for. */}
-        <main className="min-w-0 flex-1 overflow-hidden">
+        <main className="relative min-w-0 flex-1 overflow-hidden">
+          {/* Below `md` the sidebar is off-canvas, so this is the only way back
+              to navigation. Sits above the module's own content, which manages
+              its own scrolling. */}
+          <button
+            onClick={() => setMobileNavOpen(true)}
+            aria-label="Open menu"
+            className="fixed left-3 top-3 z-20 rounded-lg border border-app bg-app-elevated p-2 text-app shadow-sm md:hidden"
+          >
+            <Menu className="w-[18px] h-[18px]" />
+          </button>
+
           {tool === 'chatbot' ? (
             <ChatbotModule
               activeId={activeId}
