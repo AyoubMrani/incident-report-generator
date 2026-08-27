@@ -46,6 +46,14 @@ CHAT_BACKEND = os.environ.get("CHAT_BACKEND", "postgres").strip().lower()
 # a checkout with nothing running still serves reports from reports/.
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "filesystem").strip().lower()
 
+# Seed an *empty* report bucket from REPORTS_DIR at startup, so a fresh clone
+# lists the same reports the chatbot indexes. On by default: an empty bucket on
+# a first run is the bug, not a state anyone chooses. Set SEED_REPORTS=0 where
+# the bucket is authoritative and must never be written from local files.
+SEED_REPORTS = os.environ.get("SEED_REPORTS", "1").strip().lower() not in (
+    "0", "false", "no",
+)
+
 # Which LLM provider the chatbot uses. Swappable per the architecture decision;
 # defaults to self-hosted Ollama for the local setup.
 CHATBOT_PROVIDER = os.environ.get("CHATBOT_PROVIDER", "ollama")
@@ -124,6 +132,26 @@ async def lifespan(app: FastAPI):
             app.state.report_service = StorageReportService(storage, app.state.db)
             log.info("report storage: %s", STORAGE_BACKEND,
                      extra={"event": "storage_ready", "backend": STORAGE_BACKEND})
+
+            # A fresh clone has the reports on disk (they are tracked in git)
+            # but an empty bucket, so the chatbot — which indexes REPORTS_DIR
+            # directly — answered from reports the UI could not list. Seed the
+            # bucket from the same directory so both surfaces start in
+            # agreement. Only fires when the bucket is empty, so a restart
+            # never resurrects reports deleted through the UI.
+            if SEED_REPORTS:
+                from app.reports.seed import seed_if_empty
+
+                try:
+                    seed_if_empty(
+                        REPORTS_DIR, app.state.report_service, storage, log
+                    )
+                except Exception as exc:  # noqa: BLE001 — degrade, don't crash
+                    log.error(
+                        "report seeding failed (%s); the bucket may be empty. "
+                        "Run scripts/migrate_reports_to_minio.py to populate it.",
+                        exc, exc_info=True, extra={"event": "seed_failed"},
+                    )
         except Exception as exc:  # noqa: BLE001 — degrade, don't crash boot
             app.state.storage_backend = "filesystem-fallback"
             app.state.report_service = ReportService(REPORTS_DIR)
@@ -180,6 +208,7 @@ async def lifespan(app: FastAPI):
     # /api/chat returns 503 with the reason, so the reports module keeps working.
     app.state.chatbot = None
     app.state.chatbot_error = None
+    app.state.followups = None
     if DISABLE_CHATBOT:
         app.state.chatbot_error = "Chatbot disabled via DISABLE_CHATBOT=1."
         log.info("chatbot disabled via DISABLE_CHATBOT=1")
@@ -192,6 +221,12 @@ async def lifespan(app: FastAPI):
             provider = get_provider(CHATBOT_PROVIDER)
             app.state.chatbot = ChatbotService.build(REPORTS_DIR, provider)
             kb = app.state.chatbot.kb
+
+            # Same provider, same warm model — follow-up suggestion is a
+            # separate, much smaller prompt, not a separate model or process.
+            from app.chatbot.followups import FollowupSuggester
+
+            app.state.followups = FollowupSuggester(provider)
             log.info(
                 "knowledge base indexed: %d files, %d chunks in %.1fs",
                 kb.n_files, len(kb.documents), time.perf_counter() - started,
@@ -273,12 +308,24 @@ def health() -> dict:
     startup state would keep saying "ok" through the outage.
     """
     db = getattr(app.state, "db", None)
+
+    # Reported because "the chatbot answers but the UI lists nothing" is the
+    # one failure that looks healthy from every other field: the chatbot reads
+    # REPORTS_DIR while the listing reads storage, so only a count of what the
+    # *listing* can see distinguishes a seeded deployment from an empty one.
+    service = getattr(app.state, "report_service", None)
+    try:
+        reports_visible = len(service.list_reports()) if service is not None else None
+    except Exception:  # noqa: BLE001 — health must not fail on a degraded backend
+        reports_visible = None
+
     return {
         "status": "ok",
         "chatbot_ready": app.state.chatbot is not None,
         "chatbot_error": app.state.chatbot_error,
         "chat_backend": getattr(app.state, "chat_backend", "unknown"),
         "storage_backend": getattr(app.state, "storage_backend", "unknown"),
+        "reports_visible": reports_visible,
         "database_ready": db.ping() if db is not None else None,
         "auth_enabled": getattr(app.state, "oidc", None) is not None,
     }

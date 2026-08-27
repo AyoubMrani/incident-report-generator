@@ -39,62 +39,28 @@ from sqlalchemy import func, select  # noqa: E402
 
 from app.db.models import Report  # noqa: E402
 from app.db.session import Database  # noqa: E402
+from app.reports.seed import (  # noqa: E402
+    local_report_files as _local_files,
+    upload_reports,
+)
 from app.reports.storage_service import StorageReportService, object_key  # noqa: E402
 from app.shared.storage.base import ObjectNotFoundError  # noqa: E402
 from app.shared.storage.factory import get_storage  # noqa: E402
 
 DEFAULT_REPORTS = REPO_ROOT / "reports"
 
-CONTENT_TYPES = {".json": "application/json", ".md": "text/markdown"}
-
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _local_files(reports_dir: Path) -> list[Path]:
-    return sorted(
-        p
-        for p in reports_dir.iterdir()
-        if p.is_file() and p.suffix in (".json", ".md")
-    )
-
-
 def migrate(reports_dir: Path, storage, *, dry_run: bool) -> dict:
-    stats = {"uploaded": 0, "unchanged": 0, "failed": 0, "bytes": 0}
-
-    for path in _local_files(reports_dir):
-        key = object_key(path.name)
-        data = path.read_bytes()
-
-        if not dry_run:
-            # Skip identical content: on a versioned bucket a blind re-upload
-            # would create a new version of every report on every run, which
-            # makes the version history useless as an edit trail.
-            try:
-                if _sha(storage.get(key)) == _sha(data):
-                    stats["unchanged"] += 1
-                    continue
-            except ObjectNotFoundError:
-                pass
-            except Exception:
-                pass
-
-            try:
-                storage.put(
-                    key,
-                    data,
-                    content_type=CONTENT_TYPES.get(path.suffix, "application/octet-stream"),
-                    metadata={"filename": path.name},
-                )
-            except Exception as exc:  # noqa: BLE001 — report and continue
-                print(f"  FAILED {path.name}: {exc}", file=sys.stderr)
-                stats["failed"] += 1
-                continue
-
-        stats["uploaded"] += 1
-        stats["bytes"] += len(data)
-
+    """Upload the corpus. The work lives in app.reports.seed so that the
+    startup seeder and this script cannot drift apart; this wrapper only adds
+    the script's stderr reporting."""
+    stats = upload_reports(reports_dir, storage, dry_run=dry_run)
+    for err in stats["errors"]:
+        print(f"  FAILED {err}", file=sys.stderr)
     return stats
 
 

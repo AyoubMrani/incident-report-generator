@@ -133,6 +133,11 @@ services:
       - MINIO_ACCESS_KEY=${MINIO_ROOT_USER:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_ROOT_PASSWORD:-minioadmin}
       - REPORTS_BUCKET=${REPORTS_BUCKET:-ntt-reports}
+      # Seeds an *empty* bucket from REPORTS_DIR on boot, so a fresh clone
+      # lists the same reports the chatbot indexes. A populated bucket is
+      # left untouched, so a restart never resurrects a deleted report.
+      # Set to 0 where the bucket must never be written from local files.
+      - SEED_REPORTS=${SEED_REPORTS:-1}
 
       # AUTH_DISABLED=1 falls back to the X-Client-Id header. Refused at boot
       # when APP_ENV is production or staging.

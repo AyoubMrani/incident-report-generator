@@ -144,7 +144,13 @@ class ReportService:
         items: list[ReportListItem] = []
         for path in self.reports_dir.glob("*.json"):
             try:
-                data = json.loads(path.read_text(encoding="utf-8"))
+                # Normalized, not raw: most of the corpus is saved in the
+                # wrapped {editingFilename, markdown, report} shape, which has
+                # no top-level "metadata". Reading it raw raised KeyError and
+                # hit the `continue` below, so 60 of 69 reports were silently
+                # missing from the listing while get_content() — which does
+                # normalize — served them fine when opened directly.
+                data = _normalize_report(json.loads(path.read_text(encoding="utf-8")))
                 items.append(
                     ReportListItem(
                         filename=path.name,

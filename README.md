@@ -62,6 +62,14 @@ docker compose -f infra/docker-compose.yml up --build   # http://localhost:8000
 See [infra/README.md](infra/README.md) for the Ollama-in-a-container variant and
 config knobs.
 
+The reports in `reports/` are tracked in git, so a fresh clone has them. On the
+MinIO backend the bucket starts empty, so the backend **seeds it from
+`reports/` on first boot** — otherwise the chatbot (which indexes the directory
+directly) would answer from reports the UI could not list. Seeding only happens
+when the bucket is empty, so a restart never resurrects a report deleted through
+the UI. Disable it with `SEED_REPORTS=0`; to re-sync an already-populated bucket
+by hand, use `python scripts/migrate_reports_to_minio.py`.
+
 **Option B — no Docker, one server (prod-like).** FastAPI serves the built SPA:
 
 ```bash
