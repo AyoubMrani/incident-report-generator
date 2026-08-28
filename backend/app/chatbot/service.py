@@ -25,7 +25,11 @@ from pathlib import Path
 from app.shared.llm.provider import LLMProvider
 
 from .config import ANSWER_CACHE_SIZE, CONFIDENCE_THRESHOLD, TOP_K
-from .ingestion import KnowledgeBase, build_knowledge_base
+from .ingestion import (
+    KnowledgeBase,
+    build_knowledge_base,
+    build_knowledge_base_from_storage,
+)
 from .intent import Intent, canned_reply, classify, has_incident_signal
 from .llm import understand_screenshot
 from .prompts import (
@@ -211,6 +215,25 @@ class ChatbotService:
         svc.reports_dir = reports_dir
         return svc
 
+    @classmethod
+    def build_from_storage(
+        cls, storage, provider: LLMProvider, prefix: str = "reports"
+    ) -> "ChatbotService":
+        """Construct by indexing object storage — the same corpus the report
+        listing serves, so retrieval and the UI can no longer disagree about
+        what exists.
+
+        `refresh()` then re-reads storage, which is what makes a report saved
+        through the UI answerable without a restart: the save writes the blob,
+        and the re-index sees it. The directory-backed build could not, because
+        the blob never landed in the directory.
+        """
+        kb = build_knowledge_base_from_storage(storage, prefix)
+        svc = cls(kb, provider)
+        svc.storage = storage
+        svc.storage_prefix = prefix
+        return svc
+
     def refresh(self) -> bool:
         """Re-index the reports directory so newly saved reports are searchable.
 
@@ -220,11 +243,18 @@ class ChatbotService:
         new ones. The rebuilt KB is swapped in only on success — a failed
         re-index leaves the previous, working index in place.
         """
+        storage = getattr(self, "storage", None)
         reports_dir = getattr(self, "reports_dir", None)
-        if reports_dir is None:
+        if storage is None and reports_dir is None:
             return False
         try:
-            kb = build_knowledge_base(reports_dir)
+            kb = (
+                build_knowledge_base_from_storage(
+                    storage, getattr(self, "storage_prefix", "reports")
+                )
+                if storage is not None
+                else build_knowledge_base(reports_dir)
+            )
         except Exception:  # noqa: BLE001 — never break a save because of indexing
             return False
         self.kb = kb

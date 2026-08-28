@@ -62,13 +62,24 @@ docker compose -f infra/docker-compose.yml up --build   # http://localhost:8000
 See [infra/README.md](infra/README.md) for the Ollama-in-a-container variant and
 config knobs.
 
-The reports in `reports/` are tracked in git, so a fresh clone has them. On the
-MinIO backend the bucket starts empty, so the backend **seeds it from
-`reports/` on first boot** — otherwise the chatbot (which indexes the directory
-directly) would answer from reports the UI could not list. Seeding only happens
-when the bucket is empty, so a restart never resurrects a report deleted through
-the UI. Disable it with `SEED_REPORTS=0`; to re-sync an already-populated bucket
-by hand, use `python scripts/migrate_reports_to_minio.py`.
+**Where reports live.** On the MinIO backend, object storage is the single
+source of truth: the report listing, report downloads, and the chatbot's
+retrieval index all read the bucket. `reports/` is the *seed corpus* only —
+tracked in git so a fresh clone has something to start from, and read at
+startup to fill gaps in the bucket. Nothing reads it at request time.
+
+Seeding is per file: any corpus file whose key is missing is uploaded, so a
+bucket that already holds a user's own report still receives the corpus. Keys
+the catalog marks deleted — or that carry a `_deleted/` tombstone, which is how
+the no-database configuration records the same intent — are skipped, so a
+restart never resurrects a report removed through the UI. Disable seeding with
+`SEED_REPORTS=0`; to re-sync by hand, use
+`python scripts/migrate_reports_to_minio.py`.
+
+`GET /api/health` reports `reports_visible` and `chatbot_source` (`storage` or
+`directory`). They exist because the listing and the chatbot once read
+different sources — the UI showed an empty list while the chatbot answered from
+reports it alone could see, and every other health field looked fine.
 
 **Option B — no Docker, one server (prod-like).** FastAPI serves the built SPA:
 

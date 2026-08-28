@@ -9,6 +9,7 @@ resolution dict now. This module is pure — dict in, dict out, no I/O, no UI.
 
 import json
 import re
+from collections.abc import Callable
 from functools import lru_cache
 
 
@@ -88,16 +89,42 @@ def _normalize_action_type(value, artifact_language: str = "") -> str:
     return inferred or "MANUAL_PROCEDURE"
 
 
+# How a full document is fetched. Defaults to the filesystem; the app swaps in
+# a storage-backed reader at startup when reports live in object storage, so
+# resolution reads the same source retrieval indexed rather than a local
+# directory that may not hold the report at all.
+_document_reader: "Callable[[str], str] | None" = None
+
+
+def set_document_reader(reader: "Callable[[str], str] | None") -> None:
+    """Install the function that turns a chunk's `path` into raw text.
+
+    Called once during startup. Clearing the cache matters: documents already
+    read through the previous reader would otherwise survive the swap and mask
+    the new backend entirely.
+    """
+    global _document_reader
+    _document_reader = reader
+    _read_full_document.cache_clear()
+
+
 @lru_cache(maxsize=256)
 def _read_full_document(path: str) -> str:
-    """Re-extract a report's complete text from disk (cached).
+    """Re-extract a report's complete text (cached).
 
     Retrieval indexes fixed-size chunks, but answering faithfully needs the
-    whole procedure. Reading the source file again gives the full text without
+    whole procedure. Reading the source again gives the full text without
     inflating the index.
     """
     try:
-        from .ingestion import _read_json, _read_md
+        from .ingestion import _read_json, _read_json_text, _read_md
+
+        if _document_reader is not None:
+            raw = _document_reader(path)
+            if not raw:
+                return ""
+            return _read_json_text(raw) if path.endswith(".json") else raw
+
         if path.endswith(".json"):
             return _read_json(path)
         if path.endswith((".md", ".txt")):

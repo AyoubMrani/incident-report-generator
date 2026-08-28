@@ -122,6 +122,7 @@ async def lifespan(app: FastAPI):
     # Blobs in object storage with a Postgres catalog, or the original
     # filesystem service. Both expose the same methods to the router.
     app.state.storage_backend = STORAGE_BACKEND
+    app.state.report_storage = None
     if STORAGE_BACKEND in ("minio", "s3"):
         try:
             from app.reports.storage_service import StorageReportService
@@ -131,6 +132,7 @@ async def lifespan(app: FastAPI):
             if not storage.health():
                 raise RuntimeError(f"storage backend {STORAGE_BACKEND} unreachable")
             app.state.report_service = StorageReportService(storage, app.state.db)
+            app.state.report_storage = storage
             log.info("report storage: %s", STORAGE_BACKEND,
                      extra={"event": "storage_ready", "backend": STORAGE_BACKEND})
 
@@ -221,7 +223,33 @@ async def lifespan(app: FastAPI):
             from app.shared.llm.provider import get_provider
 
             provider = get_provider(CHATBOT_PROVIDER)
-            app.state.chatbot = ChatbotService.build(REPORTS_DIR, provider)
+
+            # Index the same corpus the report listing serves. When reports
+            # live in object storage the chatbot reads it directly, so a report
+            # saved through the UI is answerable after a refresh instead of
+            # waiting for someone to re-index a local directory that never
+            # received it. The directory remains the source only when the
+            # filesystem backend is in use.
+            report_storage = getattr(app.state, "report_storage", None)
+            if STORAGE_BACKEND in ("minio", "s3") and report_storage is not None:
+                app.state.chatbot = ChatbotService.build_from_storage(
+                    report_storage, provider
+                )
+                # Resolution re-reads whole documents by the `path` in each
+                # chunk, which is now an object key — teach it to fetch through
+                # storage, or every full-document read would silently return
+                # nothing and answers would fall back to bare chunks.
+                from app.chatbot.resolution import set_document_reader
+
+                def _read_object(key: str) -> str:
+                    try:
+                        return report_storage.get(key).decode("utf-8")
+                    except Exception:  # noqa: BLE001 — caller falls back
+                        return ""
+
+                set_document_reader(_read_object)
+            else:
+                app.state.chatbot = ChatbotService.build(REPORTS_DIR, provider)
             kb = app.state.chatbot.kb
 
             # Same provider, same warm model — follow-up suggestion is a
@@ -328,6 +356,15 @@ def health() -> dict:
         "chat_backend": getattr(app.state, "chat_backend", "unknown"),
         "storage_backend": getattr(app.state, "storage_backend", "unknown"),
         "reports_visible": reports_visible,
+        # Where retrieval reads from. Reported because the listing and the
+        # chatbot once read different sources: the UI showed an empty list
+        # while the chatbot answered from reports it alone could see, and every
+        # other health field looked fine throughout.
+        "chatbot_source": (
+            "storage"
+            if getattr(getattr(app.state, "chatbot", None), "storage", None) is not None
+            else ("directory" if getattr(app.state, "chatbot", None) else None)
+        ),
         "database_ready": db.ping() if db is not None else None,
         "auth_enabled": getattr(app.state, "oidc", None) is not None,
     }

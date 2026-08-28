@@ -164,14 +164,23 @@ def _render_block(block: dict) -> str:
 
 
 def _read_json(path: str) -> str:
-    """Extract clean incident text from a report JSON (schema-aware).
+    """Extract clean incident text from a report JSON file."""
+    with open(path, "r", encoding="utf-8") as f:
+        return _read_json_text(f.read())
 
-    Handles both on-disk shapes: flat {metadata, blocks} and the legacy wrapper
+
+def _read_json_text(raw: str) -> str:
+    """Extract clean incident text from report JSON *content* (schema-aware).
+
+    Takes text rather than a path so the same extraction serves a local file
+    and an object fetched from storage — the bytes are identical either way,
+    and the indexer must not depend on where they came from.
+
+    Handles both stored shapes: flat {metadata, blocks} and the legacy wrapper
     {report: {metadata, blocks}}. Emits title, key metadata, and the readable
     content of each block — no structural keys, no base64.
     """
-    with open(path, "r", encoding="utf-8") as f:
-        data = json.load(f)
+    data = json.loads(raw)
 
     # Unwrap the legacy {editingFilename, markdown, report:{...}} shape.
     report = data.get("report") if isinstance(data.get("report"), dict) else data
@@ -214,16 +223,21 @@ def _chunk(text: str, size: int = CHUNK_SIZE, overlap: int = CHUNK_OVERLAP) -> l
     return chunks
 
 
-def _get_report_title(path: str, content: str) -> str:
+def _get_report_title(path: str, content: str, raw: str | None = None) -> str:
     filename = os.path.splitext(os.path.basename(path))[0]
     if path.endswith(".json"):
-        # Read the file, not `content`: by this point content is the extracted
-        # prose from _read_json, so json.loads() on it always fails and every
-        # report would fall through to the bare "INC…" id below — losing the
-        # human title that source selection scores entity overlap against.
+        # Parse the *raw* document, not `content`: by this point content is the
+        # extracted prose from _read_json, so json.loads() on it always fails
+        # and every report would fall through to the bare "INC…" id below —
+        # losing the human title that source selection scores entity overlap
+        # against. `raw` lets a storage-backed caller pass bytes it already
+        # holds instead of forcing a re-read through the filesystem.
         try:
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
+            if raw is not None:
+                data = json.loads(raw)
+            else:
+                with open(path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
             report = data.get("report") if isinstance(data.get("report"), dict) else data
             metadata = (report or {}).get("metadata", {}) or {}
             title = metadata.get("title")
@@ -257,7 +271,7 @@ def _extract_incident_id_from_text(text: str | None) -> str | None:
     return match.group(0).upper() if match else None
 
 
-def _declared_incident_id(path: str) -> str | None:
+def _declared_incident_id(path: str, raw: str | None = None) -> str | None:
     """The id a report declares in its own metadata, if it is a report JSON.
 
     Preferred over scanning the text: a report may *reference* other incidents
@@ -268,8 +282,11 @@ def _declared_incident_id(path: str) -> str | None:
     if not path.lower().endswith(".json"):
         return None
     try:
-        with open(path, "r", encoding="utf-8") as f:
-            data = json.load(f)
+        if raw is not None:
+            data = json.loads(raw)
+        else:
+            with open(path, "r", encoding="utf-8") as f:
+                data = json.load(f)
     except Exception:  # noqa: BLE001 — fall back to the text scan
         return None
     report = data.get("report") if isinstance(data.get("report"), dict) else data
@@ -329,6 +346,141 @@ def _store_cached_embeddings(key: str, embeddings) -> None:
         pass
 
 
+def _index_entries(
+    entries: list[str],
+    read_text: "Callable[[str], str]",
+    root_label: str,
+    path_for: "Callable[[str], str]",
+) -> tuple[list[str], list[dict], list[str], int]:
+    """Turn a list of document names into chunks + metadata.
+
+    The single indexing rule, shared by the filesystem and storage builders, so
+    the two cannot drift into producing different chunks for the same corpus —
+    which would mean the answer quality depended on the storage backend.
+
+    `read_text` returns a document's raw text; `path_for` maps a name onto the
+    identifier stored in chunk metadata (a filesystem path, or an object key).
+    """
+    documents: list[str] = []
+    metadata: list[dict] = []
+    warnings: list[str] = []
+    n_files = 0
+
+    # The generator writes every report twice: the structured .json and a
+    # flattened .md rendering of the same incident. Indexing both stores each
+    # incident twice, so near-identical duplicates compete for the handful of
+    # source slots the answer gets — and the .md loses the schema (block types,
+    # screenshot markers, declared incident id) that makes the .json accurate.
+    # The .json is authoritative; skip a .md that merely mirrors one.
+    json_stems = {
+        os.path.splitext(name)[0]
+        for name in entries
+        if name.lower().endswith(".json")
+    }
+
+    for filename in sorted(entries):
+        ext = os.path.splitext(filename)[1].lower()
+        if ext not in (".docx", ".json", ".md", ".txt"):
+            continue
+        if ext == ".md" and os.path.splitext(filename)[0] in json_stems:
+            continue
+
+        path = path_for(filename)
+        source = f"{root_label}/{filename}"
+        try:
+            raw = read_text(filename)
+            content = _read_json_text(raw) if ext == ".json" else raw
+            title = _get_report_title(path, content, raw=raw if ext == ".json" else None)
+            # Priority: the report's own metadata, then the filename (reports are
+            # saved as "<INC id>_<title>.<ext>" pairs, so the .md twin of a JSON
+            # report still identifies itself correctly), and only then a text
+            # scan — which can pick up a *referenced* incident instead.
+            incident_id = (
+                _declared_incident_id(path, raw=raw if ext == ".json" else None)
+                or _extract_incident_id_from_text(filename)
+                or _extract_incident_id_from_text(content)
+            )
+            for chunk_id, chunk in enumerate(_chunk(content)):
+                documents.append(chunk)
+                metadata.append(
+                    {
+                        "source": source,
+                        "path": path,
+                        "title": title,
+                        "chunk_id": chunk_id,
+                        "incident_id": incident_id,
+                    }
+                )
+            n_files += 1
+        except Exception as exc:  # noqa: BLE001 — keep indexing other files
+            warnings.append(f"Could not index {source}: {exc}")
+
+    return documents, metadata, warnings, n_files
+
+
+def build_knowledge_base_from_storage(storage, prefix: str = "reports") -> KnowledgeBase:
+    """Index every report in object storage into a KnowledgeBase.
+
+    The storage-backed twin of `build_knowledge_base`. Both call
+    `_index_entries`, so a corpus produces the same chunks, titles and incident
+    ids either way — the backend decides where bytes live, never what the
+    retriever sees.
+
+    Why this exists: the report listing reads object storage while the chatbot
+    read the local directory, so the two could disagree about what the corpus
+    even was. A report saved through the UI landed in the bucket and stayed
+    invisible to retrieval until someone re-indexed a directory that did not
+    contain it.
+
+    `source` keeps the `<root>/<filename>` shape the filesystem builder
+    produces, because stored citations and the answer HTML already reference
+    that form; `path` carries the object key, which is what resolution needs to
+    re-read a full document.
+    """
+    from sentence_transformers import SentenceTransformer
+
+    objects = [o for o in storage.list(prefix) if not o.key.startswith("_deleted/")]
+    by_name = {o.key.rsplit("/", 1)[-1]: o.key for o in objects}
+
+    if not by_name:
+        raise ValueError(
+            f"Knowledge base is empty — object storage holds no reports under "
+            f"{prefix!r}."
+        )
+
+    def _read(name: str) -> str:
+        return storage.get(by_name[name]).decode("utf-8")
+
+    documents, metadata, warnings, n_files = _index_entries(
+        list(by_name),
+        read_text=_read,
+        root_label=prefix,
+        path_for=lambda name: by_name[name],
+    )
+
+    if not documents:
+        raise ValueError(
+            "Knowledge base is empty — object storage holds no indexable "
+            f"reports under {prefix!r}."
+        )
+
+    model = SentenceTransformer(EMBED_MODEL_NAME)
+    cache_key = _embedding_cache_key(documents)
+    embeddings = _load_cached_embeddings(cache_key, len(documents))
+    if embeddings is None:
+        embeddings = model.encode(documents, show_progress_bar=False)
+        _store_cached_embeddings(cache_key, embeddings)
+
+    return KnowledgeBase(
+        documents=documents,
+        metadata=metadata,
+        embeddings=embeddings,
+        embed_model=model,
+        n_files=n_files,
+        warnings=warnings,
+    )
+
+
 def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
     """Index every supported file under ``reports_dir`` into a KnowledgeBase.
 
@@ -352,59 +504,19 @@ def build_knowledge_base(reports_dir: str | Path) -> KnowledgeBase:
             "Create it and add incident documents."
         )
 
-    documents: list[str] = []
-    metadata: list[dict] = []
-    warnings: list[str] = []
-    n_files = 0
-
     root_label = os.path.basename(os.path.normpath(reports_dir))
     entries = sorted(os.listdir(reports_dir))
-    # The generator writes every report twice: the structured .json and a
-    # flattened .md rendering of the same incident. Indexing both stores each
-    # incident twice, so near-identical duplicates compete for the handful of
-    # source slots the answer gets — and the .md loses the schema (block types,
-    # screenshot markers, declared incident id) that makes the .json accurate.
-    # The .json is authoritative; skip a .md that merely mirrors one.
-    json_stems = {
-        os.path.splitext(name)[0]
-        for name in entries
-        if name.lower().endswith(".json")
-    }
 
-    for filename in entries:
-        ext = os.path.splitext(filename)[1].lower()
-        if ext not in loaders:
-            continue
-        if ext == ".md" and os.path.splitext(filename)[0] in json_stems:
-            continue
-        path = os.path.join(reports_dir, filename)
-        source = f"{root_label}/{filename}"
-        try:
-            content = loaders[ext](path)
-            title = _get_report_title(path, content)
-            # Priority: the report's own metadata, then the filename (reports are
-            # saved as "<INC id>_<title>.<ext>" pairs, so the .md twin of a JSON
-            # report still identifies itself correctly), and only then a text
-            # scan — which can pick up a *referenced* incident instead.
-            incident_id = (
-                _declared_incident_id(path)
-                or _extract_incident_id_from_text(filename)
-                or _extract_incident_id_from_text(content)
-            )
-            for chunk_id, chunk in enumerate(_chunk(content)):
-                documents.append(chunk)
-                metadata.append(
-                    {
-                        "source": source,
-                        "path": path,
-                        "title": title,
-                        "chunk_id": chunk_id,
-                        "incident_id": incident_id,
-                    }
-                )
-            n_files += 1
-        except Exception as exc:  # noqa: BLE001 — keep indexing other files
-            warnings.append(f"Could not index {source}: {exc}")
+    documents, metadata, warnings, n_files = _index_entries(
+        entries,
+        read_text=lambda name: (
+            _read_docx(os.path.join(reports_dir, name))
+            if name.lower().endswith(".docx")
+            else open(os.path.join(reports_dir, name), "r", encoding="utf-8").read()
+        ),
+        root_label=root_label,
+        path_for=lambda name: os.path.join(reports_dir, name),
+    )
 
     if not documents:
         raise ValueError(
