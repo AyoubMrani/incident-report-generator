@@ -169,6 +169,56 @@ def _tombstoned_keys(storage: Storage, files: list[Path]) -> set[str]:
     return found
 
 
+def _catalog_row_count(service) -> int:
+    """How many rows the report catalog holds, or -1 when it cannot be read.
+
+    -1 rather than 0 for "unknown": an unreadable catalog must not look empty,
+    or a transient database error would trigger a rebuild.
+    """
+    db = getattr(service, "db", None)
+    if db is None:
+        return -1
+    try:
+        from sqlalchemy import func, select
+
+        from app.db.models import Report
+
+        with db.session() as s:
+            return int(s.execute(select(func.count()).select_from(Report)).scalar_one())
+    except Exception:
+        return -1
+
+
+def _reconcile_if_catalog_empty(service, log) -> int:
+    """Rebuild catalog rows when the bucket has reports but the catalog does not.
+
+    Returns the number indexed, or 0 when nothing needed doing. Only acts on an
+    *empty* catalog: a partially-populated one may be missing rows on purpose
+    (soft-deleted reports), and re-indexing those would undo the deletion.
+    """
+    if _catalog_row_count(service) != 0:
+        return 0
+
+    try:
+        result = service.reconcile()
+    except Exception as exc:  # noqa: BLE001 — listing falls back to a bucket scan
+        log.error(
+            "report catalog is empty and could not be rebuilt (%s); the listing "
+            "falls back to scanning storage", exc,
+            exc_info=True, extra={"event": "seed_reconcile_failed"},
+        )
+        return 0
+
+    indexed = result.get("indexed", 0)
+    if indexed:
+        log.info(
+            "report catalog was empty; rebuilt %d row(s) from the bucket",
+            indexed,
+            extra={"event": "catalog_rebuilt", "indexed": indexed},
+        )
+    return indexed
+
+
 def seed_reports(reports_dir: Path, service, storage: Storage, log) -> dict:
     """Upload any corpus file the bucket is missing, then rebuild the catalog.
 
@@ -211,7 +261,20 @@ def seed_reports(reports_dir: Path, service, storage: Storage, log) -> dict:
             continue
 
     if not missing:
-        return {"seeded": False, "reason": "already_seeded", "skipped_deleted": len(deleted)}
+        # Blobs are all present, but the catalog is what the listing reads, and
+        # the two can be out of step: a database reset (or a restore from a
+        # backup older than the bucket) leaves reports in storage with no rows
+        # describing them, and the UI then shows nothing while the chatbot —
+        # which reads the bucket — answers from everything. Rebuild the catalog
+        # in that case rather than returning early, since uploading nothing is
+        # not the same as having nothing to do.
+        indexed = _reconcile_if_catalog_empty(service, log)
+        return {
+            "seeded": False,
+            "reason": "already_seeded",
+            "skipped_deleted": len(deleted),
+            "indexed": indexed,
+        }
 
     log.info(
         "seeding %d missing report file(s) from %s (%d already present, "

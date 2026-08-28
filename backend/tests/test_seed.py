@@ -343,3 +343,56 @@ def test_a_deleted_report_is_not_resurrected(reports_dir, service, storage, log,
 
     assert result["seeded"] is False
     assert not storage.exists(gone)
+
+
+# ── catalog out of step with the bucket ───────────────────────────────────────
+
+
+def test_empty_catalog_is_rebuilt_when_blobs_are_already_present(
+    reports_dir, service, storage, log, monkeypatch
+):
+    """The listing reads the catalog, so blobs alone are not enough.
+
+    A database reset (or a restore older than the bucket) leaves reports in
+    storage with no rows describing them. Seeding uploads nothing — every key
+    is present — and the early return used to skip reconcile(), so the UI
+    showed an empty list while the chatbot answered from the whole corpus.
+    """
+    seed_reports(reports_dir, service, storage, log)
+
+    rebuilt = {"called": False}
+
+    def fake_reconcile():
+        rebuilt["called"] = True
+        return {"indexed": 2, "skipped": 0}
+
+    monkeypatch.setattr(service, "reconcile", fake_reconcile)
+    monkeypatch.setattr(
+        "app.reports.seed._catalog_row_count", lambda service: 0
+    )
+
+    result = seed_reports(reports_dir, service, storage, log)
+
+    assert result["seeded"] is False
+    assert rebuilt["called"] is True
+    assert result["indexed"] == 2
+
+
+def test_a_populated_catalog_is_left_alone(
+    reports_dir, service, storage, log, monkeypatch
+):
+    """Re-indexing a partially-populated catalog would revive soft-deleted rows."""
+    seed_reports(reports_dir, service, storage, log)
+
+    called = {"reconcile": False}
+    monkeypatch.setattr(
+        service, "reconcile",
+        lambda: called.__setitem__("reconcile", True) or {"indexed": 0, "skipped": 0},
+    )
+    monkeypatch.setattr(
+        "app.reports.seed._catalog_row_count", lambda service: 5
+    )
+
+    seed_reports(reports_dir, service, storage, log)
+
+    assert called["reconcile"] is False
