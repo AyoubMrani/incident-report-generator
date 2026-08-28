@@ -60,6 +60,15 @@ def _now_ms() -> int:
     return int(time.time() * 1000)
 
 
+def _tombstone_key(filename: str) -> str:
+    """Marker recording that `filename` was deliberately deleted.
+
+    Kept under a sibling prefix rather than beside the object so a listing of
+    `reports/` never yields tombstones as if they were reports.
+    """
+    return f"_deleted/{object_key(filename)}"
+
+
 def object_key(filename: str) -> str:
     """Map a report filename onto its object key.
 
@@ -254,6 +263,23 @@ class StorageReportService:
         self._guard_filename(filename)
         self.storage.delete(object_key(filename))
         self.storage.delete(object_key(filename.replace(".json", ".md")))
+
+        # Tombstone, so the deletion survives a restart even with no catalog.
+        #
+        # Startup seeding uploads any corpus file whose key is absent, and an
+        # absent key is indistinguishable from one never seeded. The catalog
+        # records the intent when Postgres is present, but the filesystem/
+        # no-database configuration has nowhere else to put it — so the marker
+        # goes in the bucket, next to the data it describes.
+        try:
+            self.storage.put(
+                _tombstone_key(filename),
+                b"",
+                content_type="application/octet-stream",
+                metadata={"deleted_at": str(time.time())},
+            )
+        except Exception:  # noqa: BLE001 — the delete itself already succeeded
+            pass
 
         # Soft delete: the partial unique index frees the incident_id for reuse
         # while the row (and the versioned blob) remain for audit.

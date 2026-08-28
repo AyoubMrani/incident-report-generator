@@ -25,7 +25,7 @@ import pytest
 from app.reports.seed import (
     bucket_is_empty,
     local_report_files,
-    seed_if_empty,
+    seed_reports,
     upload_reports,
 )
 from app.reports.storage_service import StorageReportService, object_key
@@ -100,7 +100,7 @@ def test_empty_bucket_is_reported_empty(storage):
 
 
 def test_seeding_populates_an_empty_bucket(reports_dir, service, storage, log):
-    result = seed_if_empty(reports_dir, service, storage, log)
+    result = seed_reports(reports_dir, service, storage, log)
 
     assert result["seeded"] is True
     assert result["uploaded"] == 3       # 2 json + 1 md
@@ -112,14 +112,14 @@ def test_seeded_reports_are_listable(reports_dir, service, storage, log):
     """The actual user-visible symptom: the UI listing was empty."""
     assert service.list_reports() == []
 
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
 
     listed = {r.metadata.incident_id for r in service.list_reports()}
     assert listed == {"INC0001", "INC0002"}
 
 
 def test_seeded_content_is_readable(reports_dir, service, storage, log):
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
 
     content = service.get_content("INC0001_First incident.json")
     assert content["metadata"]["incident_id"] == "INC0001"
@@ -128,7 +128,7 @@ def test_seeded_content_is_readable(reports_dir, service, storage, log):
 
 def test_markdown_siblings_are_seeded_too(reports_dir, service, storage, log):
     """Seeding only the JSON would silently break markdown downloads."""
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
 
     assert storage.get(object_key("INC0001_First incident.md")) == b"# First incident"
 
@@ -137,10 +137,11 @@ def test_markdown_siblings_are_seeded_too(reports_dir, service, storage, log):
 
 
 def test_second_run_is_a_noop(reports_dir, service, storage, log):
-    seed_if_empty(reports_dir, service, storage, log)
-    again = seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
+    again = seed_reports(reports_dir, service, storage, log)
 
-    assert again == {"seeded": False, "reason": "bucket_not_empty"}
+    assert again["seeded"] is False
+    assert again["reason"] == "already_seeded"
 
 
 def test_restart_does_not_resurrect_a_deleted_report(
@@ -152,10 +153,10 @@ def test_restart_does_not_resurrect_a_deleted_report(
     directory, so a seeder that ran unconditionally would bring it back on the
     next restart — silently undoing a deliberate deletion.
     """
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
     service.delete(filename="INC0001_First incident.json")
 
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
 
     remaining = {r.metadata.incident_id for r in service.list_reports()}
     assert remaining == {"INC0002"}
@@ -165,7 +166,7 @@ def test_restart_does_not_resurrect_a_deleted_report(
 
 def test_edits_in_the_bucket_survive_a_restart(reports_dir, service, storage, log):
     """The bucket is the source of truth once populated, not the directory."""
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
     edited = _report("INC0001", "Edited in the app")
     storage.put(
         object_key("INC0001_First incident.json"),
@@ -173,7 +174,7 @@ def test_edits_in_the_bucket_survive_a_restart(reports_dir, service, storage, lo
         content_type="application/json",
     )
 
-    seed_if_empty(reports_dir, service, storage, log)
+    seed_reports(reports_dir, service, storage, log)
 
     content = service.get_content("INC0001_First incident.json")
     assert content["metadata"]["title"] == "Edited in the app"
@@ -183,7 +184,7 @@ def test_edits_in_the_bucket_survive_a_restart(reports_dir, service, storage, lo
 
 
 def test_missing_reports_dir_is_not_fatal(tmp_path, service, storage, log):
-    result = seed_if_empty(tmp_path / "nope", service, storage, log)
+    result = seed_reports(tmp_path / "nope", service, storage, log)
 
     assert result == {"seeded": False, "reason": "no_reports_dir"}
 
@@ -192,7 +193,7 @@ def test_empty_reports_dir_is_not_fatal(tmp_path, service, storage, log):
     empty = tmp_path / "empty"
     empty.mkdir()
 
-    result = seed_if_empty(empty, service, storage, log)
+    result = seed_reports(empty, service, storage, log)
 
     assert result == {"seeded": False, "reason": "no_local_files"}
 
@@ -205,9 +206,12 @@ def test_unreadable_storage_is_treated_as_populated(reports_dir, service, log):
         def list(self, prefix=""):
             raise RuntimeError("storage down")
 
+        def exists(self, key):
+            raise RuntimeError("storage down")
+
     broken = BrokenStorage()
     assert bucket_is_empty(broken) is False
-    assert seed_if_empty(reports_dir, service, broken, log)["seeded"] is False
+    assert seed_reports(reports_dir, service, broken, log)["seeded"] is False
 
 
 def test_upload_failure_is_counted_not_raised(reports_dir, storage, monkeypatch):
@@ -269,3 +273,73 @@ def test_filesystem_lists_wrapped_reports(reports_dir):
     listed = {r.metadata.incident_id for r in ReportService(reports_dir).list_reports()}
 
     assert listed == {"INC0001", "INC0002"}
+
+
+# ── the partially-populated bucket (the teammate's case) ──────────────────────
+
+
+def test_corpus_is_seeded_into_a_bucket_holding_a_user_report(
+    reports_dir, service, storage, log
+):
+    """The regression this rewrite exists for.
+
+    Someone who ran the app before startup seeding existed, and saved one
+    report, had a non-empty bucket. The old empty-bucket gate then skipped
+    seeding on every subsequent boot, so they saw their own report and none of
+    the corpus — while the chatbot, which reads the directory, answered from
+    all of it.
+    """
+    storage.put(
+        object_key("incident_mine_1.json"),
+        b'{"metadata": {"incident_id": "MINE"}, "blocks": []}',
+        content_type="application/json",
+    )
+    assert bucket_is_empty(storage) is False
+
+    result = seed_reports(reports_dir, service, storage, log)
+
+    assert result["seeded"] is True
+    listed = {r.metadata.incident_id for r in service.list_reports()}
+    assert {"INC0001", "INC0002"} <= listed
+
+
+def test_seeding_does_not_overwrite_a_user_report(reports_dir, service, storage, log):
+    """A report the user created is not in reports_dir, so it must survive."""
+    mine = object_key("incident_mine_1.json")
+    storage.put(mine, b'{"metadata": {"incident_id": "MINE"}, "blocks": []}',
+                content_type="application/json")
+
+    seed_reports(reports_dir, service, storage, log)
+
+    assert storage.get(mine) == b'{"metadata": {"incident_id": "MINE"}, "blocks": []}'
+
+
+def test_only_missing_files_are_uploaded(reports_dir, service, storage, log):
+    """A boot with most of the corpus present writes only the gap."""
+    seed_reports(reports_dir, service, storage, log)
+    storage.delete(object_key("INC0002_Second incident.json"))
+
+    result = seed_reports(reports_dir, service, storage, log)
+
+    assert result["seeded"] is True
+    assert result["uploaded"] == 1
+
+
+def test_a_deleted_report_is_not_resurrected(reports_dir, service, storage, log, monkeypatch):
+    """Per-file seeding must not undo a deletion.
+
+    This is the property the old empty-bucket gate protected by accident. It is
+    now explicit: the catalog records the deleted key, and the seeder skips it.
+    """
+    seed_reports(reports_dir, service, storage, log)
+    gone = object_key("INC0002_Second incident.json")
+    storage.delete(gone)
+
+    monkeypatch.setattr(
+        "app.reports.seed._soft_deleted_keys", lambda service: {gone}
+    )
+
+    result = seed_reports(reports_dir, service, storage, log)
+
+    assert result["seeded"] is False
+    assert not storage.exists(gone)

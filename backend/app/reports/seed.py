@@ -1,5 +1,5 @@
 """
-reports/seed.py — put the tracked reports/ corpus into an empty bucket.
+reports/seed.py — put the tracked reports/ corpus into the bucket.
 
 The reports in `reports/` are tracked in git, so every clone has them on disk.
 The chatbot indexes that directory directly, but the report *listing* reads
@@ -8,11 +8,13 @@ from all 91 reports while the UI showed an empty list, because nothing ever
 copied the files into MinIO. `scripts/migrate_reports_to_minio.py` did it, but
 only when someone remembered to run it.
 
-Seeding on startup closes that gap. The rule is deliberately narrow:
+Seeding on startup closes that gap. The rule is per *file*:
 
-* **Only when the bucket is empty.** A populated bucket is the source of truth
-  and is left alone — reports deleted through the UI must not reappear on the
-  next restart, which is exactly what re-seeding a live bucket would do.
+* **Upload what is missing.** Any corpus file whose key is absent is uploaded,
+  so a bucket holding only a user's own report — the state anyone who ran the
+  app before this code existed is in — still gets the corpus. Keys the catalog
+  marks deleted are skipped, so a report someone removed through the UI stays
+  removed across restarts.
 * **Blobs only.** The catalog is rebuilt by `StorageReportService.reconcile()`
   afterwards, from what actually landed in the bucket, so a partial upload
   produces a catalog matching reality rather than rows pointing at absent blobs.
@@ -30,7 +32,7 @@ from pathlib import Path
 
 from app.shared.storage.base import ObjectNotFoundError, Storage
 
-from .storage_service import KEY_PREFIX, object_key
+from .storage_service import KEY_PREFIX, _tombstone_key, object_key
 
 # The only extensions the corpus contains. The .md sibling of each .json is
 # carried across too: the viewer offers both, and seeding only the JSON would
@@ -63,17 +65,23 @@ def upload_reports(
     *,
     dry_run: bool = False,
     skip_identical: bool = True,
+    only: list[Path] | None = None,
 ) -> dict:
-    """Upload every report file into `storage`. Idempotent.
+    """Upload report files into `storage`. Idempotent.
 
     Keys are derived from filenames, so re-uploading the same file overwrites
     the same key. `skip_identical` compares content first, which keeps a re-run
     from making a new version of every report on a versioned bucket and
     rendering the version history useless as an edit trail.
+
+    `only` restricts the upload to a caller-chosen subset — the startup seeder
+    passes the files it found missing, so a boot with 68 of 69 present writes
+    one object instead of re-hashing the whole corpus. Defaults to everything,
+    which is what the migration script wants.
     """
     stats: dict = {"uploaded": 0, "unchanged": 0, "failed": 0, "bytes": 0, "errors": []}
 
-    for path in local_report_files(reports_dir):
+    for path in (local_report_files(reports_dir) if only is None else only):
         key = object_key(path.name)
         data = path.read_bytes()
 
@@ -113,11 +121,68 @@ def upload_reports(
     return stats
 
 
-def seed_if_empty(reports_dir: Path, service, storage: Storage, log) -> dict:
-    """Seed an empty bucket from `reports_dir`, then rebuild the catalog.
+def _soft_deleted_keys(service) -> set[str]:
+    """Object keys a user deleted through the UI.
 
-    Returns a stats dict; `{"seeded": False}` when nothing was done, which is
-    the normal case on every restart after the first.
+    Seeding must not resurrect them. The catalog is the only place that
+    records the intent — the blob is gone from the bucket, so absence alone is
+    indistinguishable from "never seeded". Without this check, per-file
+    seeding would restore a deleted report on the next restart, which is worse
+    than the bug it fixes.
+
+    A catalog that cannot be read yields an empty set: the caller then seeds
+    normally, which is the same behaviour as running with no Postgres at all.
+    """
+    db = getattr(service, "db", None)
+    if db is None:
+        return set()
+    try:
+        from sqlalchemy import select
+
+        from app.db.models import Report
+
+        with db.session() as s:
+            rows = s.execute(
+                select(Report.object_key).where(Report.deleted_at.is_not(None))
+            ).scalars().all()
+        return set(rows)
+    except Exception:
+        return set()
+
+
+def _tombstoned_keys(storage: Storage, files: list[Path]) -> set[str]:
+    """Keys with a deletion marker in the bucket.
+
+    The catalog covers the Postgres configuration; this covers every other one,
+    including the filesystem backend the tests and a bare `uvicorn` run use.
+    Probed per candidate rather than listed, so the check costs nothing on a
+    bucket that has never had a deletion.
+    """
+    found: set[str] = set()
+    for path in files:
+        key = object_key(path.name)
+        try:
+            if storage.exists(_tombstone_key(path.name)):
+                found.add(key)
+        except Exception:
+            continue
+    return found
+
+
+def seed_reports(reports_dir: Path, service, storage: Storage, log) -> dict:
+    """Upload any corpus file the bucket is missing, then rebuild the catalog.
+
+    Per *file*, not per bucket. An earlier version seeded only when the bucket
+    was completely empty, which meant anyone who ran the app once before
+    pulling this code — creating a single report, so the bucket was no longer
+    empty — never got the corpus at all, and saw an empty report list next to
+    a chatbot answering from all 69 reports.
+
+    The empty-bucket gate existed to stop restarts resurrecting deleted
+    reports. That property is kept, more precisely: keys the catalog marks
+    deleted are skipped explicitly, so only genuinely-absent files are
+    uploaded. Reports a user created are never touched — they are not in
+    `reports_dir`.
     """
     if not reports_dir.is_dir():
         log.info(
@@ -126,20 +191,37 @@ def seed_if_empty(reports_dir: Path, service, storage: Storage, log) -> dict:
         )
         return {"seeded": False, "reason": "no_reports_dir"}
 
-    if not bucket_is_empty(storage):
-        return {"seeded": False, "reason": "bucket_not_empty"}
-
     files = local_report_files(reports_dir)
     if not files:
         return {"seeded": False, "reason": "no_local_files"}
 
+    deleted = _soft_deleted_keys(service) | _tombstoned_keys(storage, files)
+
+    missing: list[Path] = []
+    for path in files:
+        key = object_key(path.name)
+        if key in deleted:
+            continue
+        try:
+            if not storage.exists(key):
+                missing.append(path)
+        except Exception:
+            # Treat an unreadable probe as present: re-uploading on a flaky
+            # backend is the more damaging guess.
+            continue
+
+    if not missing:
+        return {"seeded": False, "reason": "already_seeded", "skipped_deleted": len(deleted)}
+
     log.info(
-        "report bucket is empty; seeding %d file(s) from %s",
-        len(files), reports_dir,
-        extra={"event": "seed_start", "files": len(files)},
+        "seeding %d missing report file(s) from %s (%d already present, "
+        "%d skipped as deleted)",
+        len(missing), reports_dir, len(files) - len(missing) - len(deleted),
+        len(deleted),
+        extra={"event": "seed_start", "files": len(missing)},
     )
 
-    stats = upload_reports(reports_dir, storage)
+    stats = upload_reports(reports_dir, storage, only=missing)
 
     # Catalog from the bucket, not from the local files: this indexes exactly
     # what was stored, so a partial upload yields a catalog that matches
@@ -169,4 +251,4 @@ def seed_if_empty(reports_dir: Path, service, storage: Storage, log) -> dict:
         },
     )
 
-    return {"seeded": True, "indexed": indexed, **stats}
+    return {"seeded": True, "indexed": indexed, "skipped_deleted": len(deleted), **stats}

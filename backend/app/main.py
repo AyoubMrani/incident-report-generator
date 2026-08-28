@@ -46,10 +46,11 @@ CHAT_BACKEND = os.environ.get("CHAT_BACKEND", "postgres").strip().lower()
 # a checkout with nothing running still serves reports from reports/.
 STORAGE_BACKEND = os.environ.get("STORAGE_BACKEND", "filesystem").strip().lower()
 
-# Seed an *empty* report bucket from REPORTS_DIR at startup, so a fresh clone
-# lists the same reports the chatbot indexes. On by default: an empty bucket on
-# a first run is the bug, not a state anyone chooses. Set SEED_REPORTS=0 where
-# the bucket is authoritative and must never be written from local files.
+# Upload any corpus file the report bucket is missing at startup, so a fresh
+# clone lists the same reports the chatbot indexes. On by default: a bucket
+# without the corpus on a first run is the bug, not a state anyone chooses. Set
+# SEED_REPORTS=0 where the bucket is authoritative and must never be written
+# from local files.
 SEED_REPORTS = os.environ.get("SEED_REPORTS", "1").strip().lower() not in (
     "0", "false", "no",
 )
@@ -134,16 +135,17 @@ async def lifespan(app: FastAPI):
                      extra={"event": "storage_ready", "backend": STORAGE_BACKEND})
 
             # A fresh clone has the reports on disk (they are tracked in git)
-            # but an empty bucket, so the chatbot — which indexes REPORTS_DIR
+            # but not in the bucket, so the chatbot — which indexes REPORTS_DIR
             # directly — answered from reports the UI could not list. Seed the
             # bucket from the same directory so both surfaces start in
-            # agreement. Only fires when the bucket is empty, so a restart
-            # never resurrects reports deleted through the UI.
+            # agreement. Uploads per file, so a bucket already holding a user's
+            # own report still receives the corpus; keys the catalog marks
+            # deleted are skipped, so a restart never resurrects them.
             if SEED_REPORTS:
-                from app.reports.seed import seed_if_empty
+                from app.reports.seed import seed_reports
 
                 try:
-                    seed_if_empty(
+                    seed_reports(
                         REPORTS_DIR, app.state.report_service, storage, log
                     )
                 except Exception as exc:  # noqa: BLE001 — degrade, don't crash
