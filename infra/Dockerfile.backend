@@ -15,8 +15,19 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Python deps first for layer caching.
+#
+# CPU-only torch, from PyTorch's CPU index.
+#
+# sentence-transformers pulls torch, and pip's default wheel is the CUDA build:
+# ~430 MB of torch plus ~445 MB of nvidia_cudnn and the rest of the CUDA
+# runtime. None of it can be used here — the container has no GPU and the
+# embedding model runs on CPU — and downloading it made `docker compose up
+# --build` fail on a clean machine. The CPU index cuts roughly a gigabyte from
+# the image and removes the failure with it.
 COPY backend/requirements.txt ./requirements.txt
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir \
+        --extra-index-url https://download.pytorch.org/whl/cpu \
+        -r requirements.txt
 
 # App code, including alembic/ and alembic.ini — the entrypoint runs
 # `alembic upgrade head` before starting, so the migration chain must ship.
