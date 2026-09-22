@@ -1,4 +1,4 @@
-<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 54" src="https://github.com/user-attachments/assets/af9d044a-9ded-4fcc-9c8f-6ef4549825e6" /># NTT Incident Platform
+# NTT Incident Platform
 
 Unified application merging the **incident-report-generator** (React/TS) and the
 **Chatbot** (Python RAG over incident reports) into one product: a single React
