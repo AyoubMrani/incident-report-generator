@@ -5,6 +5,8 @@ Unified application merging the **incident-report-generator** (React/TS) and the
 frontend with two modules (Report Generator, Chatbot) backed by one FastAPI
 service.
 
+<img width="1379" height="901" alt="Pictureq1" src="https://github.com/user-attachments/assets/f41a23dc-e8cf-44f5-87a0-b31e0f2c9cda" />
+
 ## Why this shape
 
 The two original projects already share a data contract — the
