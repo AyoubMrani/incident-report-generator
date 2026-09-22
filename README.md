@@ -1,4 +1,4 @@
-# NTT Incident Platform
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 54" src="https://github.com/user-attachments/assets/af9d044a-9ded-4fcc-9c8f-6ef4549825e6" /># NTT Incident Platform
 
 Unified application merging the **incident-report-generator** (React/TS) and the
 **Chatbot** (Python RAG over incident reports) into one product: a single React
@@ -6,9 +6,6 @@ frontend with two modules (Report Generator, Chatbot) backed by one FastAPI
 service.
 
 <img width="1379" height="901" alt="Pictureq1" src="https://github.com/user-attachments/assets/f41a23dc-e8cf-44f5-87a0-b31e0f2c9cda" />
-
-<img width="1624" height="1061" alt="image" src="https://github.com/user-attachments/assets/c4c4dd54-db2b-4df9-aa38-e4fa27d9850d" />
-
 
 ## Why this shape
 
@@ -153,4 +150,54 @@ Run Ollama for real answers: `ollama pull llama3:8b && ollama pull qwen2.5vl:3b`
   `resolution.py` — not just `ui.py`. Removing that is the main work: replace
   `@st.cache_resource` singletons (embedding model, KB index) with objects built
   in `main.py`'s lifespan, and `st.session_state` with request-scoped data.
+
+## Evidence
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 02 09" src="https://github.com/user-attachments/assets/f4879064-5adf-431d-b90a-3060d8268526" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 22 59 52" src="https://github.com/user-attachments/assets/c18c5a85-fb25-45d3-967c-b6e9f054d520" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 22 59 34" src="https://github.com/user-attachments/assets/04cae78a-7bcc-4da1-a58f-1a3c0a6d5924" />
+
+<img width="1624" height="1061" alt="image (1)" src="https://github.com/user-attachments/assets/baf76526-5fad-4c00-9885-840eb5d231da" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 22 59 39" src="https://github.com/user-attachments/assets/717644cd-756d-4bf9-b58f-22004225c2da" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 06" src="https://github.com/user-attachments/assets/41371075-0105-4ca2-81ea-30ac6c7782a3" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 12" src="https://github.com/user-attachments/assets/4f61fdc3-e7cb-4403-83b7-7c2da4e0d39f" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 31" src="https://github.com/user-attachments/assets/ee367262-5039-4650-8ec4-d66348b768d5" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 54" src="https://github.com/user-attachments/assets/1dd3c343-d19b-4ee2-a76f-b571060b46d4" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 01 29" src="https://github.com/user-attachments/assets/39aaf469-3c2b-45f1-8629-f266338f1b99" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 01 37" src="https://github.com/user-attachments/assets/6c516dd9-ca70-453c-84ba-3e62fec57577" />
+
+<img width="1624" height="1061" alt="Screenshot 2026-08-07 at 23 00 58" src="https://github.com/user-attachments/assets/b9efc8af-3dc9-4655-9f99-abb1b1a3965e" />
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 ```
+
+
+
