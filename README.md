@@ -1,10 +1,11 @@
 # NTT Incident Platform
-<img width="1379" height="901" alt="Pictureq1" src="https://github.com/user-attachments/assets/68a20964-ffc7-4c45-a4a8-4bfd9068a06e" />
 
 Unified application merging the **incident-report-generator** (React/TS) and the
 **Chatbot** (Python RAG over incident reports) into one product: a single React
 frontend with two modules (Report Generator, Chatbot) backed by one FastAPI
 service.
+
+<img width="1379" height="901" alt="Pictureq1" src="https://github.com/user-attachments/assets/68a20964-ffc7-4c45-a4a8-4bfd9068a06e" />
 
 ## Why this shape
 
