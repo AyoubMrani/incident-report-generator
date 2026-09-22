@@ -181,23 +181,3 @@ Run Ollama for real answers: `ollama pull llama3:8b && ollama pull qwen2.5vl:3b`
 
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-```
-
-
-
