@@ -7,6 +7,9 @@ service.
 
 <img width="1379" height="901" alt="Pictureq1" src="https://github.com/user-attachments/assets/f41a23dc-e8cf-44f5-87a0-b31e0f2c9cda" />
 
+<img width="1624" height="1061" alt="image" src="https://github.com/user-attachments/assets/81038ecc-39e2-46c3-b288-48e98fe7e99a" />
+
+
 ## Why this shape
 
 The two original projects already share a data contract — the
